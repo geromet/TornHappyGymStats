@@ -1,0 +1,5 @@
+{"id":"1001","timestamp":1700000000,"details":{"id":5300,"title":"Gym train strength","category":"Gym"},"data":{"trains":1,"energy_used":5,"happy_used":25,"gym":7},"params":{"color":"green"}}
+{"id":"1002","timestamp":1700000300,"details":{"id":8844,"title":"Happy maximum increase","category":"Happy"},"data":{"maximum_happy_before":4500,"maximum_happy_after":4500},"params":{"color":"green"}}
+{"id":"1003","timestamp":1700000600,"details":{"id":2322,"title":"Travel","category":"Travel"},"data":{"destination":"Mexico"},"params":{"color":"blue"}}
+
+{ not-json }
