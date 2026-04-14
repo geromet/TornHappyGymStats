@@ -24,6 +24,7 @@ HappyGymStats.exe
 ```
 
 You'll need a **Torn FULL access API key** (entered at runtime, never stored on disk).
+The API key is only used to fetch relevant logs. It is never stored or shared. All data stays local. The only endpoint used is https://api.torn.com/v2/user/log?cat=25
 
 ## Menu actions
 
