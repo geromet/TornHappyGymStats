@@ -26,3 +26,25 @@ Thumbs.db
 
 ## GSD project management (internal)
 .gsd/
+
+# ── GSD baseline (auto-generated) ──
+.gsd
+.gsd-id
+.bg-shell/
+*.swo
+*.code-workspace
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+build/
+__pycache__/
+*.pyc
+.venv/
+venv/
+target/
+vendor/
+coverage/
+.cache/
+tmp/
