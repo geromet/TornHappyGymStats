@@ -13,6 +13,7 @@ public enum MainMenuAction
     ShowStatus,
     ReconstructHappy,
     ExportCsv,
+    Visualize,
     ConfigureThrottle,
     Exit,
 }
@@ -51,6 +52,7 @@ public sealed class ConsoleUi
             choices.Add(MainMenuAction.ExportCsv);
         }
 
+        choices.Add(MainMenuAction.Visualize);
         choices.Add(MainMenuAction.ConfigureThrottle);
         choices.Add(MainMenuAction.Exit);
 
@@ -213,6 +215,35 @@ public sealed class ConsoleUi
         AnsiConsole.Write(new Panel(summary).Header("[bold]CSV export summary[/]", Justify.Left));
     }
 
+    public void RenderVisualizeSummary(IReadOnlyList<string> generatedPaths, int recordCount, int parseErrors)
+    {
+        if (generatedPaths.Count == 0)
+        {
+            RenderInfo("No surface plots generated — no gym train data found.");
+            return;
+        }
+
+        var summary = new Table()
+            .Border(TableBorder.Rounded)
+            .AddColumn("Item")
+            .AddColumn("Value");
+
+        summary.AddRow("Output files", generatedPaths.Count.ToString());
+        summary.AddRow("Records processed", recordCount.ToString());
+
+        foreach (var path in generatedPaths)
+        {
+            summary.AddRow("  →", Markup.Escape(path));
+        }
+
+        if (parseErrors > 0)
+        {
+            summary.AddRow("[yellow]Parse errors[/]", $"[yellow]{parseErrors} row(s) skipped[/]");
+        }
+
+        AnsiConsole.Write(new Panel(summary).Header("[bold]Visualization summary[/]", Justify.Left));
+    }
+
     public void RenderStatus(AppPaths paths, Checkpoint? checkpoint)
     {
         var table = new Table()
@@ -343,6 +374,7 @@ public sealed class ConsoleUi
         MainMenuAction.ShowStatus => "Show status",
         MainMenuAction.ReconstructHappy => "Reconstruct happy",
         MainMenuAction.ExportCsv => "Export CSV",
+        MainMenuAction.Visualize => "Visualize",
         MainMenuAction.ConfigureThrottle => "Configure throttle",
         MainMenuAction.Exit => "Exit",
         _ => action.ToString(),

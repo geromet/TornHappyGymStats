@@ -26,4 +26,10 @@
     <ProjectReference Include="..\..\src\HappyGymStats\HappyGymStats.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Visualizer\fixtures\sample_gym.csv">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

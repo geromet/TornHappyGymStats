@@ -1,9 +1,11 @@
+using System.Linq;
 using HappyGymStats.Export;
 using HappyGymStats.Fetch;
 using HappyGymStats.Reconstruction;
 using HappyGymStats.Storage;
 using HappyGymStats.Ui;
 using HappyGymStats.Torn;
+using HappyGymStats.Visualizer;
 
 var ui = new ConsoleUi();
 
@@ -193,6 +195,41 @@ while (true)
                 {
                     operationCts = null;
                     cancelPressCount = 0;
+                }
+
+                break;
+            }
+
+            case MainMenuAction.Visualize:
+            {
+                if (!File.Exists(paths.LogsCsvPath))
+                {
+                    ui.RenderError("No CSV export found. Run 'Export CSV' first.");
+                    break;
+                }
+
+                try
+                {
+                    var result = CsvStatReader.readStatRecords(paths.LogsCsvPath);
+
+                    var recordCount = result.Records.Count();
+                    if (recordCount == 0)
+                    {
+                        ui.RenderInfo("CSV file is empty or contains no gym train records.");
+                        break;
+                    }
+
+                    var generatedPaths = SurfacePlotter.generatePlots(result.Records, paths.ExportDirectory).ToList();
+
+                    ui.RenderVisualizeSummary(generatedPaths, recordCount, result.ParseErrors.Count());
+                }
+                catch (FileNotFoundException ex)
+                {
+                    ui.RenderError("CSV file not found. Run 'Export CSV' first.", ex);
+                }
+                catch (Exception ex)
+                {
+                    ui.RenderError("Visualization failed.", ex);
                 }
 
                 break;
