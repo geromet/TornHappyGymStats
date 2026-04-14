@@ -28,10 +28,11 @@ public sealed class HappyReconstructorTests
     }
 
     [Fact]
-    public void RunBackwards_InvertsQuarterHourRegenTicks()
+    public void RunBackwards_CountsQuarterHourTicks_ButDoesNotApplyHappyRegen()
     {
         // Anchor at 12:30 with happy=100, then reconstruct one gym event at 12:00.
-        // Forward regen ticks between 12:00 and 12:30 are at 12:15 and 12:30 => 2 ticks => +10 happy.
+        // We still count quarter-hour ticks between 12:00 and 12:30 (12:15 and 12:30 => 2),
+        // but Torn happiness is not passively regenerated here, so RegenHappyGained is 0.
         var anchor = Utc("2024-01-01T12:30:00Z");
         var gymTime = Utc("2024-01-01T12:00:00Z");
 
@@ -47,9 +48,9 @@ public sealed class HappyReconstructorTests
 
         var derived = Assert.Single(result.DerivedGymTrains);
         Assert.Equal(2, derived.RegenTicksApplied);
-        Assert.Equal(10, derived.RegenHappyGained);
-        Assert.Equal(90, derived.HappyAfterTrain);
-        Assert.Equal(90, derived.HappyBeforeTrain);
+        Assert.Equal(0, derived.RegenHappyGained);
+        Assert.Equal(100, derived.HappyAfterTrain);
+        Assert.Equal(100, derived.HappyBeforeTrain);
     }
 
     [Fact]
@@ -78,12 +79,13 @@ public sealed class HappyReconstructorTests
     }
 
     [Fact]
-    public void RunBackwards_DoesNotUnclamp_WhenMaxHappyIncreasesGoingBackwards()
+    public void RunBackwards_AllowsUnclamp_WhenMaxHappyIsHigherEarlier()
     {
         // Forward timeline:
         // 10:00 max=100
         // 11:00 max=80 (decrease)
-        // Backwards reconstruction from 11:30 with currentHappy=80 should NOT raise the effective max back to 100.
+        // Backwards reconstruction from 11:30 with currentHappy=80 SHOULD use the higher max (100)
+        // when reconstructing earlier times.
         var tMax100 = Utc("2024-01-01T10:00:00Z");
         var tMax80 = Utc("2024-01-01T11:00:00Z");
         var anchor = Utc("2024-01-01T11:30:00Z");
@@ -112,18 +114,17 @@ public sealed class HappyReconstructorTests
         var second = result.DerivedGymTrains[1]; // 10:31
 
         Assert.Equal(gym1030, first.OccurredAtUtc);
-        Assert.Equal(0, first.RegenTicksApplied); // from 10:30 -> 10:31
-        Assert.Equal(80, first.MaxHappyAtTimeUtc); // effective max (do-not-unclamp)
+        Assert.Equal(0, first.RegenTicksApplied);
+        Assert.Equal(100, first.MaxHappyAtTimeUtc);
         Assert.True(first.ClampedToMax);
-        Assert.Equal(80, first.HappyBeforeTrain);
+        Assert.Equal(100, first.HappyBeforeTrain); // 80(after at 10:30) + 30 used => 110 clamped to 100
 
         Assert.Equal(gym1031, second.OccurredAtUtc);
-        Assert.Equal(2, second.RegenTicksApplied); // 10:31 -> 11:00 (max-happy event boundary) includes 10:45, 11:00
-        Assert.Equal(80, second.MaxHappyAtTimeUtc);
+        Assert.Equal(2, second.RegenTicksApplied); // 10:31 -> 11:00 includes 10:45, 11:00
+        Assert.Equal(100, second.MaxHappyAtTimeUtc);
         Assert.False(second.ClampedToMax);
 
-        Assert.True(result.Stats.ClampAppliedCount >= 1);
-        Assert.True(result.Stats.WarningCount >= 1);
+        Assert.Equal(1, result.Stats.ClampAppliedCount);
     }
 
     private static DateTimeOffset Utc(string iso)

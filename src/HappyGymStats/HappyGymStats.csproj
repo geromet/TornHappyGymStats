@@ -15,4 +15,9 @@
     <ProjectReference Include="..\HappyGymStats.Visualizer\HappyGymStats.Visualizer.fsproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Gym modifier lookup table (optional at runtime, but copied when present) -->
+    <Content Include="..\..\gyms.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

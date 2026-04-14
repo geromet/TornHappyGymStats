@@ -11,13 +11,18 @@ namespace HappyGymStats.Reconstruction;
 /// It inverts quarter-hour regen ticks (5 happy per tick) and inverts gym trains
 /// (<c>happy_before = happy_after + happy_used</c>).
 /// 
-/// Max-happy is applied as an upper-bound constraint. Because max-happy decreases are not invertible
-/// (clamping forward can discard information), the reconstruction uses a "do not unclamp" policy:
-/// once a lower max ceiling is observed while moving backwards, that ceiling is never raised again.
+/// Max-happy is applied as an upper-bound constraint.
+///
+/// Current policy: as we move backwards we always use the max-happy value known at that time
+/// (i.e., we DO allow the ceiling to increase again when earlier max-happy was higher).
+/// This is not perfectly invertible across max-happy decreases, but it produces more intuitive
+/// reconstructions when users know they previously trained at higher max-happy values.
 /// </remarks>
 public static class HappyReconstructor
 {
-    public const int HappyRegenPerTick = 5;
+    // Torn happiness does not passively regenerate on a quarter-hour cadence the way energy does.
+    // We still count quarter-hour ticks between events for observability, but do not apply a regen delta.
+    public const int HappyRegenPerTick = 0;
 
     public sealed record BackwardsReconstructionStats(
         int GymTrainsDerived,
@@ -51,11 +56,9 @@ public static class HappyReconstructor
         var cursorTime = anchorTimeUtc;
         var cursorHappy = currentHappy;
 
-        // Effective max ceiling used for clamping. This is monotone non-increasing as we move backwards.
-        int? effectiveMaxCeiling = null;
-        var anchorMax = maxTimeline.MaxHappyAtUtc(anchorTimeUtc);
-        if (anchorMax is not null)
-            effectiveMaxCeiling = anchorMax;
+        // Effective max ceiling used for clamping. As we move backwards, this follows the max-happy
+        // known at that earlier time (i.e., it may increase or decrease).
+        int? effectiveMaxCeiling = maxTimeline.MaxHappyAtUtc(anchorTimeUtc);
 
         var clampAppliedCount = 0;
         var warningCount = 0;
@@ -83,24 +86,13 @@ public static class HappyReconstructor
 
             cursorTime = ev.OccurredAtUtc;
 
-            // Update effective ceiling (do-not-unclamp policy) based on max-happy at this time.
+            // Update effective ceiling based on max-happy at this time.
+            // We use the max-happy value known at (or before) cursorTime, allowing the ceiling to
+            // increase again when earlier max-happy was higher.
             var actualMaxAtTime = maxTimeline.MaxHappyAtUtc(cursorTime);
             if (actualMaxAtTime is not null)
             {
-                if (effectiveMaxCeiling is null)
-                {
-                    effectiveMaxCeiling = actualMaxAtTime;
-                }
-                else
-                {
-                    var prev = effectiveMaxCeiling.Value;
-                    effectiveMaxCeiling = Math.Min(prev, actualMaxAtTime.Value);
-
-                    // If max-happy at this earlier time is higher than the effective ceiling we keep, we are
-                    // intentionally not unclamping. This is a potential information-loss situation.
-                    if (actualMaxAtTime.Value > prev)
-                        warningCount++;
-                }
+                effectiveMaxCeiling = actualMaxAtTime;
             }
 
             // Clamp to effective max even if the current event isn't a gym train.

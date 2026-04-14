@@ -15,6 +15,92 @@ Directory.CreateDirectory(paths.QuarantineDirectory);
 Directory.CreateDirectory(paths.DerivedDirectory);
 Directory.CreateDirectory(paths.ExportDirectory);
 
+// Non-interactive CLI modes (useful for regenerating artifacts without the menu UI)
+//
+// Usage:
+//   HappyGymStats visualize [--csv <path>] [--out <dir>]
+//   HappyGymStats reconstruct-happy --current <int> [--anchor <iso-utc>]
+if (args.Length > 0)
+{
+    string? GetArg(string name)
+    {
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i].Equals(name, StringComparison.OrdinalIgnoreCase))
+                return args[i + 1];
+        }
+
+        return null;
+    }
+
+    if (args[0].Equals("visualize", StringComparison.OrdinalIgnoreCase))
+    {
+        var csvPath = GetArg("--csv") ?? paths.LogsCsvPath;
+        var outDir = GetArg("--out") ?? paths.ExportDirectory;
+
+        if (!File.Exists(csvPath))
+        {
+            Console.Error.WriteLine($"CSV not found: {csvPath}");
+            return;
+        }
+
+        Directory.CreateDirectory(outDir);
+
+        var result = CsvStatReader.readStatRecords(csvPath);
+        var recordCount = result.Records.Count();
+
+        if (recordCount == 0)
+        {
+            Console.WriteLine("No gym train records found in CSV.");
+            return;
+        }
+
+        var generatedPaths = SurfacePlotter.generateStackedPlots(result.Records, outDir).ToList();
+
+        Console.WriteLine($"Records processed: {recordCount}");
+        Console.WriteLine($"Parse errors: {result.ParseErrors.Count()}");
+        foreach (var p in generatedPaths)
+            Console.WriteLine(p);
+
+        return;
+    }
+
+    if (args[0].Equals("reconstruct-happy", StringComparison.OrdinalIgnoreCase))
+    {
+        var currentText = GetArg("--current");
+        if (string.IsNullOrWhiteSpace(currentText) || !int.TryParse(currentText, out var currentHappy) || currentHappy < 0)
+        {
+            Console.Error.WriteLine("Missing/invalid --current <int> (must be >= 0)");
+            return;
+        }
+
+        var anchorText = GetArg("--anchor");
+        var anchorTimeUtc = string.IsNullOrWhiteSpace(anchorText)
+            ? DateTimeOffset.UtcNow
+            : DateTimeOffset.Parse(anchorText, null, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal);
+
+        var runner = new ReconstructionRunner(paths);
+        var result = runner.Run(currentHappy: currentHappy, anchorTimeUtc: anchorTimeUtc, ct: CancellationToken.None);
+
+        if (!result.Success)
+        {
+            Console.Error.WriteLine(result.ErrorMessage ?? "Reconstruction failed.");
+            return;
+        }
+
+        Console.WriteLine($"Derived output: {result.DerivedOutputPath}");
+        Console.WriteLine($"Gym trains derived: {result.DerivedGymTrains.Count}");
+        if (result.Stats is not null)
+        {
+            Console.WriteLine($"Clamp applied: {result.Stats.ClampAppliedCount}");
+            Console.WriteLine($"Warnings: {result.Stats.WarningCount}");
+            Console.WriteLine($"Max-happy events extracted: {result.Stats.MaxHappyEventsExtracted}");
+        }
+
+        return;
+    }
+}
+
 using var appCts = new CancellationTokenSource();
 CancellationTokenSource? operationCts = null;
 
@@ -219,7 +305,7 @@ while (true)
                         break;
                     }
 
-                    var generatedPaths = SurfacePlotter.generatePlots(result.Records, paths.ExportDirectory).ToList();
+                    var generatedPaths = SurfacePlotter.generateStackedPlots(result.Records, paths.ExportDirectory).ToList();
 
                     ui.RenderVisualizeSummary(generatedPaths, recordCount, result.ParseErrors.Count());
                 }

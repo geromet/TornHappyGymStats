@@ -39,6 +39,17 @@ public static class CsvExportRunner
         "clamped_to_max"
     };
 
+    /// <summary>
+    /// Computed columns that do not exist in the raw Torn log payload but are added during export.
+    /// </summary>
+    public static readonly string[] NormalizedColumns =
+    {
+        "data.strength_increased_normalized",
+        "data.defense_increased_normalized",
+        "data.speed_increased_normalized",
+        "data.dexterity_increased_normalized",
+    };
+
     public sealed class ExportResult
     {
         public bool Success { get; init; }
@@ -119,9 +130,32 @@ public static class CsvExportRunner
             }
         }
 
+        // Add computed columns that don't exist in the raw payload.
+        foreach (var col in NormalizedColumns)
+        {
+            headerSet.Add(col);
+        }
+
         // Deterministic header order: canonical prefix first, then remaining sorted ordinally,
         // then derived columns in fixed order (always appended).
         var headerColumns = BuildHeaderOrder(headerSet, includeDerived: true);
+
+        // --- Gym modifier normalization (optional) ---
+        // If gyms.json is present (either in the working directory or alongside the executable),
+        // we normalize stat increased values by dividing out the gym multiplier.
+        // This makes cross-gym comparisons meaningful (the gym modifier is just a multiplicative factor).
+        GymModifierNormalizer.GymModifierTable? gymTable = null;
+        {
+            var ok = GymModifierNormalizer.GymModifierTable.TryLoadFromDefaultLocations(out gymTable, out var loadError);
+            if (!ok)
+            {
+                return new ExportResult
+                {
+                    Success = false,
+                    ErrorMessage = loadError,
+                };
+            }
+        }
 
         // --- Pass 2: write CSV rows ---
         try
@@ -163,6 +197,9 @@ public static class CsvExportRunner
                         EnrichWithDerived(flat, derived);
                     }
 
+                    // Normalize stat increased values by gym multiplier (if gyms.json is available).
+                    GymModifierNormalizer.ApplyNormalization(flat, gymTable);
+
                     CsvWriter.WriteRow(writer, headerColumns, flat);
                     rowsWritten++;
                 }
@@ -202,7 +239,7 @@ public static class CsvExportRunner
     /// </summary>
     public static List<string> BuildHeaderOrder(HashSet<string> headerSet, bool includeDerived = false)
     {
-        var result = new List<string>(headerSet.Count + DerivedColumns.Length);
+        var result = new List<string>(headerSet.Count + DerivedColumns.Length + NormalizedColumns.Length);
         var remaining = new HashSet<string>(headerSet, StringComparer.Ordinal);
 
         // Add canonical prefix columns in fixed order (if present).
