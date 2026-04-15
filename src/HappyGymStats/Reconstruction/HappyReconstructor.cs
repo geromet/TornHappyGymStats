@@ -34,7 +34,23 @@ public static class HappyReconstructor
         IReadOnlyList<DerivedGymTrain> DerivedGymTrains,
         BackwardsReconstructionStats Stats);
 
+    public sealed record BackwardsReconstructionDetailedResult(
+        IReadOnlyList<DerivedGymTrain> DerivedGymTrains,
+        IReadOnlyList<DerivedHappyEvent> DerivedHappyEvents,
+        BackwardsReconstructionStats Stats);
+
     public static BackwardsReconstructionResult RunBackwards(
+        IEnumerable<ReconstructionEvent> events,
+        int currentHappy,
+        DateTimeOffset anchorTimeUtc)
+    {
+        var detailed = RunBackwardsDetailed(events, currentHappy, anchorTimeUtc);
+        return new BackwardsReconstructionResult(
+            DerivedGymTrains: detailed.DerivedGymTrains,
+            Stats: detailed.Stats);
+    }
+
+    public static BackwardsReconstructionDetailedResult RunBackwardsDetailed(
         IEnumerable<ReconstructionEvent> events,
         int currentHappy,
         DateTimeOffset anchorTimeUtc)
@@ -51,7 +67,8 @@ public static class HappyReconstructor
 
         var maxTimeline = MaxHappyTimeline.FromEvents(eventArray.OfType<MaxHappyEvent>());
 
-        var derived = new List<DerivedGymTrain>();
+        var derivedTrains = new List<DerivedGymTrain>();
+        var derivedEvents = new List<DerivedHappyEvent>();
 
         var cursorTime = anchorTimeUtc;
         var cursorHappy = currentHappy;
@@ -71,62 +88,119 @@ public static class HappyReconstructor
         {
             EnsureUtc(ev.OccurredAtUtc, nameof(events));
 
-            // Apply inverse regen between this event time and the cursor time (later).
-            var ticks = QuarterHourTicks.CountTicksBetweenUtc(ev.OccurredAtUtc, cursorTime);
-            regenTicksTotal += ticks;
+            // Expand regen ticks between this event time and the cursor time (later).
+            // We represent each tick as a synthetic event at the tick instant.
+            var tickInstants = QuarterHourTicks.EnumerateTickInstantsBetweenUtc(ev.OccurredAtUtc, cursorTime)
+                .OrderByDescending(t => t)
+                .ToArray();
 
-            var regenGain = SafeMultiplyTicks(ticks, HappyRegenPerTick);
-            cursorHappy -= regenGain;
-            if (cursorHappy < 0)
+            regenTicksTotal += tickInstants.Length;
+
+            foreach (var tick in tickInstants)
             {
-                // Reconstruction should not go negative; clamp and warn.
-                cursorHappy = 0;
-                warningCount++;
+                // cursorHappy is the happy immediately AFTER the tick (later side).
+                var afterTick = cursorHappy;
+                var beforeTickLong = (long)afterTick - HappyRegenPerTick;
+
+                var beforeTick = beforeTickLong < 0 ? 0 : (int)beforeTickLong;
+                if (beforeTickLong < 0)
+                    warningCount++;
+
+                derivedEvents.Add(new DerivedHappyEvent(
+                    EventId: $"regen@{tick.ToUnixTimeSeconds()}",
+                    SourceLogId: null,
+                    OccurredAtUtc: tick,
+                    EventType: "regen_tick",
+                    HappyBeforeEvent: beforeTick,
+                    HappyAfterEvent: afterTick,
+                    Delta: HappyRegenPerTick,
+                    HappyUsed: null,
+                    MaxHappyAtTimeUtc: effectiveMaxCeiling,
+                    ClampedToMax: false));
+
+                cursorHappy = beforeTick;
+                cursorTime = tick;
+
+                // Clamp to effective max after moving back across the tick.
+                cursorHappy = ClampToEffectiveMax(cursorHappy, effectiveMaxCeiling, ref clampAppliedCount, ref warningCount);
             }
 
+            // Now cursorTime is still >= ev.OccurredAtUtc; move to the event time.
             cursorTime = ev.OccurredAtUtc;
 
             // Update effective ceiling based on max-happy at this time.
-            // We use the max-happy value known at (or before) cursorTime, allowing the ceiling to
-            // increase again when earlier max-happy was higher.
             var actualMaxAtTime = maxTimeline.MaxHappyAtUtc(cursorTime);
             if (actualMaxAtTime is not null)
             {
                 effectiveMaxCeiling = actualMaxAtTime;
             }
 
-            // Clamp to effective max even if the current event isn't a gym train.
+            // Clamp to effective max at the event time.
             cursorHappy = ClampToEffectiveMax(cursorHappy, effectiveMaxCeiling, ref clampAppliedCount, ref warningCount);
+
+            if (ev is MaxHappyEvent max)
+            {
+                // Max-happy change itself doesn't directly add/subtract happy, but it can force a clamp.
+                derivedEvents.Add(new DerivedHappyEvent(
+                    EventId: max.LogId,
+                    SourceLogId: max.LogId,
+                    OccurredAtUtc: max.OccurredAtUtc,
+                    EventType: "max_happy",
+                    HappyBeforeEvent: cursorHappy,
+                    HappyAfterEvent: cursorHappy,
+                    Delta: null,
+                    HappyUsed: null,
+                    MaxHappyAtTimeUtc: effectiveMaxCeiling,
+                    ClampedToMax: false));
+
+                continue;
+            }
 
             if (ev is HappyDeltaEvent delta)
             {
-                // cursorHappy is our best estimate of happy immediately AFTER this delta event.
-                // To go backwards, invert the delta: before = after - delta.
-                var beforeLong = (long)cursorHappy - delta.Delta;
+                var after = cursorHappy;
 
+                // To go backwards, invert the delta: before = after - delta.
+                var beforeLong = (long)after - delta.Delta;
+
+                int before;
                 if (beforeLong < 0)
                 {
-                    cursorHappy = 0;
+                    before = 0;
                     warningCount++;
                 }
                 else if (beforeLong > int.MaxValue)
                 {
-                    cursorHappy = int.MaxValue;
+                    before = int.MaxValue;
                     warningCount++;
                 }
                 else
                 {
-                    cursorHappy = (int)beforeLong;
+                    before = (int)beforeLong;
                 }
 
-                cursorHappy = ClampToEffectiveMax(cursorHappy, effectiveMaxCeiling, ref clampAppliedCount, ref warningCount);
+                var beforeClamped = ClampToEffectiveMax(before, effectiveMaxCeiling, ref clampAppliedCount, ref warningCount);
+
+                derivedEvents.Add(new DerivedHappyEvent(
+                    EventId: delta.LogId,
+                    SourceLogId: delta.LogId,
+                    OccurredAtUtc: delta.OccurredAtUtc,
+                    EventType: "happy_delta",
+                    HappyBeforeEvent: beforeClamped,
+                    HappyAfterEvent: after,
+                    Delta: delta.Delta,
+                    HappyUsed: null,
+                    MaxHappyAtTimeUtc: effectiveMaxCeiling,
+                    ClampedToMax: beforeClamped != before));
+
+                cursorHappy = beforeClamped;
                 continue;
             }
 
             if (ev is not GymTrainEvent gym)
                 continue;
 
-            // At this point cursorHappy is our best estimate of happy immediately AFTER the train.
+            // cursorHappy is our best estimate of happy immediately AFTER the train.
             var happyAfterTrain = cursorHappy;
 
             var beforeCandidate = happyAfterTrain + gym.HappyUsed;
@@ -157,33 +231,65 @@ public static class HappyReconstructor
                 warningCount++;
             }
 
-            derived.Add(new DerivedGymTrain(
+            derivedTrains.Add(new DerivedGymTrain(
                 LogId: gym.LogId,
                 OccurredAtUtc: gym.OccurredAtUtc,
                 HappyBeforeTrain: happyBeforeTrain,
                 HappyUsed: gym.HappyUsed,
                 HappyAfterTrain: consistentAfter,
-                RegenTicksApplied: ticks,
-                RegenHappyGained: regenGain,
+                RegenTicksApplied: tickInstants.Length,
+                RegenHappyGained: SafeMultiplyTicks(tickInstants.Length, HappyRegenPerTick),
                 MaxHappyAtTimeUtc: effectiveMaxCeiling,
                 ClampedToMax: clampedToMax));
 
-            // Move the cursor to the state before the train.
+            derivedEvents.Add(new DerivedHappyEvent(
+                EventId: gym.LogId,
+                SourceLogId: gym.LogId,
+                OccurredAtUtc: gym.OccurredAtUtc,
+                EventType: "gym_train",
+                HappyBeforeEvent: happyBeforeTrain,
+                HappyAfterEvent: consistentAfter,
+                Delta: -gym.HappyUsed,
+                HappyUsed: gym.HappyUsed,
+                MaxHappyAtTimeUtc: effectiveMaxCeiling,
+                ClampedToMax: clampedToMax));
+
             cursorHappy = happyBeforeTrain;
             cursorHappy = ClampToEffectiveMax(cursorHappy, effectiveMaxCeiling, ref clampAppliedCount, ref warningCount);
         }
 
-        // Return in chronological order for consumers/UI.
-        derived.Sort(static (a, b) =>
+        // Return in chronological order with deterministic tiebreaking.
+        static int TypeOrder(string t) => t switch
+        {
+            "regen_tick" => 0,
+            "max_happy" => 1,
+            "happy_delta" => 2,
+            "gym_train" => 3,
+            _ => 9,
+        };
+
+        derivedTrains.Sort(static (a, b) =>
         {
             var cmp = a.OccurredAtUtc.CompareTo(b.OccurredAtUtc);
             return cmp != 0 ? cmp : a.LogId.CompareTo(b.LogId);
         });
 
-        return new BackwardsReconstructionResult(
-            DerivedGymTrains: derived,
+        derivedEvents.Sort((a, b) =>
+        {
+            var cmp = a.OccurredAtUtc.CompareTo(b.OccurredAtUtc);
+            if (cmp != 0) return cmp;
+
+            cmp = TypeOrder(a.EventType).CompareTo(TypeOrder(b.EventType));
+            if (cmp != 0) return cmp;
+
+            return string.CompareOrdinal(a.EventId, b.EventId);
+        });
+
+        return new BackwardsReconstructionDetailedResult(
+            DerivedGymTrains: derivedTrains,
+            DerivedHappyEvents: derivedEvents,
             Stats: new BackwardsReconstructionStats(
-                GymTrainsDerived: derived.Count,
+                GymTrainsDerived: derivedTrains.Count,
                 RegenTicksApplied: regenTicksTotal,
                 ClampAppliedCount: clampAppliedCount,
                 WarningCount: warningCount));

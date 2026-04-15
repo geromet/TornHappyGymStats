@@ -67,6 +67,22 @@ public static class HappyReconstructionModels
         bool ClampedToMax);
 
     /// <summary>
+    /// Derived happy timeline record for debugging.
+    /// Includes both real log events and synthetic regen-tick events.
+    /// </summary>
+    public sealed record DerivedHappyEvent(
+        string EventId,
+        string? SourceLogId,
+        DateTimeOffset OccurredAtUtc,
+        string EventType,
+        int HappyBeforeEvent,
+        int HappyAfterEvent,
+        int? Delta,
+        int? HappyUsed,
+        int? MaxHappyAtTimeUtc,
+        bool ClampedToMax);
+
+    /// <summary>
     /// High-level reconstruction stats suitable for a UI summary panel.
     /// </summary>
     public sealed record ReconstructionStats(

@@ -11,11 +11,16 @@ public sealed record AppPaths(
     // Derived sidecar file for gym-train reconstruction output.
     public string DerivedGymTrainsJsonlPath => Path.Combine(DerivedDirectory, "derived-gymtrains.jsonl");
 
+    // Derived sidecar file containing per-event happy timeline (includes synthetic regen tick events).
+    public string DerivedHappyEventsJsonlPath => Path.Combine(DerivedDirectory, "derived-happy-events.jsonl");
+
     public string ExportDirectory => Path.Combine(DataDirectory, "export");
 
     public string LogsCsvPath => Path.Combine(ExportDirectory, "userlogs.csv");
 
     public string LogsDebugCsvPath => Path.Combine(ExportDirectory, "userlogs.debug.csv");
+
+    public string HappyTimelineCsvPath => Path.Combine(ExportDirectory, "happy-timeline.csv");
 
     public static AppPaths Default(string appName = "HappyGymStats")
     {

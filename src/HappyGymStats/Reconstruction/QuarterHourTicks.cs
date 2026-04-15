@@ -29,6 +29,28 @@ public static class QuarterHourTicks
     private static readonly TimeSpan QuarterHour = TimeSpan.FromMinutes(15);
 
     /// <summary>
+    /// Enumerate quarter-hour tick instants between <paramref name="earlierUtc"/> and <paramref name="laterUtc"/>.
+    /// </summary>
+    /// <remarks>
+    /// Uses the same convention as <see cref="CountTicksBetweenUtc"/>: earlier-exclusive, later-inclusive.
+    /// </remarks>
+    public static IEnumerable<DateTimeOffset> EnumerateTickInstantsBetweenUtc(DateTimeOffset earlierUtc, DateTimeOffset laterUtc)
+    {
+        EnsureUtc(earlierUtc, nameof(earlierUtc));
+        EnsureUtc(laterUtc, nameof(laterUtc));
+
+        if (laterUtc < earlierUtc)
+            throw new ArgumentOutOfRangeException(nameof(laterUtc), laterUtc, "laterUtc must be >= earlierUtc.");
+
+        var nextTick = NextQuarterHourAfterUtc(earlierUtc);
+        while (nextTick <= laterUtc)
+        {
+            yield return nextTick;
+            nextTick = nextTick.Add(QuarterHour);
+        }
+    }
+
+    /// <summary>
     /// Count quarter-hour tick instants between <paramref name="earlierUtc"/> and <paramref name="laterUtc"/>.
     /// </summary>
     /// <param name="earlierUtc">Earlier instant in UTC (offset must be +00:00).</param>

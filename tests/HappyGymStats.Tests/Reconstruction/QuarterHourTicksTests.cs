@@ -59,6 +59,23 @@ public sealed class QuarterHourTicksTests
     }
 
     [Fact]
+    public void EnumerateTickInstantsBetweenUtc_MatchesCountTicksBetweenUtc()
+    {
+        var earlier = new DateTimeOffset(2026, 01, 01, 12, 00, 00, TimeSpan.Zero);
+        var later = new DateTimeOffset(2026, 01, 01, 13, 00, 00, TimeSpan.Zero);
+
+        var ticks = QuarterHourTicks.EnumerateTickInstantsBetweenUtc(earlier, later).ToList();
+
+        Assert.Equal(4, ticks.Count);
+        Assert.Equal(new DateTimeOffset(2026, 01, 01, 12, 15, 00, TimeSpan.Zero), ticks[0]);
+        Assert.Equal(new DateTimeOffset(2026, 01, 01, 12, 30, 00, TimeSpan.Zero), ticks[1]);
+        Assert.Equal(new DateTimeOffset(2026, 01, 01, 12, 45, 00, TimeSpan.Zero), ticks[2]);
+        Assert.Equal(new DateTimeOffset(2026, 01, 01, 13, 00, 00, TimeSpan.Zero), ticks[3]);
+
+        Assert.Equal(QuarterHourTicks.CountTicksBetweenUtc(earlier, later), ticks.Count);
+    }
+
+    [Fact]
     public void CountTicksBetweenUtc_WhenNotUtc_Throws()
     {
         var earlier = new DateTimeOffset(2026, 01, 01, 12, 00, 00, TimeSpan.FromHours(+1));

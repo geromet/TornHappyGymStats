@@ -61,15 +61,27 @@ public sealed class ReconstructionRunner
         }
 
         // Core reconstruction.
-        var reconstructed = HappyReconstructor.RunBackwards(events, currentHappy, anchorTimeUtc);
+        var reconstructed = HappyReconstructor.RunBackwardsDetailed(events, currentHappy, anchorTimeUtc);
 
-        // Persist derived sidecar (atomic write). If persistence fails, do not pretend the run succeeded.
-        var write = DerivedGymTrainStore.WriteAllAtomic(_paths.DerivedGymTrainsJsonlPath, reconstructed.DerivedGymTrains);
-        if (!write.Success)
+        // Persist derived sidecars (atomic write). If persistence fails, do not pretend the run succeeded.
+        var writeTrains = DerivedGymTrainStore.WriteAllAtomic(_paths.DerivedGymTrainsJsonlPath, reconstructed.DerivedGymTrains);
+        if (!writeTrains.Success)
         {
             return new RunResult(
                 Success: false,
-                ErrorMessage: write.ErrorMessage,
+                ErrorMessage: writeTrains.ErrorMessage,
+                DerivedOutputPath: _paths.DerivedGymTrainsJsonlPath,
+                DerivedGymTrains: reconstructed.DerivedGymTrains,
+                Stats: null,
+                AnchorTimeUtc: anchorTimeUtc);
+        }
+
+        var writeEvents = DerivedHappyEventStore.WriteAllAtomic(_paths.DerivedHappyEventsJsonlPath, reconstructed.DerivedHappyEvents);
+        if (!writeEvents.Success)
+        {
+            return new RunResult(
+                Success: false,
+                ErrorMessage: writeEvents.ErrorMessage,
                 DerivedOutputPath: _paths.DerivedGymTrainsJsonlPath,
                 DerivedGymTrains: reconstructed.DerivedGymTrains,
                 Stats: null,
