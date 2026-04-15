@@ -98,6 +98,31 @@ public static class HappyReconstructor
             // Clamp to effective max even if the current event isn't a gym train.
             cursorHappy = ClampToEffectiveMax(cursorHappy, effectiveMaxCeiling, ref clampAppliedCount, ref warningCount);
 
+            if (ev is HappyDeltaEvent delta)
+            {
+                // cursorHappy is our best estimate of happy immediately AFTER this delta event.
+                // To go backwards, invert the delta: before = after - delta.
+                var beforeLong = (long)cursorHappy - delta.Delta;
+
+                if (beforeLong < 0)
+                {
+                    cursorHappy = 0;
+                    warningCount++;
+                }
+                else if (beforeLong > int.MaxValue)
+                {
+                    cursorHappy = int.MaxValue;
+                    warningCount++;
+                }
+                else
+                {
+                    cursorHappy = (int)beforeLong;
+                }
+
+                cursorHappy = ClampToEffectiveMax(cursorHappy, effectiveMaxCeiling, ref clampAppliedCount, ref warningCount);
+                continue;
+            }
+
             if (ev is not GymTrainEvent gym)
                 continue;
 

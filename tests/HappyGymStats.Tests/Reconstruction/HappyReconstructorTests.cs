@@ -127,6 +127,37 @@ public sealed class HappyReconstructorTests
         Assert.Equal(1, result.Stats.ClampAppliedCount);
     }
 
+    [Fact]
+    public void RunBackwards_AppliesHappyDeltaEvents_WhenReconstructing()
+    {
+        // Timeline (forward):
+        // 12:00 gym train uses 10 happy
+        // 12:05 item use increases happy by +25
+        // 12:10 anchor, current happy = 50
+        //
+        // Therefore at 12:00 after-train happy must be 25, and before-train must be 35.
+        var anchor = Utc("2024-01-01T12:10:00Z");
+        var deltaTime = Utc("2024-01-01T12:05:00Z");
+        var gymTime = Utc("2024-01-01T12:00:00Z");
+
+        var events = new ReconstructionEvent[]
+        {
+            new HappyDeltaEvent(LogId: "d1", OccurredAtUtc: deltaTime, Delta: 25),
+            new GymTrainEvent(LogId: "g1", OccurredAtUtc: gymTime, HappyUsed: 10),
+        };
+
+        var result = HappyReconstructor.RunBackwards(
+            events: events,
+            currentHappy: 50,
+            anchorTimeUtc: anchor);
+
+        var derived = Assert.Single(result.DerivedGymTrains);
+        Assert.Equal(gymTime, derived.OccurredAtUtc);
+        Assert.Equal(35, derived.HappyBeforeTrain);
+        Assert.Equal(10, derived.HappyUsed);
+        Assert.Equal(25, derived.HappyAfterTrain);
+    }
+
     private static DateTimeOffset Utc(string iso)
         => DateTimeOffset.Parse(iso, null, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal);
 }

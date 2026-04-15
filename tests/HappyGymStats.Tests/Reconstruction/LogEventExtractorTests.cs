@@ -36,6 +36,26 @@ public sealed class LogEventExtractorTests
     }
 
     [Fact]
+    public void Extract_FindsHappyDeltaEvent_FromHappyIncreasedDecreased()
+    {
+        var record = new JsonlLogReader.LogRecord(
+            LogId: "2001",
+            OccurredAtUtc: DateTimeOffset.FromUnixTimeSeconds(1700000000),
+            Title: "Some item use",
+            Category: "Special",
+            RawJson: "{\"id\":\"2001\",\"timestamp\":1700000000,\"details\":{\"title\":\"Some item use\",\"category\":\"Special\"},\"data\":{\"happy_increased\":25,\"happy_decreased\":5}}");
+
+        var extracted = LogEventExtractor.Extract(new[] { record });
+        var events = extracted.Events.ToList();
+
+        var delta = events.OfType<HappyDeltaEvent>().Single();
+        Assert.Equal("2001", delta.LogId);
+        Assert.Equal(20, delta.Delta); // +25 - 5
+
+        Assert.Equal(1, extracted.Stats.HappyDeltaEventsExtracted);
+    }
+
+    [Fact]
     public void Extract_WhenDetailsMissing_DoesNotThrow_AndDoesNotExtract()
     {
         var record = new JsonlLogReader.LogRecord(

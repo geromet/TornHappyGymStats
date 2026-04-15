@@ -17,6 +17,7 @@ public static class LogEventExtractor
         public int RecordsSeen { get; internal set; }
         public int GymTrainEventsExtracted { get; internal set; }
         public int MaxHappyEventsExtracted { get; internal set; }
+        public int HappyDeltaEventsExtracted { get; internal set; }
         public int JsonParseFailures { get; internal set; }
         public int MissingDetailsCount { get; internal set; }
         public int NumericOutOfRangeCount { get; internal set; }
@@ -55,12 +56,15 @@ public static class LogEventExtractor
                     // Gym train detection: data.happy_used is the primary signal.
                     if (TryGetPropertyIgnoreCase(root, "data", out var dataEl) && dataEl.ValueKind == JsonValueKind.Object)
                     {
+                        var extractedGymTrain = false;
+
                         if (TryGetPropertyIgnoreCase(dataEl, "happy_used", out var happyUsedValue))
                         {
                             var parsed = TryParseInt32Bounded(happyUsedValue, out var happyUsed, out var happyUsedOutOfRange);
 
                             if (parsed && !happyUsedOutOfRange)
                             {
+                                extractedGymTrain = true;
                                 stats.GymTrainEventsExtracted++;
                                 yield return new GymTrainEvent(
                                     LogId: record.LogId,
@@ -87,6 +91,55 @@ public static class LogEventExtractor
                             else if (parsed && maxHappyOutOfRange)
                             {
                                 stats.NumericOutOfRangeCount++;
+                            }
+                        }
+
+                        // Happy delta detection: apply to any record reporting a direct happy change.
+                        // Skip for gym trains to avoid double-counting in case Torn adds delta fields later.
+                        if (!extractedGymTrain)
+                        {
+                            var delta = 0;
+                            var hasNonZeroDelta = false;
+
+                            if (TryGetPropertyIgnoreCase(dataEl, "happy_increased", out var incEl))
+                            {
+                                var parsed = TryParseInt32Bounded(incEl, out var inc, out var incOutOfRange);
+                                if (parsed && !incOutOfRange)
+                                {
+                                    if (inc != 0)
+                                        hasNonZeroDelta = true;
+
+                                    delta += inc;
+                                }
+                                else if (parsed && incOutOfRange)
+                                {
+                                    stats.NumericOutOfRangeCount++;
+                                }
+                            }
+
+                            if (TryGetPropertyIgnoreCase(dataEl, "happy_decreased", out var decEl))
+                            {
+                                var parsed = TryParseInt32Bounded(decEl, out var dec, out var decOutOfRange);
+                                if (parsed && !decOutOfRange)
+                                {
+                                    if (dec != 0)
+                                        hasNonZeroDelta = true;
+
+                                    delta -= dec;
+                                }
+                                else if (parsed && decOutOfRange)
+                                {
+                                    stats.NumericOutOfRangeCount++;
+                                }
+                            }
+
+                            if (hasNonZeroDelta && delta != 0)
+                            {
+                                stats.HappyDeltaEventsExtracted++;
+                                yield return new HappyDeltaEvent(
+                                    LogId: record.LogId,
+                                    OccurredAtUtc: record.OccurredAtUtc,
+                                    Delta: delta);
                             }
                         }
                     }

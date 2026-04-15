@@ -81,6 +81,7 @@ public sealed class ReconstructionRunner
             MalformedLines: read.Stats.MalformedLines,
             GymTrainEventsExtracted: extract.Stats.GymTrainEventsExtracted,
             MaxHappyEventsExtracted: extract.Stats.MaxHappyEventsExtracted,
+            HappyDeltaEventsExtracted: extract.Stats.HappyDeltaEventsExtracted,
             GymTrainsDerived: reconstructed.Stats.GymTrainsDerived,
             ClampAppliedCount: reconstructed.Stats.ClampAppliedCount,
             WarningCount: reconstructed.Stats.WarningCount);
