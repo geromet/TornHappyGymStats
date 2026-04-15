@@ -10,6 +10,7 @@
     <Compile Include="CsvStatReader.fs" />
     <Compile Include="SurfaceBinner.fs" />
     <Compile Include="SurfacePlotter.fs" />
+    <Compile Include="HappyTimelinePlotter.fs" />
   </ItemGroup>
 
   <ItemGroup>

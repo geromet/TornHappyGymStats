@@ -91,6 +91,7 @@ module CsvStatReader =
                 | false, _ -> None
 
             let happyBeforeTrainIdx = tryGetCol "happy_before_train"
+            let happyBeforeEventIdx = tryGetCol "happy_before_event"
             let energyUsedIdx       = tryGetCol "data.energy_used"
             let detailsTitleIdx     = tryGetCol "details.title"
 
@@ -143,9 +144,10 @@ module CsvStatReader =
                         | None -> ()
                         | Some statType ->
                             let happyOpt =
-                                match happyBeforeTrainIdx with
-                                | Some idx -> tryParseFloat (getField idx)
-                                | None -> None
+                                match happyBeforeTrainIdx, happyBeforeEventIdx with
+                                | Some idx, _ -> tryParseFloat (getField idx)
+                                | None, Some idx -> tryParseFloat (getField idx)
+                                | None, None -> None
 
                             let energyOpt =
                                 match energyUsedIdx with
@@ -178,11 +180,12 @@ module CsvStatReader =
                         match statTypeFromTitle title with
                         | None -> ()  // Not a gym train row — skip
                         | Some statType ->
-                            // Extract happy_before_train + energy used
+                            // Extract happy_before_train (preferred) or happy_before_event (debug schema)
                             let happyOpt =
-                                match happyBeforeTrainIdx with
-                                | Some idx -> tryParseFloat (getField idx)
-                                | None -> None
+                                match happyBeforeTrainIdx, happyBeforeEventIdx with
+                                | Some idx, _ -> tryParseFloat (getField idx)
+                                | None, Some idx -> tryParseFloat (getField idx)
+                                | None, None -> None
 
                             let energyOpt =
                                 match energyUsedIdx with
