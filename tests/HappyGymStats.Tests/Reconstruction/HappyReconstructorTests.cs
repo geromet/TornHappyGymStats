@@ -28,11 +28,11 @@ public sealed class HappyReconstructorTests
     }
 
     [Fact]
-    public void RunBackwards_CountsQuarterHourTicks_ButDoesNotApplyHappyRegen()
+    public void RunBackwards_CountsQuarterHourTicks_AndAppliesHappyRegen()
     {
         // Anchor at 12:30 with happy=100, then reconstruct one gym event at 12:00.
-        // We still count quarter-hour ticks between 12:00 and 12:30 (12:15 and 12:30 => 2),
-        // but Torn happiness is not passively regenerated here, so RegenHappyGained is 0.
+        // Quarter-hour ticks between 12:00 and 12:30 are 12:15 and 12:30 => 2 ticks.
+        // Happy regenerates +5 per tick, so going backwards we subtract 10.
         var anchor = Utc("2024-01-01T12:30:00Z");
         var gymTime = Utc("2024-01-01T12:00:00Z");
 
@@ -48,9 +48,9 @@ public sealed class HappyReconstructorTests
 
         var derived = Assert.Single(result.DerivedGymTrains);
         Assert.Equal(2, derived.RegenTicksApplied);
-        Assert.Equal(0, derived.RegenHappyGained);
-        Assert.Equal(100, derived.HappyAfterTrain);
-        Assert.Equal(100, derived.HappyBeforeTrain);
+        Assert.Equal(10, derived.RegenHappyGained);
+        Assert.Equal(90, derived.HappyAfterTrain);
+        Assert.Equal(90, derived.HappyBeforeTrain);
     }
 
     [Fact]
@@ -100,7 +100,8 @@ public sealed class HappyReconstructorTests
 
             // Two trains between quarter-hour ticks: no regen should be applied between 10:31 and 10:30.
             new GymTrainEvent(LogId: "21", OccurredAtUtc: gym1031, HappyUsed: 0),
-            new GymTrainEvent(LogId: "22", OccurredAtUtc: gym1030, HappyUsed: 30),
+            // Use a large happy_used so the reconstructed before-train value exceeds max and clamps.
+            new GymTrainEvent(LogId: "22", OccurredAtUtc: gym1030, HappyUsed: 50),
         };
 
         var result = HappyReconstructor.RunBackwards(
@@ -117,7 +118,7 @@ public sealed class HappyReconstructorTests
         Assert.Equal(0, first.RegenTicksApplied);
         Assert.Equal(100, first.MaxHappyAtTimeUtc);
         Assert.True(first.ClampedToMax);
-        Assert.Equal(100, first.HappyBeforeTrain); // 80(after at 10:30) + 30 used => 110 clamped to 100
+        Assert.Equal(100, first.HappyBeforeTrain); // derived after at 10:30 + 50 used exceeds 100, so it clamps
 
         Assert.Equal(gym1031, second.OccurredAtUtc);
         Assert.Equal(2, second.RegenTicksApplied); // 10:31 -> 11:00 includes 10:45, 11:00

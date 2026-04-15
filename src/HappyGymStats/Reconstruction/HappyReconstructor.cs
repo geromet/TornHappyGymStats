@@ -20,9 +20,9 @@ namespace HappyGymStats.Reconstruction;
 /// </remarks>
 public static class HappyReconstructor
 {
-    // Torn happiness does not passively regenerate on a quarter-hour cadence the way energy does.
-    // We still count quarter-hour ticks between events for observability, but do not apply a regen delta.
-    public const int HappyRegenPerTick = 0;
+    // Torn happiness regenerates passively at a fixed cadence: +5 happy every 15 minutes.
+    // Ticks are counted by QuarterHourTicks using UTC quarter-hour boundaries.
+    public const int HappyRegenPerTick = 5;
 
     public sealed record BackwardsReconstructionStats(
         int GymTrainsDerived,
