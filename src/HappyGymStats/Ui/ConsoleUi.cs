@@ -141,6 +141,7 @@ public sealed class ConsoleUi
         summary.AddRow("Malformed lines", s.MalformedLines.ToString());
         summary.AddRow("Gym-train events", s.GymTrainEventsExtracted.ToString());
         summary.AddRow("Max-happy events", s.MaxHappyEventsExtracted.ToString());
+        summary.AddRow("Happy delta events", s.HappyDeltaEventsExtracted.ToString());
         summary.AddRow("Gym trains derived", s.GymTrainsDerived.ToString());
         summary.AddRow("Clamp applied", s.ClampAppliedCount.ToString());
         summary.AddRow("Warnings", s.WarningCount.ToString());

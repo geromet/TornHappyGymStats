@@ -95,6 +95,7 @@ if (args.Length > 0)
             Console.WriteLine($"Clamp applied: {result.Stats.ClampAppliedCount}");
             Console.WriteLine($"Warnings: {result.Stats.WarningCount}");
             Console.WriteLine($"Max-happy events extracted: {result.Stats.MaxHappyEventsExtracted}");
+            Console.WriteLine($"Happy delta events extracted: {result.Stats.HappyDeltaEventsExtracted}");
         }
 
         return;
