@@ -69,8 +69,9 @@ public static class CsvExportRunner
         "stat_after",
         "stat_increased",
         "stat_decreased",
-        "happy_before_train",
-        "happy_after_train",
+        "happy_before_event",
+        "happy_after_event",
+        "event_type",
         "regen_ticks_applied",
     };
 
@@ -260,7 +261,7 @@ public static class CsvExportRunner
     /// <summary>
     /// Run a fixed-schema "debug" CSV export intended for easier inspection.
     /// </summary>
-    public static ExportResult RunDebug(string logsJsonlPath, string outputCsvPath, string? derivedJsonlPath)
+    public static ExportResult RunDebug(string logsJsonlPath, string outputCsvPath, string? derivedJsonlPath, string? derivedHappyEventsJsonlPath)
     {
         // --- Load derived sidecar (optional) ---
         var derivedRead = derivedJsonlPath is not null
@@ -298,6 +299,20 @@ public static class CsvExportRunner
                     ErrorMessage = loadError,
                 };
             }
+        }
+
+        // --- Load derived per-event happy timeline (optional) ---
+        var happyEventsRead = derivedHappyEventsJsonlPath is not null
+            ? DerivedHappyEventReader.Read(derivedHappyEventsJsonlPath)
+            : null;
+
+        if (happyEventsRead?.ErrorMessage is not null)
+        {
+            return new ExportResult
+            {
+                Success = false,
+                ErrorMessage = happyEventsRead.ErrorMessage,
+            };
         }
 
         try
@@ -380,12 +395,28 @@ public static class CsvExportRunner
                         ExtractStatFields(dataEl, gymTable, row);
                     }
 
-                    // Join derived fields (if present).
+                    // Join per-event happy timeline (if present).
+                    // This file is produced by the reconstruction step.
+                    if (happyEventsRead is not null &&
+                        happyEventsRead.BySourceLogId.TryGetValue(record.LogId, out var happyEv))
+                    {
+                        row["happy_before_event"] = happyEv.HappyBeforeEvent.ToString();
+                        row["happy_after_event"] = happyEv.HappyAfterEvent.ToString();
+                        row["event_type"] = happyEv.EventType;
+                    }
+
+                    // Join derived gym-train fields (for regen_ticks_applied on train rows).
                     if (derivedRead is not null && derivedRead.Records.TryGetValue(record.LogId, out var derived))
                     {
-                        row["happy_before_train"] = derived.HappyBeforeTrain.ToString();
-                        row["happy_after_train"] = derived.HappyAfterTrain.ToString();
                         row["regen_ticks_applied"] = derived.RegenTicksApplied.ToString();
+
+                        // If happy timeline isn't present (old runs), fall back to train-only fields.
+                        if (!row.ContainsKey("happy_before_event"))
+                            row["happy_before_event"] = derived.HappyBeforeTrain.ToString();
+                        if (!row.ContainsKey("happy_after_event"))
+                            row["happy_after_event"] = derived.HappyAfterTrain.ToString();
+                        if (!row.ContainsKey("event_type"))
+                            row["event_type"] = "gym_train";
                     }
 
                     CsvWriter.WriteRow(writer, DebugColumns, row);

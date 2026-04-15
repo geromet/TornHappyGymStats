@@ -42,7 +42,7 @@ public sealed class CsvDebugExportTests
             var write = DerivedGymTrainStore.WriteAllAtomic(derivedPath, derived);
             Assert.True(write.Success, write.ErrorMessage);
 
-            var result = CsvExportRunner.RunDebug(jsonlPath, csvPath, derivedPath);
+            var result = CsvExportRunner.RunDebug(jsonlPath, csvPath, derivedPath, derivedHappyEventsJsonlPath: null);
             Assert.True(result.Success, result.ErrorMessage);
             Assert.Equal(CsvExportRunner.DebugColumns, result.HeaderColumns);
 
@@ -70,9 +70,10 @@ public sealed class CsvDebugExportTests
             Assert.Equal("105", fields[Idx("stat_after")]);
             Assert.Equal("5", fields[Idx("stat_increased")]);
 
-            // Derived join
-            Assert.Equal("2000", fields[Idx("happy_before_train")]);
-            Assert.Equal("1990", fields[Idx("happy_after_train")]);
+            // Derived join (fallback to train-derived values when no per-event timeline is provided)
+            Assert.Equal("2000", fields[Idx("happy_before_event")]);
+            Assert.Equal("1990", fields[Idx("happy_after_event")]);
+            Assert.Equal("gym_train", fields[Idx("event_type")]);
             Assert.Equal("2", fields[Idx("regen_ticks_applied")]);
         }
         finally

@@ -258,9 +258,11 @@ public sealed class ConsoleUi
         table.AddRow("JSONL store", Markup.Escape(paths.LogsJsonlPath));
         table.AddRow("Derived directory", Markup.Escape(paths.DerivedDirectory));
         table.AddRow("Derived gym trains", Markup.Escape(paths.DerivedGymTrainsJsonlPath));
+        table.AddRow("Derived happy events", Markup.Escape(paths.DerivedHappyEventsJsonlPath));
         table.AddRow("Export directory", Markup.Escape(paths.ExportDirectory));
         table.AddRow("CSV output", Markup.Escape(paths.LogsCsvPath));
         table.AddRow("Debug CSV output", Markup.Escape(paths.LogsDebugCsvPath));
+        table.AddRow("Happy timeline CSV", Markup.Escape(paths.HappyTimelineCsvPath));
 
         if (checkpoint is null)
         {

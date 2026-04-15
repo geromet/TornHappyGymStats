@@ -19,6 +19,7 @@ Directory.CreateDirectory(paths.ExportDirectory);
 //
 // Usage:
 //   HappyGymStats visualize [--csv <path>] [--out <dir>]
+//   HappyGymStats visualize-happy [--timeline <path>] [--out <dir>]
 //   HappyGymStats reconstruct-happy --current <int> [--anchor <iso-utc>]
 if (args.Length > 0)
 {
@@ -62,6 +63,26 @@ if (args.Length > 0)
         foreach (var p in generatedPaths)
             Console.WriteLine(p);
 
+        return;
+    }
+
+    if (args[0].Equals("visualize-happy", StringComparison.OrdinalIgnoreCase))
+    {
+        var timelinePath = GetArg("--timeline") ?? paths.HappyTimelineCsvPath;
+        var outDir = GetArg("--out") ?? paths.ExportDirectory;
+
+        if (!File.Exists(timelinePath))
+        {
+            Console.Error.WriteLine($"Happy timeline CSV not found: {timelinePath}");
+            return;
+        }
+
+        Directory.CreateDirectory(outDir);
+
+        var outPath = Path.Combine(outDir, "HappyTimeline.html");
+        var generated = HappyTimelinePlotter.generateHappyTimelinePlot(timelinePath, outPath);
+
+        Console.WriteLine(generated);
         return;
     }
 
@@ -236,11 +257,25 @@ while (true)
                     var debugResult = CsvExportRunner.RunDebug(
                         paths.LogsJsonlPath,
                         paths.LogsDebugCsvPath,
-                        paths.DerivedGymTrainsJsonlPath);
+                        paths.DerivedGymTrainsJsonlPath,
+                        paths.DerivedHappyEventsJsonlPath);
 
                     if (debugResult.Success)
                     {
                         ui.RenderInfo($"Debug CSV output: {debugResult.OutputPath} (rows={debugResult.RowsWritten})");
+
+                        var timelineResult = HappyTimelineCsvWriter.Write(
+                            paths.DerivedHappyEventsJsonlPath,
+                            paths.HappyTimelineCsvPath);
+
+                        if (timelineResult.Success)
+                        {
+                            ui.RenderInfo($"Happy timeline CSV output: {timelineResult.OutputPath} (rows={timelineResult.RowsWritten})");
+                        }
+                        else
+                        {
+                            ui.RenderError(timelineResult.ErrorMessage ?? "Happy timeline CSV export failed.");
+                        }
                     }
                     else
                     {
