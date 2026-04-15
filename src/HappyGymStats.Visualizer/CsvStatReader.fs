@@ -94,6 +94,13 @@ module CsvStatReader =
             let energyUsedIdx       = tryGetCol "data.energy_used"
             let detailsTitleIdx     = tryGetCol "details.title"
 
+            // Debug CSV schema support (fixed columns).
+            let statTypeIdx     = tryGetCol "stat_type"
+            let statBeforeIdx   = tryGetCol "stat_before"
+            let statIncreasedIdx= tryGetCol "stat_increased"
+
+            let debugSchema = statTypeIdx.IsSome && statBeforeIdx.IsSome && statIncreasedIdx.IsSome
+
             let records = ResizeArray<StatRecord>()
             let errors  = ResizeArray<string>()
 
@@ -119,28 +126,32 @@ module CsvStatReader =
                 let getField (idx: int) =
                     if idx < fields.Length then fields.[idx].Trim() else ""
 
-                // Check if this is a gym train row via details.title
-                match detailsTitleIdx with
-                | None -> ()
-                | Some titleIdx ->
-                    let title = getField titleIdx
-                    match statTypeFromTitle title with
-                    | None -> ()  // Not a gym train row — skip
-                    | Some statType ->
-                        // Extract happy_before_train + energy used
-                        let happyOpt =
-                            match happyBeforeTrainIdx with
-                            | Some idx -> tryParseFloat (getField idx)
-                            | None -> None
+                if debugSchema then
+                    // Debug schema: stat_type/stat_before/stat_increased columns exist.
+                    match statTypeIdx, statBeforeIdx, statIncreasedIdx with
+                    | Some stIdx, Some beforeIdx, Some increasedIdx ->
+                        let stText = getField stIdx
+                        let statTypeOpt =
+                            match stText.Trim().ToLowerInvariant() with
+                            | "strength" -> Some Strength
+                            | "defense" -> Some Defense
+                            | "speed" -> Some Speed
+                            | "dexterity" -> Some Dexterity
+                            | _ -> None
 
-                        let energyOpt =
-                            match energyUsedIdx with
-                            | Some idx -> tryParseFloat (getField idx)
-                            | None -> None
+                        match statTypeOpt with
+                        | None -> ()
+                        | Some statType ->
+                            let happyOpt =
+                                match happyBeforeTrainIdx with
+                                | Some idx -> tryParseFloat (getField idx)
+                                | None -> None
 
-                        // Extract stat-specific before and increased values
-                        match Map.find statType statColMap with
-                        | Some beforeIdx, Some increasedIdx ->
+                            let energyOpt =
+                                match energyUsedIdx with
+                                | Some idx -> tryParseFloat (getField idx)
+                                | None -> None
+
                             let beforeOpt    = tryParseFloat (getField beforeIdx)
                             let increasedOpt = tryParseFloat (getField increasedIdx)
 
@@ -155,11 +166,51 @@ module CsvStatReader =
                                 }
                             | _ ->
                                 errors.Add(
-                                    sprintf "Row %d: missing numeric fields (stat=%A before=%A happy=%A increased=%A energy=%A)"
+                                    sprintf "Row %d: missing numeric fields (debug schema; stat=%A before=%A happy=%A increased=%A energy=%A)"
                                         (rowIdx + 1) statType beforeOpt happyOpt increasedOpt energyOpt)
-                        | _ ->
-                            errors.Add(
-                                sprintf "Row %d: missing column mapping for stat type %A"
-                                    (rowIdx + 1) statType)
+                    | _ -> ()
+                else
+                    // Legacy schema: detect via details.title and stat-specific columns.
+                    match detailsTitleIdx with
+                    | None -> ()
+                    | Some titleIdx ->
+                        let title = getField titleIdx
+                        match statTypeFromTitle title with
+                        | None -> ()  // Not a gym train row — skip
+                        | Some statType ->
+                            // Extract happy_before_train + energy used
+                            let happyOpt =
+                                match happyBeforeTrainIdx with
+                                | Some idx -> tryParseFloat (getField idx)
+                                | None -> None
+
+                            let energyOpt =
+                                match energyUsedIdx with
+                                | Some idx -> tryParseFloat (getField idx)
+                                | None -> None
+
+                            // Extract stat-specific before and increased values
+                            match Map.find statType statColMap with
+                            | Some beforeIdx, Some increasedIdx ->
+                                let beforeOpt    = tryParseFloat (getField beforeIdx)
+                                let increasedOpt = tryParseFloat (getField increasedIdx)
+
+                                match beforeOpt, happyOpt, increasedOpt, energyOpt with
+                                | Some before, Some happy, Some increased, Some energy when energy > 0.0 ->
+                                    records.Add {
+                                        StatType = statType
+                                        StatBefore = before
+                                        HappyBeforeTrain = happy
+                                        StatIncreased = increased
+                                        EnergyUsed = energy
+                                    }
+                                | _ ->
+                                    errors.Add(
+                                        sprintf "Row %d: missing numeric fields (stat=%A before=%A happy=%A increased=%A energy=%A)"
+                                            (rowIdx + 1) statType beforeOpt happyOpt increasedOpt energyOpt)
+                            | _ ->
+                                errors.Add(
+                                    sprintf "Row %d: missing column mapping for stat type %A"
+                                        (rowIdx + 1) statType)
 
             { Records = List.ofSeq records; ParseErrors = List.ofSeq errors }

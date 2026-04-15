@@ -60,7 +60,22 @@ let ``ReadStatRecords skips non-gym rows`` () =
     Assert.Equal(3, result.Records.Length)
     Assert.Empty result.ParseErrors
 
-// ── Test 4: Empty CSV (header only) ─────────────────────────────────────────
+// ── Test 4: Debug schema support ───────────────────────────────────────────
+
+[<Fact>]
+let ``ReadStatRecords parses debug CSV schema`` () =
+    let result = readStatRecords (fixturePath "sample_gym_debug.csv")
+    Assert.Single(result.Records) |> ignore
+    Assert.Empty result.ParseErrors
+
+    let r = result.Records.[0]
+    Assert.Equal(Strength, r.StatType)
+    Assert.Equal(100.0, r.StatBefore)
+    Assert.Equal(2000.0, r.HappyBeforeTrain)
+    Assert.Equal(5.0, r.StatIncreased)
+    Assert.Equal(25.0, r.EnergyUsed)
+
+// ── Test 5: Empty CSV (header only) ─────────────────────────────────────────
 
 [<Fact>]
 let ``ReadStatRecords handles empty CSV with header only`` () =
