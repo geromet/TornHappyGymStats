@@ -60,8 +60,10 @@ public sealed class ReconstructionRunner
             events.Add(ev);
         }
 
-        // Core reconstruction.
-        var reconstructed = HappyReconstructor.RunBackwardsDetailed(events, currentHappy, anchorTimeUtc);
+        // Core reconstruction (forward, anchor-driven).
+        // NOTE: currentHappy/anchorTimeUtc are currently used only by the UI/CLI contract.
+        // Forward reconstruction derives what it can from anchors inside the log stream.
+        var reconstructed = HappyTimelineReconstructor.RunForward(events);
 
         // Persist derived sidecars (atomic write). If persistence fails, do not pretend the run succeeded.
         var writeTrains = DerivedGymTrainStore.WriteAllAtomic(_paths.DerivedGymTrainsJsonlPath, reconstructed.DerivedGymTrains);

@@ -400,8 +400,8 @@ public static class CsvExportRunner
                     if (happyEventsRead is not null &&
                         happyEventsRead.BySourceLogId.TryGetValue(record.LogId, out var happyEv))
                     {
-                        row["happy_before_event"] = happyEv.HappyBeforeEvent.ToString();
-                        row["happy_after_event"] = happyEv.HappyAfterEvent.ToString();
+                        row["happy_before_event"] = happyEv.HappyBeforeEvent?.ToString() ?? string.Empty;
+                        row["happy_after_event"] = happyEv.HappyAfterEvent?.ToString() ?? string.Empty;
                         row["event_type"] = happyEv.EventType;
                     }
 

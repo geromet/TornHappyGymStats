@@ -30,7 +30,8 @@ public sealed class LogEventExtractorTests
 
         var max = events.OfType<MaxHappyEvent>().Single();
         Assert.Equal("1002", max.LogId);
-        Assert.Equal(4500, max.MaxHappy);
+        Assert.Equal(4500, max.MaxHappyBefore);
+        Assert.Equal(4500, max.MaxHappyAfter);
 
         Assert.True(extracted.Stats.MaxHappyEventsExtracted >= 1);
     }

@@ -95,8 +95,8 @@ public sealed class HappyReconstructorTests
 
         var events = new ReconstructionEvent[]
         {
-            new MaxHappyEvent(LogId: "10", OccurredAtUtc: tMax100, MaxHappy: 100),
-            new MaxHappyEvent(LogId: "11", OccurredAtUtc: tMax80, MaxHappy: 80),
+            new MaxHappyEvent(LogId: "10", OccurredAtUtc: tMax100, MaxHappyBefore: 100, MaxHappyAfter: 100),
+            new MaxHappyEvent(LogId: "11", OccurredAtUtc: tMax80, MaxHappyBefore: 100, MaxHappyAfter: 80),
 
             // Two trains between quarter-hour ticks: no regen should be applied between 10:31 and 10:30.
             new GymTrainEvent(LogId: "21", OccurredAtUtc: gym1031, HappyUsed: 0),

@@ -31,7 +31,23 @@ public static class HappyReconstructionModels
     public sealed record MaxHappyEvent(
         string LogId,
         DateTimeOffset OccurredAtUtc,
-        int MaxHappy)
+        int MaxHappyBefore,
+        int MaxHappyAfter)
+        : ReconstructionEvent(LogId, OccurredAtUtc);
+
+    /// <summary>
+    /// A parsed drug overdose event extracted from a user log.
+    /// </summary>
+    /// <remarks>
+    /// Overdoses are treated as anchor-capable events because (for known drugs) we can infer the
+    /// before/after happy values from the reported <c>happy_decreased</c> and a drug-specific percentage.
+    /// </remarks>
+    public sealed record OverdoseEvent(
+        string LogId,
+        DateTimeOffset OccurredAtUtc,
+        string DrugName,
+        double PercentLoss,
+        int HappyDecreased)
         : ReconstructionEvent(LogId, OccurredAtUtc);
 
     /// <summary>
@@ -75,8 +91,8 @@ public static class HappyReconstructionModels
         string? SourceLogId,
         DateTimeOffset OccurredAtUtc,
         string EventType,
-        int HappyBeforeEvent,
-        int HappyAfterEvent,
+        int? HappyBeforeEvent,
+        int? HappyAfterEvent,
         int? Delta,
         int? HappyUsed,
         int? MaxHappyAtTimeUtc,
