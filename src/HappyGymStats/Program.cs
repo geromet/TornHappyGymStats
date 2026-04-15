@@ -231,6 +231,21 @@ while (true)
                         paths.DerivedGymTrainsJsonlPath);
 
                     ui.RenderCsvExportSummary(result);
+
+                    ui.RenderInfo("Starting debug CSV export...");
+                    var debugResult = CsvExportRunner.RunDebug(
+                        paths.LogsJsonlPath,
+                        paths.LogsDebugCsvPath,
+                        paths.DerivedGymTrainsJsonlPath);
+
+                    if (debugResult.Success)
+                    {
+                        ui.RenderInfo($"Debug CSV output: {debugResult.OutputPath} (rows={debugResult.RowsWritten})");
+                    }
+                    else
+                    {
+                        ui.RenderError(debugResult.ErrorMessage ?? "Debug CSV export failed.");
+                    }
                 }
                 catch (OperationCanceledException)
                 {

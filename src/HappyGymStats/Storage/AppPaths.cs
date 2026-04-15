@@ -15,6 +15,8 @@ public sealed record AppPaths(
 
     public string LogsCsvPath => Path.Combine(ExportDirectory, "userlogs.csv");
 
+    public string LogsDebugCsvPath => Path.Combine(ExportDirectory, "userlogs.debug.csv");
+
     public static AppPaths Default(string appName = "HappyGymStats")
     {
         var dataDir = HappyGymStats.Storage.DataDirectory.ResolveBasePath(appName);

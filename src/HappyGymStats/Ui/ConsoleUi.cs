@@ -260,6 +260,7 @@ public sealed class ConsoleUi
         table.AddRow("Derived gym trains", Markup.Escape(paths.DerivedGymTrainsJsonlPath));
         table.AddRow("Export directory", Markup.Escape(paths.ExportDirectory));
         table.AddRow("CSV output", Markup.Escape(paths.LogsCsvPath));
+        table.AddRow("Debug CSV output", Markup.Escape(paths.LogsDebugCsvPath));
 
         if (checkpoint is null)
         {
