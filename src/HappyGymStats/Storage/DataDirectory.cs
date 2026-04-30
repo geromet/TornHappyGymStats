@@ -4,18 +4,32 @@ namespace HappyGymStats.Storage;
 
 public static class DataDirectory
 {
+    public const string OverrideEnvironmentVariable = "HAPPYGYMSTATS_DATA_DIR";
+
     private const string LocalDataDirName = "data";
 
     /// <summary>
     /// Resolve the base data directory.
     ///
     /// Preference order:
-    /// 1) AppContext.BaseDirectory/data (portable deployments when writable)
-    /// 2) ./data (developer-local / working dir)
-    /// 3) LocalApplicationData/{appName} (user-writable fallback)
+    /// 1) HAPPYGYMSTATS_DATA_DIR, when explicitly set (must be writable)
+    /// 2) AppContext.BaseDirectory/data (portable deployments when writable)
+    /// 3) ./data (developer-local / working dir)
+    /// 4) LocalApplicationData/{appName} (user-writable fallback)
     /// </summary>
     public static string ResolveBasePath(string appName)
     {
+        var overridePath = Environment.GetEnvironmentVariable(OverrideEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(overridePath))
+        {
+            var resolvedOverride = Path.GetFullPath(overridePath);
+            if (TryEnsureWritableDirectory(resolvedOverride))
+                return resolvedOverride;
+
+            throw new IOException(
+                $"Data directory override from {OverrideEnvironmentVariable} is not writable or could not be created: '{resolvedOverride}'.");
+        }
+
         // 1) AppContext.BaseDirectory/data
         var baseDirCandidate = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, LocalDataDirName));
         if (TryEnsureWritableDirectory(baseDirCandidate))
