@@ -1,0 +1,6 @@
+@HappyGymStats.Api_HostAddress = http://localhost:5047
+
+GET {{HappyGymStats.Api_HostAddress}}/health
+Accept: application/json
+
+###
