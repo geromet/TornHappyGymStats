@@ -198,6 +198,56 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
         Assert.False(string.IsNullOrWhiteSpace(payload.Error.RequestId));
     }
 
+    [Fact]
+    public async Task Import_latest_returns_not_found_before_any_import()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/v1/import/latest");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
+
+        Assert.NotNull(payload);
+        Assert.Equal("not_found", payload.Error.Code);
+    }
+
+    [Fact]
+    public async Task Import_requires_api_key()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/v1/import", new { fresh = true });
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
+
+        Assert.NotNull(payload);
+        Assert.Equal("validation_failed", payload.Error.Code);
+        Assert.Equal("apiKey is required.", payload.Error.Message);
+    }
+
+    [Fact]
+    public async Task Import_endpoint_accepts_request_and_exposes_latest_status()
+    {
+        using var client = _factory.CreateClient();
+
+        var startResponse = await client.PostAsJsonAsync("/v1/import", new { apiKey = "bad-key-for-test", fresh = true });
+        Assert.True(startResponse.StatusCode is HttpStatusCode.Accepted or HttpStatusCode.OK);
+
+        var startPayload = await startResponse.Content.ReadFromJsonAsync<ImportStatusDto>(JsonOptions);
+        Assert.NotNull(startPayload);
+        Assert.False(string.IsNullOrWhiteSpace(startPayload.Id));
+
+        var latestResponse = await client.GetAsync("/v1/import/latest");
+        latestResponse.EnsureSuccessStatusCode();
+
+        var latestPayload = await latestResponse.Content.ReadFromJsonAsync<ImportStatusDto>(JsonOptions);
+        Assert.NotNull(latestPayload);
+        Assert.Equal(startPayload.Id, latestPayload.Id);
+        Assert.Contains(latestPayload.Outcome, new[] { "queued", "running", "failed", "completed", "cancelled" });
+    }
+
     public sealed class TestApplicationFactory : WebApplicationFactory<Program>
     {
         private SqliteConnection? _connection;
