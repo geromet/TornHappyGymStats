@@ -1,9 +1,11 @@
 using System.Text.Json;
-
+using HappyGymStats.Data;
+using HappyGymStats.Data.Entities;
 using HappyGymStats.Storage;
 using HappyGymStats.Storage.Models;
 using HappyGymStats.Torn;
 using HappyGymStats.Torn.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace HappyGymStats.Fetch;
 
@@ -46,6 +48,14 @@ public sealed class LogFetcher
         Directory.CreateDirectory(_paths.DataDirectory);
         Directory.CreateDirectory(_paths.QuarantineDirectory);
 
+        var databasePath = SqlitePaths.ResolveDatabasePath(_paths.DataDirectory);
+        var dbOptions = new DbContextOptionsBuilder<HappyGymStatsDbContext>()
+            .UseSqlite($"Data Source={databasePath}")
+            .Options;
+
+        await using var db = new HappyGymStatsDbContext(dbOptions);
+        await db.Database.MigrateAsync(ct);
+
         var scan = JsonlLogStore.ScanAndQuarantine(_paths.LogsJsonlPath, _paths.QuarantineDirectory);
         if (scan.MalformedLines > 0)
         {
@@ -53,8 +63,11 @@ public sealed class LogFetcher
         }
 
         var existingIds = scan.ExistingIds;
+        foreach (var dbLogId in await db.RawUserLogs.AsNoTracking().Select(row => row.LogId).ToListAsync(ct))
+            existingIds.Add(dbLogId);
 
         var checkpoint = CheckpointStore.TryRead(_paths.CheckpointPath)
+                         ?? await ReadCheckpointFromDatabaseAsync(db, ct)
                          ?? new Checkpoint(
                              NextUrl: null,
                              LastLogId: scan.LastLogId,
@@ -69,11 +82,8 @@ public sealed class LogFetcher
                              LastErrorMessage: null,
                              LastErrorAt: null);
 
-        // If old checkpoint had counts lower than the known on-disk store, correct it upward.
         if (checkpoint.TotalAppendedCount < existingIds.Count)
-        {
             checkpoint = checkpoint with { TotalAppendedCount = existingIds.Count };
-        }
 
         checkpoint = checkpoint with
         {
@@ -83,6 +93,19 @@ public sealed class LogFetcher
             LastErrorMessage = null,
             LastErrorAt = null,
         };
+
+        var importRun = new ImportRunEntity
+        {
+            StartedAtUtc = checkpoint.LastRunStartedAt ?? DateTimeOffset.UtcNow,
+            Outcome = "running",
+            ErrorMessage = null,
+            PagesFetched = 0,
+            LogsFetched = 0,
+            LogsAppended = 0,
+        };
+        db.ImportRuns.Add(importRun);
+        await SaveCheckpointAsync(db, checkpoint, ct);
+        await db.SaveChangesAsync(ct);
 
         Uri? nextUrl;
         if (mode == FetchMode.Fresh)
@@ -99,7 +122,11 @@ public sealed class LogFetcher
                     LastRunCompletedAt = DateTimeOffset.UtcNow,
                     LastRunOutcome = "noop",
                 };
+                importRun.CompletedAtUtc = checkpoint.LastRunCompletedAt;
+                importRun.Outcome = "noop";
                 CheckpointStore.Write(_paths.CheckpointPath, checkpoint);
+                await SaveCheckpointAsync(db, checkpoint, ct);
+                await db.SaveChangesAsync(ct);
                 log?.Invoke("No resume cursor present in checkpoint. Nothing to resume.");
                 return new FetchRunResult(checkpoint, PagesFetched: 0, LogsFetched: 0, LogsAppended: 0);
             }
@@ -113,7 +140,12 @@ public sealed class LogFetcher
                     LastErrorMessage = $"Checkpoint NextUrl is not a valid absolute URI: '{checkpoint.NextUrl}'.",
                     LastErrorAt = DateTimeOffset.UtcNow,
                 };
+                importRun.CompletedAtUtc = checkpoint.LastRunCompletedAt;
+                importRun.Outcome = "failed";
+                importRun.ErrorMessage = checkpoint.LastErrorMessage;
                 CheckpointStore.Write(_paths.CheckpointPath, checkpoint);
+                await SaveCheckpointAsync(db, checkpoint, ct);
+                await db.SaveChangesAsync(ct);
                 throw new InvalidDataException(checkpoint.LastErrorMessage);
             }
 
@@ -123,7 +155,6 @@ public sealed class LogFetcher
         var pagesFetched = 0;
         long logsFetched = 0;
         long logsAppended = 0;
-
         var throttleFirst = true;
 
         try
@@ -145,7 +176,7 @@ public sealed class LogFetcher
                 pagesFetched++;
                 logsFetched += page.Logs.Count;
 
-                var newRaw = new List<JsonElement>(page.Logs.Count);
+                var newLogs = new List<UserLog>(page.Logs.Count);
                 UserLog? lastAppended = null;
 
                 foreach (var logItem in page.Logs)
@@ -156,14 +187,16 @@ public sealed class LogFetcher
                     if (!existingIds.Add(logItem.Id))
                         continue;
 
-                    newRaw.Add(logItem.Raw);
+                    newLogs.Add(logItem);
                     lastAppended = logItem;
                 }
 
-                if (newRaw.Count > 0)
+                if (newLogs.Count > 0)
                 {
-                    JsonlLogStore.Append(_paths.LogsJsonlPath, newRaw);
-                    logsAppended += newRaw.Count;
+                    JsonlLogStore.Append(_paths.LogsJsonlPath, newLogs.Select(row => row.Raw));
+                    db.RawUserLogs.AddRange(newLogs.Select(MapRawUserLog));
+                    await db.SaveChangesAsync(ct);
+                    logsAppended += newLogs.Count;
 
                     if (lastAppended is not null)
                     {
@@ -181,11 +214,16 @@ public sealed class LogFetcher
                 {
                     NextUrl = page.NextUrl?.OriginalString,
                     TotalFetchedCount = checkpoint.TotalFetchedCount + page.Logs.Count,
-                    TotalAppendedCount = checkpoint.TotalAppendedCount + newRaw.Count,
+                    TotalAppendedCount = checkpoint.TotalAppendedCount + newLogs.Count,
                 };
 
-                // Durable progress marker: always write after handling a page.
+                importRun.PagesFetched = pagesFetched;
+                importRun.LogsFetched = checked((int)Math.Min(int.MaxValue, logsFetched));
+                importRun.LogsAppended = checked((int)Math.Min(int.MaxValue, logsAppended));
+
                 CheckpointStore.Write(_paths.CheckpointPath, checkpoint);
+                await SaveCheckpointAsync(db, checkpoint, ct);
+                await db.SaveChangesAsync(ct);
 
                 if (page.Logs.Count == 0)
                 {
@@ -201,8 +239,7 @@ public sealed class LogFetcher
                     break;
                 }
 
-                log?.Invoke($"Page {pagesFetched}: fetched={page.Logs.Count}, appended={newRaw.Count}, next={(page.NextUrl is null ? "(none)" : "present")}");
-
+                log?.Invoke($"Page {pagesFetched}: fetched={page.Logs.Count}, appended={newLogs.Count}, next={(page.NextUrl is null ? "(none)" : "present")}");
                 nextUrl = page.NextUrl;
             }
 
@@ -212,7 +249,15 @@ public sealed class LogFetcher
                 LastRunOutcome = "completed",
             };
 
+            importRun.CompletedAtUtc = checkpoint.LastRunCompletedAt;
+            importRun.Outcome = "completed";
+            importRun.PagesFetched = pagesFetched;
+            importRun.LogsFetched = checked((int)Math.Min(int.MaxValue, logsFetched));
+            importRun.LogsAppended = checked((int)Math.Min(int.MaxValue, logsAppended));
+
             CheckpointStore.Write(_paths.CheckpointPath, checkpoint);
+            await SaveCheckpointAsync(db, checkpoint, ct);
+            await db.SaveChangesAsync(ct);
             return new FetchRunResult(checkpoint, pagesFetched, logsFetched, logsAppended);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -223,7 +268,15 @@ public sealed class LogFetcher
                 LastRunOutcome = "cancelled",
             };
 
+            importRun.CompletedAtUtc = checkpoint.LastRunCompletedAt;
+            importRun.Outcome = "cancelled";
+            importRun.PagesFetched = pagesFetched;
+            importRun.LogsFetched = checked((int)Math.Min(int.MaxValue, logsFetched));
+            importRun.LogsAppended = checked((int)Math.Min(int.MaxValue, logsAppended));
+
             CheckpointStore.Write(_paths.CheckpointPath, checkpoint);
+            await SaveCheckpointAsync(db, checkpoint, ct);
+            await db.SaveChangesAsync(ct);
             throw;
         }
         catch (Exception ex)
@@ -236,7 +289,16 @@ public sealed class LogFetcher
                 LastErrorAt = DateTimeOffset.UtcNow,
             };
 
+            importRun.CompletedAtUtc = checkpoint.LastRunCompletedAt;
+            importRun.Outcome = "failed";
+            importRun.ErrorMessage = ex.Message;
+            importRun.PagesFetched = pagesFetched;
+            importRun.LogsFetched = checked((int)Math.Min(int.MaxValue, logsFetched));
+            importRun.LogsAppended = checked((int)Math.Min(int.MaxValue, logsAppended));
+
             CheckpointStore.Write(_paths.CheckpointPath, checkpoint);
+            await SaveCheckpointAsync(db, checkpoint, ct);
+            await db.SaveChangesAsync(ct);
             throw;
         }
     }
@@ -276,6 +338,60 @@ public sealed class LogFetcher
             }
         }
     }
+
+    private static async Task<Checkpoint?> ReadCheckpointFromDatabaseAsync(HappyGymStatsDbContext db, CancellationToken ct)
+    {
+        var entity = await db.ImportCheckpoints.AsNoTracking().SingleOrDefaultAsync(row => row.Name == "default", ct);
+        if (entity is null)
+            return null;
+
+        return new Checkpoint(
+            entity.NextUrl,
+            entity.LastLogId,
+            entity.LastLogTimestamp,
+            entity.LastLogTitle,
+            entity.LastLogCategory,
+            entity.TotalFetchedCount,
+            entity.TotalAppendedCount,
+            entity.LastRunStartedAt,
+            entity.LastRunCompletedAt,
+            entity.LastRunOutcome,
+            entity.LastErrorMessage,
+            entity.LastErrorAt);
+    }
+
+    private static async Task SaveCheckpointAsync(HappyGymStatsDbContext db, Checkpoint checkpoint, CancellationToken ct)
+    {
+        var entity = await db.ImportCheckpoints.SingleOrDefaultAsync(row => row.Name == "default", ct);
+        if (entity is null)
+        {
+            entity = new ImportCheckpointEntity { Name = "default" };
+            db.ImportCheckpoints.Add(entity);
+        }
+
+        entity.NextUrl = checkpoint.NextUrl;
+        entity.LastLogId = checkpoint.LastLogId;
+        entity.LastLogTimestamp = checkpoint.LastLogTimestamp;
+        entity.LastLogTitle = checkpoint.LastLogTitle;
+        entity.LastLogCategory = checkpoint.LastLogCategory;
+        entity.TotalFetchedCount = checkpoint.TotalFetchedCount;
+        entity.TotalAppendedCount = checkpoint.TotalAppendedCount;
+        entity.LastRunStartedAt = checkpoint.LastRunStartedAt;
+        entity.LastRunCompletedAt = checkpoint.LastRunCompletedAt;
+        entity.LastRunOutcome = checkpoint.LastRunOutcome;
+        entity.LastErrorMessage = checkpoint.LastErrorMessage;
+        entity.LastErrorAt = checkpoint.LastErrorAt;
+    }
+
+    private static RawUserLogEntity MapRawUserLog(UserLog log)
+        => new()
+        {
+            LogId = log.Id,
+            OccurredAtUtc = SafeUnixSeconds(log.Timestamp) ?? DateTimeOffset.UnixEpoch,
+            Title = log.Title,
+            Category = log.Category,
+            RawJson = JsonSerializer.Serialize(log.Raw),
+        };
 
     private static DateTimeOffset? SafeUnixSeconds(long unixSeconds)
     {
