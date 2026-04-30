@@ -220,7 +220,7 @@ public sealed class ConsoleUi
     {
         if (generatedPaths.Count == 0)
         {
-            RenderInfo("No surface plots generated — no gym train data found.");
+            RenderInfo("No point-cloud plots generated — no gym train data found.");
             return;
         }
 

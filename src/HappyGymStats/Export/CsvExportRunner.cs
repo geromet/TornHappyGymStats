@@ -52,7 +52,7 @@ public static class CsvExportRunner
     };
 
     /// <summary>
-    /// Minimal, fixed-schema CSV intended for debugging reconstruction/surfaces.
+    /// Minimal, fixed-schema CSV intended for debugging reconstruction/visualization.
     /// </summary>
     public static readonly string[] DebugColumns =
     {

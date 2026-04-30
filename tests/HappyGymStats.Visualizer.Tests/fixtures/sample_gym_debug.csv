@@ -1,2 +1,0 @@
-id,timestamp,data,data.energy_used,data.gym,data.maximum_happy_after,data.maximum_happy_before,data.happy_delta,stat_type,stat_before,stat_after,stat_increased,stat_decreased,happy_before_event,happy_after_event,event_type,regen_ticks_applied
-s1,1700000000,{},25,7,,,,strength,100,105,5,,2000,1987,gym_train,0

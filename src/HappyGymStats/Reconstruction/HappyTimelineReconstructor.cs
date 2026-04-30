@@ -65,13 +65,21 @@ public static class HappyTimelineReconstructor
         var anchorApplied = 0;
         var regenEmitted = 0;
 
+        // When the immediately-previous real event was a gym train, we attribute any regen ticks
+        // between that train and the next real event to that train row.
+        int? pendingTrainIndex = null;
+
         foreach (var ev in ordered)
         {
             EnsureUtc(ev.OccurredAtUtc, nameof(events));
 
             // Emit regen tick events between cursorTime and this event.
+            // These ticks represent regeneration AFTER the previous real event and BEFORE this real event.
             if (cursorTime is not null)
             {
+                long regenTicksBetween = 0;
+                var regenHappyGainedBetween = 0;
+
                 foreach (var tick in QuarterHourTicks.EnumerateTickInstantsBetweenUtc(cursorTime.Value, ev.OccurredAtUtc))
                 {
                     // Determine max ceiling at this tick (if known).
@@ -83,6 +91,9 @@ public static class HappyTimelineReconstructor
                         ? null
                         : ApplyDeltaClamp(before.Value, +HappyRegenPerTick, maxAtTick, ref clampApplied, ref warnings, out clamped);
 
+                    // For regen ticks, the *actual* delta can be < +5 if we were clamped at max.
+                    int? actualDelta = (before is not null && after is not null) ? after.Value - before.Value : null;
+
                     derivedEvents.Add(new DerivedHappyEvent(
                         EventId: $"regen@{tick.ToUnixTimeSeconds()}",
                         SourceLogId: null,
@@ -90,13 +101,35 @@ public static class HappyTimelineReconstructor
                         EventType: "regen_tick",
                         HappyBeforeEvent: before,
                         HappyAfterEvent: after,
-                        Delta: +HappyRegenPerTick,
+                        Delta: actualDelta,
                         HappyUsed: null,
                         MaxHappyAtTimeUtc: maxAtTick,
                         ClampedToMax: clamped));
 
                     currentHappy = after;
                     regenEmitted++;
+
+                    if (pendingTrainIndex is not null)
+                    {
+                        regenTicksBetween++;
+                        if (actualDelta is not null)
+                            regenHappyGainedBetween += actualDelta.Value;
+                    }
+                }
+
+                // Finalize the previous train row (if any): it owns the regen between it and this event.
+                if (pendingTrainIndex is not null)
+                {
+                    var idx = pendingTrainIndex.Value;
+                    var prior = derivedTrains[idx];
+
+                    derivedTrains[idx] = prior with
+                    {
+                        RegenTicksApplied = regenTicksBetween,
+                        RegenHappyGained = regenHappyGainedBetween,
+                    };
+
+                    pendingTrainIndex = null;
                 }
             }
 
@@ -109,16 +142,10 @@ public static class HappyTimelineReconstructor
             {
                 case MaxHappyEvent max:
                 {
-                    // For max-happy changes, clamp current happy if the max decreased.
+                    // Max-happy changes only affect the passive regen ceiling.
+                    // They do not immediately clamp current happy; Torn applies that on quarter-hour ticks.
                     var before = currentHappy;
                     var after = before;
-
-                    // The timeline maxAtEvent is the max *after* the event.
-                    if (after is not null && maxAtEvent is not null && after.Value > maxAtEvent.Value)
-                    {
-                        after = maxAtEvent.Value;
-                        clampApplied++;
-                    }
 
                     derivedEvents.Add(new DerivedHappyEvent(
                         EventId: max.LogId,
@@ -127,10 +154,10 @@ public static class HappyTimelineReconstructor
                         EventType: "max_happy",
                         HappyBeforeEvent: before,
                         HappyAfterEvent: after,
-                        Delta: max.MaxHappyAfter - max.MaxHappyBefore,
+                        Delta: before is not null && after is not null ? after.Value - before.Value : null,
                         HappyUsed: null,
                         MaxHappyAtTimeUtc: maxAtEvent,
-                        ClampedToMax: after != before));
+                        ClampedToMax: false));
 
                     currentHappy = after;
                     break;
@@ -157,21 +184,10 @@ public static class HappyTimelineReconstructor
                     {
                         // Unknown factor: fall back to delta behavior.
                         inferredBefore = currentHappy;
-                        inferredAfter = inferredBefore is null ? null : (int?)ApplyDeltaClamp(inferredBefore.Value, -od.HappyDecreased, maxAtEvent, ref clampApplied, ref warnings, out var _);
+                        inferredAfter = inferredBefore is null
+                            ? null
+                            : (int?)ApplyDeltaFloorOnly(inferredBefore.Value, -od.HappyDecreased, ref warnings);
                         warnings++;
-                    }
-
-                    // Apply max clamp post-inference.
-                    if (inferredBefore is not null && maxAtEvent is not null && inferredBefore.Value > maxAtEvent.Value)
-                    {
-                        inferredBefore = maxAtEvent.Value;
-                        clampApplied++;
-                    }
-
-                    if (inferredAfter is not null && maxAtEvent is not null && inferredAfter.Value > maxAtEvent.Value)
-                    {
-                        inferredAfter = maxAtEvent.Value;
-                        clampApplied++;
                     }
 
                     derivedEvents.Add(new DerivedHappyEvent(
@@ -194,10 +210,9 @@ public static class HappyTimelineReconstructor
                 case HappyDeltaEvent delta:
                 {
                     var before = currentHappy;
-                    var clamped = false;
                     int? after = before is null
                         ? null
-                        : ApplyDeltaClamp(before.Value, delta.Delta, maxAtEvent, ref clampApplied, ref warnings, out clamped);
+                        : ApplyDeltaFloorOnly(before.Value, delta.Delta, ref warnings);
 
                     derivedEvents.Add(new DerivedHappyEvent(
                         EventId: delta.LogId,
@@ -206,10 +221,10 @@ public static class HappyTimelineReconstructor
                         EventType: "happy_delta",
                         HappyBeforeEvent: before,
                         HappyAfterEvent: after,
-                        Delta: delta.Delta,
+                        Delta: before is not null && after is not null ? after.Value - before.Value : null,
                         HappyUsed: null,
                         MaxHappyAtTimeUtc: maxAtEvent,
-                        ClampedToMax: clamped));
+                        ClampedToMax: false));
 
                     currentHappy = after;
                     break;
@@ -243,7 +258,6 @@ public static class HappyTimelineReconstructor
 
                     if (before is not null && after is not null)
                     {
-                        // Regen ticks between this and next event are counted elsewhere; set 0 here for forward.
                         derivedTrains.Add(new DerivedGymTrain(
                             LogId: gym.LogId,
                             OccurredAtUtc: gym.OccurredAtUtc,
@@ -254,6 +268,9 @@ public static class HappyTimelineReconstructor
                             RegenHappyGained: 0,
                             MaxHappyAtTimeUtc: maxAtEvent,
                             ClampedToMax: false));
+
+                        // Regen between this train and the next real event will be attributed to this row.
+                        pendingTrainIndex = derivedTrains.Count - 1;
                     }
 
                     currentHappy = after;
@@ -272,6 +289,27 @@ public static class HappyTimelineReconstructor
                 ClampAppliedCount: clampApplied,
                 AnchorAppliedCount: anchorApplied,
                 WarningCount: warnings));
+    }
+
+    private static int ApplyDeltaFloorOnly(
+        int before,
+        int delta,
+        ref int warnings)
+    {
+        long afterLong = (long)before + delta;
+        if (afterLong < 0)
+        {
+            warnings++;
+            return 0;
+        }
+
+        if (afterLong > int.MaxValue)
+        {
+            warnings++;
+            return int.MaxValue;
+        }
+
+        return (int)afterLong;
     }
 
     private static int ApplyDeltaClamp(

@@ -11,6 +11,7 @@ type StatType =
 type StatRecord = {
     StatType: StatType
     StatBefore: float
+    StatTotalBefore: float
     HappyBeforeTrain: float
     StatIncreased: float
     EnergyUsed: float
@@ -22,13 +23,20 @@ type ReadResult = {
     ParseErrors: string list
 }
 
-/// Result of surface grid binning: unique X/Y axis values and a z-matrix of mean (StatIncreased / EnergyUsed).
-/// z.[yIdx].[xIdx] holds the mean stat-gain-per-energy for the (xVals.[xIdx], yVals.[yIdx]) bin.
-/// Empty bins (no data points) are represented as NaN.
-/// Note: Plotly.NET serializes NaN as the string "NaN" (JSON can't represent NaN). SurfacePlotter post-processes
-/// the generated HTML to replace those "NaN" strings with null so Plotly.js renders holes correctly.
-type GridResult = {
-    XValues: float list      // X-axis values (either exact distinct StatBefore values or bin centers)
-    YValues: float list      // Y-axis values (either exact distinct HappyBeforeTrain values or bin centers)
-    ZMatrix: float list list // row-major: ZMatrix.[yIdx].[xIdx]
+/// Detailed stat record that preserves the log id (and optionally timestamp) for verification/diagnostics.
+type StatRecordRow = {
+    LogId: string
+    Timestamp: int64 option
+    StatType: StatType
+    StatBefore: float
+    StatTotalBefore: float
+    HappyBeforeTrain: float
+    StatIncreased: float
+    EnergyUsed: float
+}
+
+/// Result of parsing a CSV file into detailed records.
+type ReadResultDetailed = {
+    Records: StatRecordRow list
+    ParseErrors: string list
 }
