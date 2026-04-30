@@ -1,4 +1,5 @@
 using System.Linq;
+using HappyGymStats.Data;
 using HappyGymStats.Export;
 using HappyGymStats.Fetch;
 using HappyGymStats.Reconstruction;
@@ -7,10 +8,12 @@ using HappyGymStats.Ui;
 using HappyGymStats.Torn;
 using HappyGymStats.Visualizer;
 using HappyGymStats.Verification;
+using Microsoft.EntityFrameworkCore;
 
 var ui = new ConsoleUi();
 
 var paths = AppPaths.Default();
+var databasePath = SqlitePaths.ResolveDatabasePath(paths.DataDirectory);
 Directory.CreateDirectory(paths.DataDirectory);
 Directory.CreateDirectory(paths.QuarantineDirectory);
 Directory.CreateDirectory(paths.DerivedDirectory);
@@ -123,14 +126,74 @@ if (args.Length > 0)
         return;
     }
 
+    if (args[0].Equals("migrate-legacy-db", StringComparison.OrdinalIgnoreCase))
+    {
+        var dbPath = GetArg("--db") ?? databasePath;
+        var result = await LegacySqliteMigrator.RunAsync(paths, dbPath, CancellationToken.None);
+
+        if (!result.Success)
+        {
+            Console.Error.WriteLine(result.ErrorMessage ?? "Legacy-to-SQLite migration failed.");
+            return;
+        }
+
+        Console.WriteLine($"SQLite database: {result.DatabasePath}");
+        Console.WriteLine($"Raw logs imported: {result.RawLogsImported}");
+        Console.WriteLine($"Derived gym trains imported: {result.DerivedGymTrainsImported}");
+        Console.WriteLine($"Derived happy events imported: {result.DerivedHappyEventsImported}");
+        Console.WriteLine($"Checkpoint imported: {(result.CheckpointImported ? "yes" : "no")}");
+        return;
+    }
+
     if (args[0].Equals("export-csv", StringComparison.OrdinalIgnoreCase))
     {
+        var source = (GetArg("--source") ?? "auto").Trim().ToLowerInvariant();
+        var dbPath = GetArg("--db") ?? databasePath;
         var jsonlPath = GetArg("--jsonl") ?? paths.LogsJsonlPath;
         var derivedPath = GetArg("--derived") ?? paths.DerivedGymTrainsJsonlPath;
         var derivedHappyPath = GetArg("--derived-happy") ?? paths.DerivedHappyEventsJsonlPath;
         var csvPath = GetArg("--csv") ?? paths.LogsCsvPath;
         var debugCsvPath = GetArg("--debug-csv") ?? paths.LogsDebugCsvPath;
         var timelinePath = GetArg("--timeline") ?? paths.HappyTimelineCsvPath;
+
+        var useDatabase = source switch
+        {
+            "db" => true,
+            "legacy" => false,
+            "auto" => File.Exists(dbPath) && new FileInfo(dbPath).Length > 0,
+            _ => throw new ArgumentException("--source must be one of: auto, db, legacy")
+        };
+
+        if (useDatabase)
+        {
+            var dbExportResult = await DbCsvExportRunner.RunAsync(dbPath, csvPath, CancellationToken.None);
+            if (!dbExportResult.Success)
+            {
+                Console.Error.WriteLine(dbExportResult.ErrorMessage ?? "DB-backed CSV export failed.");
+                return;
+            }
+
+            Console.WriteLine($"CSV output: {dbExportResult.OutputPath} (rows={dbExportResult.RowsWritten}, source=db)");
+
+            var dbDebugResult = await DbCsvExportRunner.RunDebugAsync(dbPath, debugCsvPath, CancellationToken.None);
+            if (!dbDebugResult.Success)
+            {
+                Console.Error.WriteLine(dbDebugResult.ErrorMessage ?? "DB-backed debug CSV export failed.");
+                return;
+            }
+
+            Console.WriteLine($"Debug CSV output: {dbDebugResult.OutputPath} (rows={dbDebugResult.RowsWritten}, source=db)");
+
+            var dbTimelineResult = await DbHappyTimelineCsvWriter.WriteAsync(dbPath, timelinePath, CancellationToken.None);
+            if (!dbTimelineResult.Success)
+            {
+                Console.Error.WriteLine(dbTimelineResult.ErrorMessage ?? "DB-backed happy timeline CSV export failed.");
+                return;
+            }
+
+            Console.WriteLine($"Happy timeline CSV output: {dbTimelineResult.OutputPath} (rows={dbTimelineResult.RowsWritten}, source=db)");
+            return;
+        }
 
         var result = CsvExportRunner.Run(jsonlPath, csvPath, derivedPath);
         if (!result.Success)
@@ -139,7 +202,7 @@ if (args.Length > 0)
             return;
         }
 
-        Console.WriteLine($"CSV output: {result.OutputPath} (rows={result.RowsWritten})");
+        Console.WriteLine($"CSV output: {result.OutputPath} (rows={result.RowsWritten}, source=legacy)");
 
         var debugResult = CsvExportRunner.RunDebug(jsonlPath, debugCsvPath, derivedPath, derivedHappyPath);
         if (!debugResult.Success)
@@ -148,7 +211,7 @@ if (args.Length > 0)
             return;
         }
 
-        Console.WriteLine($"Debug CSV output: {debugResult.OutputPath} (rows={debugResult.RowsWritten})");
+        Console.WriteLine($"Debug CSV output: {debugResult.OutputPath} (rows={debugResult.RowsWritten}, source=legacy)");
 
         var timelineResult = HappyTimelineCsvWriter.Write(derivedHappyPath, timelinePath);
         if (!timelineResult.Success)
@@ -157,7 +220,7 @@ if (args.Length > 0)
             return;
         }
 
-        Console.WriteLine($"Happy timeline CSV output: {timelineResult.OutputPath} (rows={timelineResult.RowsWritten})");
+        Console.WriteLine($"Happy timeline CSV output: {timelineResult.OutputPath} (rows={timelineResult.RowsWritten}, source=legacy)");
         return;
     }
 
@@ -286,7 +349,7 @@ while (true)
             case MainMenuAction.ShowStatus:
             {
                 var checkpoint = CheckpointStore.TryRead(paths.CheckpointPath);
-                ui.RenderStatus(paths, checkpoint);
+                ui.RenderStatus(paths, databasePath, checkpoint);
                 break;
             }
 
@@ -336,29 +399,48 @@ while (true)
                 {
                     ui.RenderPrivacyWarning();
 
-                    ui.RenderInfo("Starting CSV export...");
-
-                    var result = CsvExportRunner.Run(
+                    var preferDatabase = SqlitePaths.ShouldPreferDatabase(
+                        databasePath,
                         paths.LogsJsonlPath,
-                        paths.LogsCsvPath,
-                        paths.DerivedGymTrainsJsonlPath);
-
-                    ui.RenderCsvExportSummary(result);
-
-                    ui.RenderInfo("Starting debug CSV export...");
-                    var debugResult = CsvExportRunner.RunDebug(
-                        paths.LogsJsonlPath,
-                        paths.LogsDebugCsvPath,
                         paths.DerivedGymTrainsJsonlPath,
                         paths.DerivedHappyEventsJsonlPath);
+                    ui.RenderInfo(preferDatabase
+                        ? "Starting DB-backed CSV export..."
+                        : "Starting CSV export...");
+
+                    CsvExportRunner.ExportResult result;
+                    CsvExportRunner.ExportResult debugResult;
+                    CsvExportRunner.ExportResult timelineResult;
+
+                    if (preferDatabase)
+                    {
+                        result = await DbCsvExportRunner.RunAsync(databasePath, paths.LogsCsvPath, opCts.Token);
+                        debugResult = await DbCsvExportRunner.RunDebugAsync(databasePath, paths.LogsDebugCsvPath, opCts.Token);
+                        timelineResult = await DbHappyTimelineCsvWriter.WriteAsync(databasePath, paths.HappyTimelineCsvPath, opCts.Token);
+                    }
+                    else
+                    {
+                        result = CsvExportRunner.Run(
+                            paths.LogsJsonlPath,
+                            paths.LogsCsvPath,
+                            paths.DerivedGymTrainsJsonlPath);
+
+                        debugResult = CsvExportRunner.RunDebug(
+                            paths.LogsJsonlPath,
+                            paths.LogsDebugCsvPath,
+                            paths.DerivedGymTrainsJsonlPath,
+                            paths.DerivedHappyEventsJsonlPath);
+
+                        timelineResult = HappyTimelineCsvWriter.Write(
+                            paths.DerivedHappyEventsJsonlPath,
+                            paths.HappyTimelineCsvPath);
+                    }
+
+                    ui.RenderCsvExportSummary(result);
 
                     if (debugResult.Success)
                     {
                         ui.RenderInfo($"Debug CSV output: {debugResult.OutputPath} (rows={debugResult.RowsWritten})");
-
-                        var timelineResult = HappyTimelineCsvWriter.Write(
-                            paths.DerivedHappyEventsJsonlPath,
-                            paths.HappyTimelineCsvPath);
 
                         if (timelineResult.Success)
                         {

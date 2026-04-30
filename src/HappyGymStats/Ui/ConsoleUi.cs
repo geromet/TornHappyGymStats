@@ -245,7 +245,7 @@ public sealed class ConsoleUi
         AnsiConsole.Write(new Panel(summary).Header("[bold]Visualization summary[/]", Justify.Left));
     }
 
-    public void RenderStatus(AppPaths paths, Checkpoint? checkpoint)
+    public void RenderStatus(AppPaths paths, string databasePath, Checkpoint? checkpoint)
     {
         var table = new Table()
             .Border(TableBorder.Rounded)
@@ -263,6 +263,7 @@ public sealed class ConsoleUi
         table.AddRow("CSV output", Markup.Escape(paths.LogsCsvPath));
         table.AddRow("Debug CSV output", Markup.Escape(paths.LogsDebugCsvPath));
         table.AddRow("Happy timeline CSV", Markup.Escape(paths.HappyTimelineCsvPath));
+        table.AddRow("SQLite database", Markup.Escape(databasePath));
 
         if (checkpoint is null)
         {

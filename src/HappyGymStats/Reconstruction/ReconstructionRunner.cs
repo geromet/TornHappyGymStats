@@ -51,7 +51,12 @@ public sealed class ReconstructionRunner
         }
 
         // Extract events (minimal representation) and detach from raw JSON as early as possible.
-        var extract = LogEventExtractor.Extract(read.Records);
+        var extract = LogEventExtractor.Extract(read.Records.Select(record => new ReconstructionLogRecord(
+            LogId: record.LogId,
+            OccurredAtUtc: record.OccurredAtUtc,
+            Title: record.Title,
+            Category: record.Category,
+            RawJson: record.RawJson)));
         var events = new List<ReconstructionEvent>();
 
         foreach (var ev in extract.Events)
