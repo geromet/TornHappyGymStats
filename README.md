@@ -66,13 +66,23 @@ Torn gym train logs contain `happy_used` but not your total happy at the time. R
 
 The app warns you at startup and before export: **your gym logs, happy values, and CSV exports can reveal in-game activity patterns.** Do not share them with anyone you don't fully trust.
 
-## Building from source
+## Running from source
 
 Requires [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
 
+From the project root, use the helper script to build the solution and start the CLI:
+
+```bash
+./run.sh
+```
+
+Runs launched through `./run.sh` write runtime data to the project-root `data/` directory.
+
+## Building from source
+
 ```bash
 dotnet build
-dotnet test                           # 57 tests
+dotnet test
 bash scripts/publish-all.sh            # builds all 6 RIDs to dist/
 ```
 
