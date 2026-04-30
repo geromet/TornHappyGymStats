@@ -1,6 +1,16 @@
 @HappyGymStats.Api_HostAddress = http://localhost:5047
 
-GET {{HappyGymStats.Api_HostAddress}}/health
+GET {{HappyGymStats.Api_HostAddress}}/v1/health
+Accept: application/json
+
+###
+
+GET {{HappyGymStats.Api_HostAddress}}/v1/gym-trains?limit=2
+Accept: application/json
+
+###
+
+GET {{HappyGymStats.Api_HostAddress}}/v1/happy-events?limit=2
 Accept: application/json
 
 ###
