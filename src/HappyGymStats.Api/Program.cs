@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using HappyGymStats.Api;
 using HappyGymStats.Data;
 using HappyGymStats.Data.Entities;
 using HappyGymStats.Storage;
@@ -14,13 +15,17 @@ builder.Services.AddCors(options =>
     options.AddPolicy("ReadApi", policy => policy
         .AllowAnyOrigin()
         .AllowAnyHeader()
-        .WithMethods("GET")));
+        .WithMethods("GET", "POST")));
 
 var databasePath = ResolveDatabasePath(builder.Configuration, builder.Environment);
 Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
 
 builder.Services.AddDbContext<HappyGymStatsDbContext>(options =>
     options.UseSqlite($"Data Source={databasePath}"));
+
+builder.Services.AddSingleton(sp =>
+    new ImportService(sp.GetRequiredService<IServiceScopeFactory>(), databasePath));
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ImportService>());
 
 var app = builder.Build();
 
@@ -37,6 +42,41 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("ReadApi");
+
+// ---- Import endpoints -------------------------------------------------------
+
+app.MapPost("/v1/import", (
+    ImportService importService,
+    HttpContext httpContext,
+    ImportRequest? request) =>
+{
+    var apiKey = request?.ApiKey?.Trim();
+    if (string.IsNullOrWhiteSpace(apiKey))
+        return ValidationError(httpContext, "apiKey is required.", new { field = "apiKey" });
+
+    var status = importService.Enqueue(apiKey, request?.Fresh ?? false);
+
+    var statusCode = status.IsTerminal
+        ? StatusCodes.Status200OK
+        : StatusCodes.Status202Accepted;
+
+    return Results.Json(ToDto(status), statusCode: statusCode);
+})
+    .WithName("StartImport")
+    .WithOpenApi();
+
+app.MapGet("/v1/import/latest", (ImportService importService, HttpContext httpContext) =>
+{
+    var status = importService.Latest;
+    if (status is null)
+        return Error(httpContext, StatusCodes.Status404NotFound, "not_found", "No import has been started.", null);
+
+    return Results.Ok(ToDto(status));
+})
+    .WithName("GetLatestImport")
+    .WithOpenApi();
+
+// ---- Read endpoints ---------------------------------------------------------
 
 app.MapGet("/v1/health", async (HappyGymStatsDbContext db, CancellationToken ct) =>
     Results.Ok(new HealthResponse(
@@ -75,10 +115,7 @@ app.MapGet("/v1/gym-trains", async (
             row.ClampedToMax));
 
     var rows = await query.ToListAsync(ct);
-    var response = CreatePage(
-        rows,
-        take,
-        row => new PageCursor(row.OccurredAtUtc, row.LogId));
+    var response = CreatePage(rows, take, row => new PageCursor(row.OccurredAtUtc, row.LogId));
 
     return Results.Ok(response);
 })
@@ -113,10 +150,7 @@ app.MapGet("/v1/happy-events", async (
             row.Note));
 
     var rows = await query.ToListAsync(ct);
-    var response = CreatePage(
-        rows,
-        take,
-        row => new PageCursor(row.OccurredAtUtc, row.EventId));
+    var response = CreatePage(rows, take, row => new PageCursor(row.OccurredAtUtc, row.EventId));
 
     return Results.Ok(response);
 })
@@ -124,6 +158,12 @@ app.MapGet("/v1/happy-events", async (
     .WithOpenApi();
 
 app.Run();
+
+// ---- Helpers ----------------------------------------------------------------
+
+static ImportStatusDto ToDto(ImportJobStatus s)
+    => new(s.Id, s.Outcome, s.StartedAtUtc, s.CompletedAtUtc,
+           s.PagesFetched, s.LogsFetched, s.LogsAppended, s.ErrorMessage);
 
 static IQueryable<DerivedGymTrainEntity> CreateGymTrainPageQuery(HappyGymStatsDbContext db, PageCursor? cursor)
 {
@@ -246,11 +286,25 @@ static string ResolveDatabasePath(IConfiguration configuration, IWebHostEnvironm
     return SqlitePaths.ResolveDatabasePath(fallbackDataDirectory, configuredPath);
 }
 
+// ---- Types ------------------------------------------------------------------
+
 internal static class Pagination
 {
     public const int DefaultLimit = 100;
     public const int MaxLimit = 200;
 }
+
+public sealed record ImportRequest(string? ApiKey, bool? Fresh);
+
+public sealed record ImportStatusDto(
+    string Id,
+    string Outcome,
+    DateTimeOffset StartedAtUtc,
+    DateTimeOffset? CompletedAtUtc,
+    int PagesFetched,
+    long LogsFetched,
+    long LogsAppended,
+    string? ErrorMessage);
 
 public sealed record HealthResponse(string Status, string Api, string DatabaseProvider);
 

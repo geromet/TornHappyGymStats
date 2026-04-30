@@ -14,3 +14,19 @@ GET {{HappyGymStats.Api_HostAddress}}/v1/happy-events?limit=2
 Accept: application/json
 
 ###
+
+POST {{HappyGymStats.Api_HostAddress}}/v1/import
+Content-Type: application/json
+Accept: application/json
+
+{
+  "apiKey": "replace-with-real-key",
+  "fresh": false
+}
+
+###
+
+GET {{HappyGymStats.Api_HostAddress}}/v1/import/latest
+Accept: application/json
+
+###

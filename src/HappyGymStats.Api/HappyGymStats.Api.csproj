@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\HappyGymStats\HappyGymStats.csproj" />
     <ProjectReference Include="..\HappyGymStats.Core\HappyGymStats.Core.csproj" />
     <ProjectReference Include="..\HappyGymStats.Data\HappyGymStats.Data.csproj" />
   </ItemGroup>
