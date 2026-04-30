@@ -145,8 +145,8 @@ bash scripts/publish-all.sh            # builds all 6 RIDs to dist/
 
 - `userlogs.jsonl`, derived JSONL sidecars, and `checkpoint.json` remain the legacy interchange/backup format.
 - `migrate-legacy-db` imports those legacy artifacts into SQLite.
-- `Export CSV` now prefers SQLite when `happygymstats.db` exists and falls back to legacy files otherwise.
-- Static web and API work should treat SQLite as the primary read model.
+- `Export CSV` now prefers SQLite only when the database exists and is at least as fresh as the legacy inputs; otherwise it falls back to legacy files.
+- Static web and API work should treat SQLite as the primary read model once the migration snapshot is current.
 
 ## GitHub Pages deployment shape
 

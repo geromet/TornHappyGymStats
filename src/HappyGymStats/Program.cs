@@ -13,7 +13,7 @@ using Microsoft.EntityFrameworkCore;
 var ui = new ConsoleUi();
 
 var paths = AppPaths.Default();
-var databasePath = SqlitePaths.ResolveDatabasePath(paths);
+var databasePath = SqlitePaths.ResolveDatabasePath(paths.DataDirectory);
 Directory.CreateDirectory(paths.DataDirectory);
 Directory.CreateDirectory(paths.QuarantineDirectory);
 Directory.CreateDirectory(paths.DerivedDirectory);
@@ -399,7 +399,11 @@ while (true)
                 {
                     ui.RenderPrivacyWarning();
 
-                    var preferDatabase = File.Exists(databasePath) && new FileInfo(databasePath).Length > 0;
+                    var preferDatabase = SqlitePaths.ShouldPreferDatabase(
+                        databasePath,
+                        paths.LogsJsonlPath,
+                        paths.DerivedGymTrainsJsonlPath,
+                        paths.DerivedHappyEventsJsonlPath);
                     ui.RenderInfo(preferDatabase
                         ? "Starting DB-backed CSV export..."
                         : "Starting CSV export...");

@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using HappyGymStats.Data;
 using HappyGymStats.Data.Entities;
+using HappyGymStats.Storage;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -241,10 +242,8 @@ static string ResolveDatabasePath(IConfiguration configuration, IWebHostEnvironm
     var configuredPath = configuration.GetConnectionString("HappyGymStats")
         ?? configuration["HAPPYGYMSTATS_DATABASE"];
 
-    if (!string.IsNullOrWhiteSpace(configuredPath))
-        return Path.GetFullPath(configuredPath);
-
-    return Path.Combine(environment.ContentRootPath, "data", "happygymstats.db");
+    var fallbackDataDirectory = DataDirectory.ResolveBasePath("HappyGymStats");
+    return SqlitePaths.ResolveDatabasePath(fallbackDataDirectory, configuredPath);
 }
 
 internal static class Pagination

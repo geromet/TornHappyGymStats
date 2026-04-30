@@ -30,17 +30,14 @@ public static class DataDirectory
                 $"Data directory override from {OverrideEnvironmentVariable} is not writable or could not be created: '{resolvedOverride}'.");
         }
 
-        // 1) AppContext.BaseDirectory/data
         var baseDirCandidate = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, LocalDataDirName));
         if (TryEnsureWritableDirectory(baseDirCandidate))
             return baseDirCandidate;
 
-        // 2) ./data
         var cwdCandidate = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, LocalDataDirName));
         if (TryEnsureWritableDirectory(cwdCandidate))
             return cwdCandidate;
 
-        // 3) LocalApplicationData
         var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var fallback = Path.Combine(root, appName);
 
@@ -59,8 +56,6 @@ public static class DataDirectory
         {
             Directory.CreateDirectory(path);
 
-            // Make a best-effort write test.
-            // Using a deterministic-ish prefix helps debugging without leaking secrets.
             var probePath = Path.Combine(path, $".write-probe-{Process.GetCurrentProcess().Id}-{Environment.CurrentManagedThreadId}.tmp");
             File.WriteAllText(probePath, "probe");
             File.Delete(probePath);
