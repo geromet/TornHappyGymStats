@@ -29,7 +29,7 @@ public static class LogEventExtractor
         IEnumerable<ReconstructionEvent> Events,
         ExtractionStats Stats);
 
-    public static ExtractResult Extract(IEnumerable<JsonlLogReader.LogRecord> records)
+    public static ExtractResult Extract(IEnumerable<ReconstructionLogRecord> records)
     {
         var stats = new ExtractionStats();
 

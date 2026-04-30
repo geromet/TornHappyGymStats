@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\HappyGymStats.Visualizer\HappyGymStats.Visualizer.fsproj" />
+    <ProjectReference Include="..\HappyGymStats.Core\HappyGymStats.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

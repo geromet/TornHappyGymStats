@@ -164,7 +164,12 @@ public sealed class ExportedDatasetConsistencyTests
         var read = JsonlLogReader.Read(Paths.UserLogsJsonlPath);
         Assert.True(read.Success, read.ErrorMessage);
 
-        var extract = LogEventExtractor.Extract(read.Records);
+        var extract = LogEventExtractor.Extract(read.Records.Select(record => new ReconstructionLogRecord(
+            LogId: record.LogId,
+            OccurredAtUtc: record.OccurredAtUtc,
+            Title: record.Title,
+            Category: record.Category,
+            RawJson: record.RawJson)));
         var events = extract.Events.ToArray();
 
         return HappyTimelineReconstructor.RunForward(events);
