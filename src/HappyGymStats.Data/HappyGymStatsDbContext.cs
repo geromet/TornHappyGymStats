@@ -74,6 +74,7 @@ public sealed class HappyGymStatsDbContext : DbContext
             entity.HasIndex(e => e.SourceLogId);
             entity.HasIndex(e => e.OccurredAtUtc);
             entity.HasIndex(e => e.EventType);
+            entity.HasIndex(e => e.SortOrder);
             entity.Property(e => e.EventType).IsRequired();
             entity.Property(e => e.OccurredAtUtc).HasConversion(UtcDateTimeOffsetConverter);
         });

@@ -3,6 +3,7 @@ using System;
 using HappyGymStats.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace HappyGymStats.Data.Migrations
 {
     [DbContext(typeof(HappyGymStatsDbContext))]
-    partial class HappyGymStatsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260430174556_AddDerivedHappyEventParityFields")]
+    partial class AddDerivedHappyEventParityFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.26");
@@ -86,9 +89,6 @@ namespace HappyGymStats.Data.Migrations
                     b.Property<DateTime>("OccurredAtUtc")
                         .HasColumnType("TEXT");
 
-                    b.Property<long>("SortOrder")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("SourceLogId")
                         .HasColumnType("TEXT");
 
@@ -97,8 +97,6 @@ namespace HappyGymStats.Data.Migrations
                     b.HasIndex("EventType");
 
                     b.HasIndex("OccurredAtUtc");
-
-                    b.HasIndex("SortOrder");
 
                     b.HasIndex("SourceLogId");
 

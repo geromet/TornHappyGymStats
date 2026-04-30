@@ -1,6 +1,7 @@
 using System.Globalization;
 using HappyGymStats.Export;
 using HappyGymStats.Reconstruction;
+using HappyGymStats.Storage;
 using HappyGymStats.Verification;
 using HappyGymStats.Visualizer;
 using Microsoft.FSharp.Collections;
@@ -136,6 +137,38 @@ public sealed class ExportedDatasetConsistencyTests
 
         Assert.True(report.VisualizationHtmlMatchesCsv);
         Assert.Equal(0, report.Mismatches);
+    }
+
+    [Fact]
+    public async Task Legacy_dataset_can_be_migrated_to_sqlite_and_reexported_without_drift()
+    {
+        using var _ = Paths.UseRepoRootAsCurrentDirectory();
+        var tempDir = CreateTempDirectory();
+        var dbPath = Path.Combine(tempDir, "happygymstats.db");
+        var csvOutput = Path.Combine(tempDir, "userlogs.csv");
+        var debugOutput = Path.Combine(tempDir, "userlogs.debug.csv");
+        var timelineOutput = Path.Combine(tempDir, "happy-timeline.csv");
+
+        var appPaths = new AppPaths(
+            DataDirectory: Path.GetDirectoryName(Paths.UserLogsJsonlPath)!,
+            QuarantineDirectory: Path.Combine(Path.GetDirectoryName(Paths.UserLogsJsonlPath)!, "quarantine"),
+            CheckpointPath: Path.Combine(Path.GetDirectoryName(Paths.UserLogsJsonlPath)!, "checkpoint.json"),
+            LogsJsonlPath: Paths.UserLogsJsonlPath);
+
+        var migrate = await LegacySqliteMigrator.RunAsync(appPaths, dbPath, CancellationToken.None);
+        Assert.True(migrate.Success, migrate.ErrorMessage);
+
+        var csv = await DbCsvExportRunner.RunAsync(dbPath, csvOutput, CancellationToken.None);
+        Assert.True(csv.Success, csv.ErrorMessage);
+        Assert.Equal(File.ReadAllText(Paths.UserLogsCsvPath), File.ReadAllText(csvOutput));
+
+        var debug = await DbCsvExportRunner.RunDebugAsync(dbPath, debugOutput, CancellationToken.None);
+        Assert.True(debug.Success, debug.ErrorMessage);
+        Assert.Equal(File.ReadAllText(Paths.UserLogsDebugCsvPath), File.ReadAllText(debugOutput));
+
+        var timeline = await DbHappyTimelineCsvWriter.WriteAsync(dbPath, timelineOutput, CancellationToken.None);
+        Assert.True(timeline.Success, timeline.ErrorMessage);
+        Assert.Equal(File.ReadAllText(Paths.HappyTimelineCsvPath), File.ReadAllText(timelineOutput));
     }
 
     [Fact]
