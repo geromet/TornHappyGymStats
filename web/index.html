@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Happy Gym Stats — Web Preview</title>
+  <meta name="description" content="Static preview dashboard for the Happy Gym Stats read API." />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div class="hero__copy">
+        <p class="eyebrow">Wave 6 · static frontend skeleton</p>
+        <h1>Happy Gym Stats</h1>
+        <p class="lede">
+          A small read-only dashboard for the SQLite-backed API. GitHub Pages can host this frontend,
+          but it does not host the .NET API or the database.
+        </p>
+      </div>
+
+      <aside class="connection-card panel">
+        <div class="panel__header">
+          <span class="panel__label">Connection</span>
+          <span id="connection-badge" class="badge badge--idle">Not checked</span>
+        </div>
+
+        <label class="field" for="api-base-url">
+          <span class="field__label">API base URL</span>
+          <input id="api-base-url" name="api-base-url" type="url" placeholder="http://localhost:5047" autocomplete="off" />
+        </label>
+
+        <div class="connection-card__actions">
+          <button id="save-api-base" class="button button--ghost" type="button">Save</button>
+          <button id="reload-dashboard" class="button" type="button">Refresh data</button>
+        </div>
+
+        <p class="connection-card__hint">
+          Saved in your browser. You can also override it with <code>?api=https://your-api-host</code>.
+        </p>
+      </aside>
+    </header>
+
+    <main class="dashboard-grid">
+      <section class="panel panel--status" aria-labelledby="health-heading">
+        <div class="panel__header">
+          <span class="panel__label">Health</span>
+          <span id="health-pill" class="badge badge--idle">Unknown</span>
+        </div>
+        <h2 id="health-heading">API status</h2>
+        <dl class="metric-list">
+          <div>
+            <dt>Status</dt>
+            <dd id="health-status">—</dd>
+          </div>
+          <div>
+            <dt>API</dt>
+            <dd id="health-api">—</dd>
+          </div>
+          <div>
+            <dt>Database</dt>
+            <dd id="health-db">—</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="panel panel--wide" aria-labelledby="gym-trains-heading">
+        <div class="panel__header">
+          <span class="panel__label">Read model</span>
+          <span id="gym-trains-count" class="badge badge--idle">0 rows</span>
+        </div>
+        <div class="section-heading">
+          <h2 id="gym-trains-heading">Latest gym trains</h2>
+          <p>Latest five rows from <code>/v1/gym-trains</code>.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Occurred</th>
+                <th>Happy before</th>
+                <th>Happy used</th>
+                <th>Happy after</th>
+                <th>Regen gained</th>
+                <th>Max happy</th>
+              </tr>
+            </thead>
+            <tbody id="gym-trains-body">
+              <tr><td colspan="6" class="table-empty">No data loaded yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel panel--wide" aria-labelledby="happy-events-heading">
+        <div class="panel__header">
+          <span class="panel__label">Timeline</span>
+          <span id="happy-events-count" class="badge badge--idle">0 rows</span>
+        </div>
+        <div class="section-heading">
+          <h2 id="happy-events-heading">Latest happy events</h2>
+          <p>Latest five rows from <code>/v1/happy-events</code>.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Occurred</th>
+                <th>Type</th>
+                <th>Delta</th>
+                <th>Before</th>
+                <th>After</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody id="happy-events-body">
+              <tr><td colspan="6" class="table-empty">No data loaded yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel panel--notes" aria-labelledby="deployment-heading">
+        <div class="panel__header">
+          <span class="panel__label">Deployment notes</span>
+        </div>
+        <h2 id="deployment-heading">What this skeleton does and does not do</h2>
+        <ul class="notes-list">
+          <li>GitHub Pages hosts this static dashboard only.</li>
+          <li>The API still needs a separate .NET-capable host and a writable SQLite volume.</li>
+          <li>The current API enables cross-origin <code>GET</code> requests so this dashboard can read from it.</li>
+          <li>Write/import endpoints need a tighter CORS and credential story before they ship.</li>
+        </ul>
+      </section>
+
+      <section class="panel panel--log" aria-labelledby="activity-heading">
+        <div class="panel__header">
+          <span class="panel__label">Activity</span>
+        </div>
+        <h2 id="activity-heading">Client log</h2>
+        <pre id="activity-log" class="activity-log">Waiting for first refresh…</pre>
+      </section>
+    </main>
+  </div>
+
+  <script src="./app.js" defer></script>
+</body>
+</html>
