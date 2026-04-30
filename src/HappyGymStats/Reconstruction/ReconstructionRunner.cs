@@ -1,11 +1,13 @@
+using HappyGymStats.Data;
+using HappyGymStats.Data.Entities;
 using HappyGymStats.Storage;
-
+using Microsoft.EntityFrameworkCore;
 using static HappyGymStats.Reconstruction.HappyReconstructionModels;
 
 namespace HappyGymStats.Reconstruction;
 
 /// <summary>
-/// End-to-end orchestration: read raw JSONL → extract events → reconstruct happy values → write derived output.
+/// End-to-end orchestration: read raw logs → extract events → reconstruct happy values → write derived output.
 /// </summary>
 public sealed class ReconstructionRunner
 {
@@ -38,25 +40,59 @@ public sealed class ReconstructionRunner
         Directory.CreateDirectory(_paths.DataDirectory);
         Directory.CreateDirectory(_paths.DerivedDirectory);
 
-        var read = JsonlLogReader.Read(_paths.LogsJsonlPath);
-        if (!read.Success)
+        var databasePath = SqlitePaths.ResolveDatabasePath(_paths.DataDirectory);
+        var dbOptions = new DbContextOptionsBuilder<HappyGymStatsDbContext>()
+            .UseSqlite($"Data Source={databasePath}")
+            .Options;
+
+        using var db = new HappyGymStatsDbContext(dbOptions);
+        db.Database.Migrate();
+
+        var preferDatabase = SqlitePaths.ShouldPreferDatabase(databasePath, _paths.LogsJsonlPath);
+
+        IReadOnlyList<ReconstructionLogRecord> records;
+        JsonlLogReader.ReadStats? readerStats = null;
+
+        if (preferDatabase)
         {
-            return new RunResult(
-                Success: false,
-                ErrorMessage: read.ErrorMessage,
-                DerivedOutputPath: _paths.DerivedGymTrainsJsonlPath,
-                DerivedGymTrains: Array.Empty<DerivedGymTrain>(),
-                Stats: null,
-                AnchorTimeUtc: anchorTimeUtc);
+            records = db.RawUserLogs
+                .AsNoTracking()
+                .OrderBy(row => row.Id)
+                .Select(row => new ReconstructionLogRecord(
+                    row.LogId,
+                    row.OccurredAtUtc,
+                    row.Title,
+                    row.Category,
+                    row.RawJson))
+                .ToList();
+
+            readerStats = new JsonlLogReader.ReadStats();
+        }
+        else
+        {
+            var read = JsonlLogReader.Read(_paths.LogsJsonlPath);
+            if (!read.Success)
+            {
+                return new RunResult(
+                    Success: false,
+                    ErrorMessage: read.ErrorMessage,
+                    DerivedOutputPath: _paths.DerivedGymTrainsJsonlPath,
+                    DerivedGymTrains: Array.Empty<DerivedGymTrain>(),
+                    Stats: null,
+                    AnchorTimeUtc: anchorTimeUtc);
+            }
+
+            readerStats = read.Stats;
+            records = read.Records.Select(record => new ReconstructionLogRecord(
+                    LogId: record.LogId,
+                    OccurredAtUtc: record.OccurredAtUtc,
+                    Title: record.Title,
+                    Category: record.Category,
+                    RawJson: record.RawJson))
+                .ToList();
         }
 
-        // Extract events (minimal representation) and detach from raw JSON as early as possible.
-        var extract = LogEventExtractor.Extract(read.Records.Select(record => new ReconstructionLogRecord(
-            LogId: record.LogId,
-            OccurredAtUtc: record.OccurredAtUtc,
-            Title: record.Title,
-            Category: record.Category,
-            RawJson: record.RawJson)));
+        var extract = LogEventExtractor.Extract(records);
         var events = new List<ReconstructionEvent>();
 
         foreach (var ev in extract.Events)
@@ -65,12 +101,8 @@ public sealed class ReconstructionRunner
             events.Add(ev);
         }
 
-        // Core reconstruction (forward, anchor-driven).
-        // NOTE: currentHappy/anchorTimeUtc are currently used only by the UI/CLI contract.
-        // Forward reconstruction derives what it can from anchors inside the log stream.
         var reconstructed = HappyTimelineReconstructor.RunForward(events);
 
-        // Persist derived sidecars (atomic write). If persistence fails, do not pretend the run succeeded.
         var writeTrains = DerivedGymTrainStore.WriteAllAtomic(_paths.DerivedGymTrainsJsonlPath, reconstructed.DerivedGymTrains);
         if (!writeTrains.Success)
         {
@@ -95,9 +127,17 @@ public sealed class ReconstructionRunner
                 AnchorTimeUtc: anchorTimeUtc);
         }
 
+        db.DerivedGymTrains.RemoveRange(db.DerivedGymTrains);
+        db.DerivedHappyEvents.RemoveRange(db.DerivedHappyEvents);
+        db.SaveChanges();
+
+        db.DerivedGymTrains.AddRange(reconstructed.DerivedGymTrains.Select(MapDerivedGymTrain));
+        db.DerivedHappyEvents.AddRange(reconstructed.DerivedHappyEvents.Select((ev, index) => MapDerivedHappyEvent(ev, index)));
+        db.SaveChanges();
+
         var stats = new ReconstructionStats(
-            LinesRead: read.Stats.LinesRead,
-            MalformedLines: read.Stats.MalformedLines,
+            LinesRead: readerStats?.LinesRead ?? records.Count,
+            MalformedLines: readerStats?.MalformedLines ?? 0,
             GymTrainEventsExtracted: extract.Stats.GymTrainEventsExtracted,
             MaxHappyEventsExtracted: extract.Stats.MaxHappyEventsExtracted,
             HappyDeltaEventsExtracted: extract.Stats.HappyDeltaEventsExtracted,
@@ -113,4 +153,35 @@ public sealed class ReconstructionRunner
             Stats: stats,
             AnchorTimeUtc: anchorTimeUtc);
     }
+
+    private static DerivedGymTrainEntity MapDerivedGymTrain(DerivedGymTrain row)
+        => new()
+        {
+            LogId = row.LogId,
+            OccurredAtUtc = row.OccurredAtUtc,
+            HappyBeforeTrain = row.HappyBeforeTrain,
+            HappyAfterTrain = row.HappyAfterTrain,
+            HappyUsed = row.HappyUsed,
+            RegenTicksApplied = row.RegenTicksApplied,
+            RegenHappyGained = row.RegenHappyGained,
+            MaxHappyAtTimeUtc = row.MaxHappyAtTimeUtc,
+            ClampedToMax = row.ClampedToMax,
+        };
+
+    private static DerivedHappyEventEntity MapDerivedHappyEvent(DerivedHappyEvent row, int sortOrder)
+        => new()
+        {
+            EventId = row.EventId,
+            EventType = row.EventType,
+            OccurredAtUtc = row.OccurredAtUtc,
+            SourceLogId = row.SourceLogId,
+            SortOrder = sortOrder,
+            HappyBeforeEvent = row.HappyBeforeEvent,
+            HappyAfterEvent = row.HappyAfterEvent,
+            Delta = row.Delta,
+            HappyUsed = row.HappyUsed,
+            MaxHappyAtTimeUtc = row.MaxHappyAtTimeUtc,
+            ClampedToMax = row.ClampedToMax,
+            Note = null,
+        };
 }
