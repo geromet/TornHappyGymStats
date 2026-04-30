@@ -141,6 +141,7 @@ public sealed class ConsoleUi
         summary.AddRow("Malformed lines", s.MalformedLines.ToString());
         summary.AddRow("Gym-train events", s.GymTrainEventsExtracted.ToString());
         summary.AddRow("Max-happy events", s.MaxHappyEventsExtracted.ToString());
+        summary.AddRow("Happy delta events", s.HappyDeltaEventsExtracted.ToString());
         summary.AddRow("Gym trains derived", s.GymTrainsDerived.ToString());
         summary.AddRow("Clamp applied", s.ClampAppliedCount.ToString());
         summary.AddRow("Warnings", s.WarningCount.ToString());
@@ -219,7 +220,7 @@ public sealed class ConsoleUi
     {
         if (generatedPaths.Count == 0)
         {
-            RenderInfo("No surface plots generated — no gym train data found.");
+            RenderInfo("No point-cloud plots generated — no gym train data found.");
             return;
         }
 
@@ -257,8 +258,11 @@ public sealed class ConsoleUi
         table.AddRow("JSONL store", Markup.Escape(paths.LogsJsonlPath));
         table.AddRow("Derived directory", Markup.Escape(paths.DerivedDirectory));
         table.AddRow("Derived gym trains", Markup.Escape(paths.DerivedGymTrainsJsonlPath));
+        table.AddRow("Derived happy events", Markup.Escape(paths.DerivedHappyEventsJsonlPath));
         table.AddRow("Export directory", Markup.Escape(paths.ExportDirectory));
         table.AddRow("CSV output", Markup.Escape(paths.LogsCsvPath));
+        table.AddRow("Debug CSV output", Markup.Escape(paths.LogsDebugCsvPath));
+        table.AddRow("Happy timeline CSV", Markup.Escape(paths.HappyTimelineCsvPath));
 
         if (checkpoint is null)
         {

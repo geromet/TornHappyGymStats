@@ -60,16 +60,30 @@ public sealed class ReconstructionRunner
             events.Add(ev);
         }
 
-        // Core reconstruction.
-        var reconstructed = HappyReconstructor.RunBackwards(events, currentHappy, anchorTimeUtc);
+        // Core reconstruction (forward, anchor-driven).
+        // NOTE: currentHappy/anchorTimeUtc are currently used only by the UI/CLI contract.
+        // Forward reconstruction derives what it can from anchors inside the log stream.
+        var reconstructed = HappyTimelineReconstructor.RunForward(events);
 
-        // Persist derived sidecar (atomic write). If persistence fails, do not pretend the run succeeded.
-        var write = DerivedGymTrainStore.WriteAllAtomic(_paths.DerivedGymTrainsJsonlPath, reconstructed.DerivedGymTrains);
-        if (!write.Success)
+        // Persist derived sidecars (atomic write). If persistence fails, do not pretend the run succeeded.
+        var writeTrains = DerivedGymTrainStore.WriteAllAtomic(_paths.DerivedGymTrainsJsonlPath, reconstructed.DerivedGymTrains);
+        if (!writeTrains.Success)
         {
             return new RunResult(
                 Success: false,
-                ErrorMessage: write.ErrorMessage,
+                ErrorMessage: writeTrains.ErrorMessage,
+                DerivedOutputPath: _paths.DerivedGymTrainsJsonlPath,
+                DerivedGymTrains: reconstructed.DerivedGymTrains,
+                Stats: null,
+                AnchorTimeUtc: anchorTimeUtc);
+        }
+
+        var writeEvents = DerivedHappyEventStore.WriteAllAtomic(_paths.DerivedHappyEventsJsonlPath, reconstructed.DerivedHappyEvents);
+        if (!writeEvents.Success)
+        {
+            return new RunResult(
+                Success: false,
+                ErrorMessage: writeEvents.ErrorMessage,
                 DerivedOutputPath: _paths.DerivedGymTrainsJsonlPath,
                 DerivedGymTrains: reconstructed.DerivedGymTrains,
                 Stats: null,
@@ -81,6 +95,7 @@ public sealed class ReconstructionRunner
             MalformedLines: read.Stats.MalformedLines,
             GymTrainEventsExtracted: extract.Stats.GymTrainEventsExtracted,
             MaxHappyEventsExtracted: extract.Stats.MaxHappyEventsExtracted,
+            HappyDeltaEventsExtracted: extract.Stats.HappyDeltaEventsExtracted,
             GymTrainsDerived: reconstructed.Stats.GymTrainsDerived,
             ClampAppliedCount: reconstructed.Stats.ClampAppliedCount,
             WarningCount: reconstructed.Stats.WarningCount);

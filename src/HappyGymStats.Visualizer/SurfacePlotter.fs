@@ -2,150 +2,105 @@ namespace HappyGymStats.Visualizer
 
 open System
 open System.IO
-open System.Text.RegularExpressions
-open Plotly.NET
-open Plotly.NET.Chart3D
-open Plotly.NET.LayoutObjects
+open System.Globalization
+open System.Text.Json
+open System.Text.Json.Nodes
 
-/// Thin rendering module — converts binned grid results into interactive Plotly 3D surface HTML.
+/// Thin rendering module that writes interactive Plotly 3D point-cloud HTML.
 module SurfacePlotter =
-
-    // NOTE: For 3D charts, axis titles must be set on layout.scene.xaxis/yaxis/zaxis.
 
     let private defaultXLabel = "Stat before train"
     let private defaultYLabel = "Happy before train"
     let private defaultZLabel = "Stat gained / energy"
 
-    let private chartHeightPx = 820
+    let private chartHeightPx = 1180
+    let private maxChartX = 1_000_000_000.0
+    let private maxChartY = 99_999.0
 
-    let private buildScene () : Scene =
-        let axis titleText =
-            LinearAxis.init(Title = Title.init(Text = titleText))
+    let private jsNumber (value: float) : string =
+        if Double.IsFinite(value) then value.ToString("R", CultureInfo.InvariantCulture) else "0"
 
-        Scene.init(
-            XAxis = axis defaultXLabel,
-            YAxis = axis defaultYLabel,
-            ZAxis = axis defaultZLabel
-        )
+    let private createRawPointTraceNode (name: string) (records: StatRecord list) =
+        let usable = records |> List.filter (fun r -> r.EnergyUsed > 0.0)
 
-    let private styleChartCommon (chart: GenericChart) : GenericChart =
-        let transparent = Color.fromString "rgba(0,0,0,0)"
+        let trace = JsonObject()
+        trace["type"] <- JsonValue.Create("scatter3d")
+        trace["mode"] <- JsonValue.Create("markers")
+        trace["name"] <- JsonValue.Create(name)
+        trace["showlegend"] <- JsonValue.Create(true)
+        trace["hovertemplate"] <- JsonValue.Create("stat: %{x:.0f}<br>happy: %{y:.0f}<br>gain / energy: %{z:.6f}<extra>Raw sample</extra>")
 
-        chart
-        |> Chart.withScene (buildScene ())
-        |> Chart.withLayoutStyle(PaperBGColor = transparent, PlotBGColor = transparent)
+        trace["x"] <- (usable |> List.map (fun r -> JsonValue.Create(r.StatBefore) :> JsonNode) |> List.toArray |> JsonArray)
+        trace["y"] <- (usable |> List.map (fun r -> JsonValue.Create(r.HappyBeforeTrain) :> JsonNode) |> List.toArray |> JsonArray)
+        trace["z"] <- (usable |> List.map (fun r -> JsonValue.Create(r.StatIncreased / r.EnergyUsed) :> JsonNode) |> List.toArray |> JsonArray)
 
-    let private styleChartWithTitle (title: string) (chart: GenericChart) : GenericChart =
-        // Keep margins tight but leave a sliver for the modebar.
-        let margin = Margin.init(Left = 0, Right = 0, Top = 14, Bottom = 0)
+        let marker = JsonObject()
+        marker["size"] <- JsonValue.Create(3.0)
+        marker["opacity"] <- JsonValue.Create(0.72)
+        marker["color"] <- JsonValue.Create("rgba(118, 219, 255, 0.9)")
+        trace["marker"] <- marker
+        trace
 
-        chart
-        |> styleChartCommon
-        |> Chart.withLayoutStyle(Title = Title.init(Text = title), Margin = margin)
+    let private createPointCloudLayoutNode () =
+        let layout = JsonObject()
+        layout["showlegend"] <- JsonValue.Create(true)
+        layout["paper_bgcolor"] <- JsonValue.Create("rgba(0,0,0,0)")
+        layout["plot_bgcolor"] <- JsonValue.Create("rgba(0,0,0,0)")
 
-    let private styleChartTight (chart: GenericChart) : GenericChart =
-        // Used in Surfaces.html (we already have an <h2> per plot).
-        let margin = Margin.init(Left = 0, Right = 0, Top = 12, Bottom = 0)
+        let margin = JsonObject()
+        margin["l"] <- JsonValue.Create(0)
+        margin["r"] <- JsonValue.Create(0)
+        margin["t"] <- JsonValue.Create(12)
+        margin["b"] <- JsonValue.Create(0)
+        layout["margin"] <- margin
 
-        chart
-        |> styleChartCommon
-        |> Chart.withLayoutStyle(Margin = margin)
+        let scene = JsonObject()
 
-    /// Patch Plotly.NET HTML output so Plotly.js renders missing cells as holes and uses the container size.
-    let private fixHtml (html: string) : string =
-        html
-            // JSON cannot represent NaN/Infinity. Plotly.NET emits them as strings.
-            // Plotly.js expects null for missing values.
-            .Replace("\"NaN\"", "null")
-            .Replace("\"Infinity\"", "null")
-            .Replace("\"-Infinity\"", "null")
-        |> fun s ->
-            // Remove fixed width/height in layout so charts can fill the page.
-            // Plotly.NET emits `"width":600,"height":600,` by default.
-            Regex.Replace(
-                s,
-                "\"width\":\d+(?:\\.\d+)?,\"height\":\d+(?:\\.\d+)?,",
-                "",
-                RegexOptions.CultureInvariant)
-        |> fun s ->
-            // Ensure the chart container has a reasonable height.
-            // The HTML can be either `<div id="...">` or `<div id="..." style="...">`.
-            // (If layout.height is removed and the container has no height, Plotly renders at 0px.)
-            Regex.Replace(
-                s,
-                "<div id=\"([^\"]+)\"([^>]*)>",
-                MatchEvaluator(fun m ->
-                    let id = m.Groups.[1].Value
-                    let attrs = m.Groups.[2].Value
-                    let ensureStyle (existing: string) =
-                        // Append, don't overwrite.
-                        let suffix = sprintf "; width: 100%%; height: %dpx;" chartHeightPx
-                        if existing.Contains("height", StringComparison.OrdinalIgnoreCase) then existing
-                        else existing + suffix
+        let axis (titleText: string) (maxValue: float) =
+            let axisNode = JsonObject()
+            let title = JsonObject()
+            title["text"] <- JsonValue.Create(titleText)
+            axisNode["title"] <- title
+            axisNode["range"] <- JsonArray(JsonValue.Create(0.0) :> JsonNode, JsonValue.Create(maxValue) :> JsonNode)
+            axisNode
 
-                    let newAttrs =
-                        if attrs.Contains("style=\"", StringComparison.OrdinalIgnoreCase) then
-                            Regex.Replace(
-                                attrs,
-                                "style=\\\"([^\\\"]*)\\\"",
-                                MatchEvaluator(fun sm ->
-                                    let cur = sm.Groups.[1].Value
-                                    sprintf "style=\"%s\"" (ensureStyle cur)
-                                ),
-                                RegexOptions.CultureInvariant)
-                        else
-                            attrs + (sprintf " style=\"width: 100%%; height: %dpx;\"" chartHeightPx)
+        scene["xaxis"] <- axis defaultXLabel maxChartX
+        scene["yaxis"] <- axis defaultYLabel maxChartY
+        scene["zaxis"] <- axis defaultZLabel 1.0
+        scene["aspectmode"] <- JsonValue.Create("manual")
 
-                    sprintf "<div id=\"%s\"%s>" id newAttrs
-                ),
-                RegexOptions.CultureInvariant)
+        let aspectRatio = JsonObject()
+        aspectRatio["x"] <- JsonValue.Create(1.55)
+        aspectRatio["y"] <- JsonValue.Create(1.2)
+        aspectRatio["z"] <- JsonValue.Create(0.95)
+        scene["aspectratio"] <- aspectRatio
 
-    let private baseSurfaceChart (grid: GridResult) : GenericChart =
-        let zData = grid.ZMatrix |> Seq.map Seq.ofList
-        let xData = grid.XValues |> Seq.ofList
-        let yData = grid.YValues |> Seq.ofList
+        let camera = JsonObject()
+        let eye = JsonObject()
+        eye["x"] <- JsonValue.Create(1.35)
+        eye["y"] <- JsonValue.Create(1.55)
+        eye["z"] <- JsonValue.Create(1.05)
+        camera["eye"] <- eye
+        scene["camera"] <- camera
 
-        Chart.Surface(zData = zData, X = xData, Y = yData)
+        layout["scene"] <- scene
+        layout
 
-    /// Generates a Plotly.NET 3D surface chart from a GridResult.
-    let generateChart (grid: GridResult) (title: string) : GenericChart =
-        baseSurfaceChart grid
-        |> styleChartWithTitle title
+    let private renderPointCloudHtml (records: StatRecord list) =
+        let id = "plot-" + Guid.NewGuid().ToString("N")
+        let data = JsonArray()
+        data.Add((createRawPointTraceNode "Raw samples" records) :> JsonNode)
+        let layout = createPointCloudLayoutNode()
+        let jsonOptions = JsonSerializerOptions(WriteIndented = false)
+        let dataJson = data.ToJsonString(jsonOptions)
+        let layoutJson = layout.ToJsonString(jsonOptions)
 
-    /// Generates a surface chart from a GridResult and saves it as an HTML file.
-    /// Returns the output file path.
-    let generatePlot (grid: GridResult) (title: string) (outputPath: string) : string =
-        let chart = generateChart grid title
-        chart |> Chart.saveHtml outputPath
+        $"""<div id="{id}" class="plot-shell" style="width: 100%%; height: {chartHeightPx}px;"></div>
+<script>
+  Plotly.newPlot("{id}", {dataJson}, {layoutJson}, {{ responsive: true }});
+</script>"""
 
-        let html = File.ReadAllText outputPath
-        let fixedHtml = fixHtml html
-        if not (obj.ReferenceEquals(html, fixedHtml)) then
-            File.WriteAllText(outputPath, fixedHtml)
-
-        outputPath
-
-    /// Generates surface plots for all four stat types.
-    /// Output: <outputDir>/<statType>.html for each stat type present in the records.
-    let generatePlots (records: StatRecord list) (outputDir: string) : string list =
-        if not (Directory.Exists(outputDir)) then
-            Directory.CreateDirectory(outputDir) |> ignore
-
-        let allStatTypes = [ Strength; Defense; Speed; Dexterity ]
-
-        allStatTypes
-        |> List.choose (fun statType ->
-            let filtered = records |> List.filter (fun r -> r.StatType = statType)
-            if filtered.IsEmpty then None
-            else
-                let grid = SurfaceBinner.binRecords filtered
-                let title = sprintf "%A surface" statType
-                let filename = sprintf "%A.html" statType
-                let outputPath = Path.Combine(outputDir, filename)
-                Some (generatePlot grid title outputPath)
-        )
-
-    /// Generates one single HTML file containing all surfaces stacked vertically.
+    /// Generates one single HTML file containing all point clouds stacked vertically.
     /// Output: <outputDir>/Surfaces.html
     /// Returns a list with that single output path (or [] if no stat records exist).
     let generateStackedPlots (records: StatRecord list) (outputDir: string) : string list =
@@ -153,29 +108,20 @@ module SurfacePlotter =
             Directory.CreateDirectory(outputDir) |> ignore
 
         let allStatTypes = [ Strength; Defense; Speed; Dexterity ]
+        let usableRecords = records |> List.filter (fun r -> r.EnergyUsed > 0.0)
 
-        let charts =
-            allStatTypes
-            |> List.choose (fun statType ->
-                let filtered = records |> List.filter (fun r -> r.StatType = statType)
-                if filtered.IsEmpty then None
-                else
-                    let grid = SurfaceBinner.binRecords filtered
-                    let title = sprintf "%A surface" statType
-                    let chart = baseSurfaceChart grid |> styleChartTight
-                    Some (statType, title, chart)
-            )
-
-        if charts.IsEmpty then
+        if usableRecords.IsEmpty then
             []
         else
-            // Combined (all stats) surface — average across all records.
-            let combinedGrid = SurfaceBinner.binRecords records
-            let combinedChart = baseSurfaceChart combinedGrid |> styleChartTight
+            let maxGatheredStat = usableRecords |> List.map _.StatBefore |> List.max
+            let maxGatheredHappy = usableRecords |> List.map _.HappyBeforeTrain |> List.max
+            let maxGatheredGain = usableRecords |> List.map (fun r -> r.StatIncreased / r.EnergyUsed) |> List.max
+            let defaultMaxGain = max 1.0 (ceil (maxGatheredGain * 1.2))
+            let statSliderMax = max maxChartX maxGatheredStat
+            let happySliderMax = max maxChartY maxGatheredHappy
+            let gainSliderMax = max defaultMaxGain (ceil maxGatheredGain)
 
-            let renderBlock (heading: string) (chart: GenericChart) =
-                let inner = chart |> GenericChart.toChartHTML |> fixHtml
-
+            let renderBlockHtml (heading: string) (inner: string) =
                 $"""
 <section class="panel">
   <h2>{heading}</h2>
@@ -183,13 +129,19 @@ module SurfacePlotter =
 </section>
 """
 
+            let renderBlock (heading: string) (rawRecords: StatRecord list) =
+                rawRecords
+                |> renderPointCloudHtml
+                |> renderBlockHtml heading
+
             let blocks =
                 [
-                    renderBlock "All stats (avg)" combinedChart
+                    renderBlock "All stats" usableRecords
                     yield!
-                        charts
-                        |> List.map (fun (statType, _title, chart) ->
-                            renderBlock (string statType) chart)
+                        allStatTypes
+                        |> List.choose (fun statType ->
+                            let rawRecords = usableRecords |> List.filter (fun r -> r.StatType = statType)
+                            if rawRecords.IsEmpty then None else Some (renderBlock (string statType) rawRecords))
                 ]
                 |> String.concat "\n"
 
@@ -199,26 +151,102 @@ module SurfacePlotter =
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HappyGymStats — Surfaces</title>
+  <title>HappyGymStats — Point Clouds</title>
   <script src="https://cdn.plot.ly/plotly-2.27.1.min.js" charset="utf-8"></script>
   <style>
     body {{ font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 0; background: #0b0f19; color: #e8eefc; }}
     header {{ padding: 20px 24px; border-bottom: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02); position: sticky; top: 0; backdrop-filter: blur(10px); }}
     header h1 {{ margin: 0; font-size: 18px; font-weight: 600; }}
     header p {{ margin: 6px 0 0; opacity: 0.75; font-size: 13px; }}
-    main {{ width: 100%%; margin: 0; padding: 12px 12px 28px; box-sizing: border-box; }}
+    .controls {{ display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)) auto; gap: 12px; align-items: end; margin-top: 14px; }}
+    .axis-control {{ display: grid; gap: 6px; min-width: 0; }}
+    .axis-control span {{ display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: #c8d4e8; }}
+    .axis-control output {{ color: #ffffff; font-variant-numeric: tabular-nums; }}
+    .axis-control input {{ width: 100%%; accent-color: #ffb04d; }}
+    .controls button {{ border: 1px solid rgba(255,255,255,0.18); background: rgba(255,176,77,0.18); color: #fff4e2; border-radius: 8px; padding: 8px 12px; font: inherit; font-size: 13px; cursor: pointer; }}
+    .controls button:hover {{ background: rgba(255,176,77,0.28); }}
+    main {{ width: 100vw; margin: 0; padding: 12px 12px 28px; box-sizing: border-box; }}
     .panel {{ background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 10px 10px 12px; margin: 12px 0; }}
     .panel h2 {{ margin: 4px 6px 10px; font-size: 16px; font-weight: 600; }}
+    @media (max-width: 760px) {{ .controls {{ grid-template-columns: 1fr; }} }}
   </style>
 </head>
 <body>
   <header>
-    <h1>HappyGymStats — Stat gained per energy (surface)</h1>
-    <p>X = stat before train · Y = happy before train · Z = stat gained / energy</p>
+    <h1>HappyGymStats — Stat gained per energy (point cloud)</h1>
+    <p>Raw gym samples plotted by stat before train, happy before train, and stat gained per energy.</p>
+    <div class="controls" aria-label="Axis controls">
+      <label class="axis-control" for="maxStatAxis">
+        <span>Max stat <output id="maxStatAxisValue"></output></span>
+        <input id="maxStatAxis" type="range" min="1" max="{jsNumber statSliderMax}" step="1" value="{jsNumber maxChartX}" />
+      </label>
+      <label class="axis-control" for="maxHappyAxis">
+        <span>Max happy <output id="maxHappyAxisValue"></output></span>
+        <input id="maxHappyAxis" type="range" min="1" max="{jsNumber happySliderMax}" step="1" value="{jsNumber maxChartY}" />
+      </label>
+      <label class="axis-control" for="maxGainAxis">
+        <span>Max gain / energy <output id="maxGainAxisValue"></output></span>
+        <input id="maxGainAxis" type="range" min="0.001" max="{jsNumber gainSliderMax}" step="0.001" value="{jsNumber defaultMaxGain}" />
+      </label>
+      <button id="clampToData" type="button">Clamp axes to data</button>
+    </div>
   </header>
   <main>
 {blocks}
   </main>
+  <script>
+    (function() {{
+      const defaultMaxStat = {jsNumber maxChartX};
+      const defaultMaxHappy = {jsNumber maxChartY};
+      const defaultMaxGain = {jsNumber defaultMaxGain};
+      const gatheredMaxStat = {jsNumber maxGatheredStat};
+      const gatheredMaxHappy = {jsNumber maxGatheredHappy};
+      const gatheredMaxGain = {jsNumber maxGatheredGain};
+
+      const formatValue = (value) => Math.round(Number(value)).toLocaleString();
+      const formatGain = (value) => Number(value).toLocaleString(undefined, {{ maximumFractionDigits: 3 }});
+      const plots = () => Array.from(document.querySelectorAll('.plot-shell'));
+
+      const applyAxes = () => {{
+        const maxStat = Number(document.getElementById('maxStatAxis').value || defaultMaxStat);
+        const maxHappy = Number(document.getElementById('maxHappyAxis').value || defaultMaxHappy);
+        const maxGain = Number(document.getElementById('maxGainAxis').value || defaultMaxGain);
+        document.getElementById('maxStatAxisValue').value = formatValue(maxStat);
+        document.getElementById('maxHappyAxisValue').value = formatValue(maxHappy);
+        document.getElementById('maxGainAxisValue').value = formatGain(maxGain);
+
+        if (!window.Plotly || typeof window.Plotly.relayout !== 'function') return;
+        for (const plot of plots()) {{
+          window.Plotly.relayout(plot, {{
+            'scene.xaxis.range': [0, maxStat],
+            'scene.yaxis.range': [0, maxHappy],
+            'scene.zaxis.range': [0, maxGain]
+          }});
+        }}
+      }};
+
+      const clampToData = () => {{
+        document.getElementById('maxStatAxis').value = Math.max(1, Math.ceil(gatheredMaxStat));
+        document.getElementById('maxHappyAxis').value = Math.max(1, Math.ceil(gatheredMaxHappy));
+        document.getElementById('maxGainAxis').value = Math.max(0.001, gatheredMaxGain).toFixed(3);
+        applyAxes();
+      }};
+
+      const bindControls = () => {{
+        document.getElementById('maxStatAxis').addEventListener('input', applyAxes);
+        document.getElementById('maxHappyAxis').addEventListener('input', applyAxes);
+        document.getElementById('maxGainAxis').addEventListener('input', applyAxes);
+        document.getElementById('clampToData').addEventListener('click', clampToData);
+        applyAxes();
+      }};
+
+      if (document.readyState === 'loading') {{
+        document.addEventListener('DOMContentLoaded', bindControls, {{ once: true }});
+      }} else {{
+        bindControls();
+      }}
+    }})();
+  </script>
 </body>
 </html>
 """

@@ -12,12 +12,14 @@ namespace HappyGymStats.Reconstruction;
 public sealed class MaxHappyTimeline
 {
     private readonly DateTimeOffset[] _timesUtc;
-    private readonly int[] _maxValues;
+    private readonly int[] _maxAfterValues;
+    private readonly int? _initialMaxBeforeOldest;
 
-    private MaxHappyTimeline(DateTimeOffset[] timesUtc, int[] maxValues)
+    private MaxHappyTimeline(DateTimeOffset[] timesUtc, int[] maxAfterValues, int? initialMaxBeforeOldest)
     {
         _timesUtc = timesUtc;
-        _maxValues = maxValues;
+        _maxAfterValues = maxAfterValues;
+        _initialMaxBeforeOldest = initialMaxBeforeOldest;
     }
 
     public static MaxHappyTimeline FromEvents(IEnumerable<MaxHappyEvent> events)
@@ -31,7 +33,13 @@ public sealed class MaxHappyTimeline
             .ToArray();
 
         var times = new DateTimeOffset[ordered.Length];
-        var values = new int[ordered.Length];
+        var valuesAfter = new int[ordered.Length];
+        int? initialBefore = null;
+
+        if (ordered.Length > 0)
+        {
+            initialBefore = ordered[0].MaxHappyBefore;
+        }
 
         for (var i = 0; i < ordered.Length; i++)
         {
@@ -39,10 +47,10 @@ public sealed class MaxHappyTimeline
             EnsureUtc(e.OccurredAtUtc, nameof(events));
 
             times[i] = e.OccurredAtUtc;
-            values[i] = e.MaxHappy;
+            valuesAfter[i] = e.MaxHappyAfter;
         }
 
-        return new MaxHappyTimeline(times, values);
+        return new MaxHappyTimeline(times, valuesAfter, initialBefore);
     }
 
     /// <summary>
@@ -64,17 +72,17 @@ public sealed class MaxHappyTimeline
             while (idx + 1 < _timesUtc.Length && _timesUtc[idx + 1] == instantUtc)
                 idx++;
 
-            return _maxValues[idx];
+            return _maxAfterValues[idx];
         }
 
         // If not found, BinarySearch returns bitwise complement of insertion index.
         var insertionIndex = ~idx;
         var rightmostLessThan = insertionIndex - 1;
         if (rightmostLessThan < 0)
-            return null;
+            return _initialMaxBeforeOldest;
 
         Debug.Assert(_timesUtc[rightmostLessThan] <= instantUtc);
-        return _maxValues[rightmostLessThan];
+        return _maxAfterValues[rightmostLessThan];
     }
 
     private static void EnsureUtc(DateTimeOffset value, string paramName)

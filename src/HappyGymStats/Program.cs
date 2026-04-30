@@ -6,6 +6,7 @@ using HappyGymStats.Storage;
 using HappyGymStats.Ui;
 using HappyGymStats.Torn;
 using HappyGymStats.Visualizer;
+using HappyGymStats.Verification;
 
 var ui = new ConsoleUi();
 
@@ -19,6 +20,7 @@ Directory.CreateDirectory(paths.ExportDirectory);
 //
 // Usage:
 //   HappyGymStats visualize [--csv <path>] [--out <dir>]
+//   HappyGymStats visualize-happy [--timeline <path>] [--out <dir>]
 //   HappyGymStats reconstruct-happy --current <int> [--anchor <iso-utc>]
 if (args.Length > 0)
 {
@@ -65,6 +67,26 @@ if (args.Length > 0)
         return;
     }
 
+    if (args[0].Equals("visualize-happy", StringComparison.OrdinalIgnoreCase))
+    {
+        var timelinePath = GetArg("--timeline") ?? paths.HappyTimelineCsvPath;
+        var outDir = GetArg("--out") ?? paths.ExportDirectory;
+
+        if (!File.Exists(timelinePath))
+        {
+            Console.Error.WriteLine($"Happy timeline CSV not found: {timelinePath}");
+            return;
+        }
+
+        Directory.CreateDirectory(outDir);
+
+        var outPath = Path.Combine(outDir, "HappyTimeline.html");
+        var generated = HappyTimelinePlotter.generateHappyTimelinePlot(timelinePath, outPath);
+
+        Console.WriteLine(generated);
+        return;
+    }
+
     if (args[0].Equals("reconstruct-happy", StringComparison.OrdinalIgnoreCase))
     {
         var currentText = GetArg("--current");
@@ -95,7 +117,99 @@ if (args.Length > 0)
             Console.WriteLine($"Clamp applied: {result.Stats.ClampAppliedCount}");
             Console.WriteLine($"Warnings: {result.Stats.WarningCount}");
             Console.WriteLine($"Max-happy events extracted: {result.Stats.MaxHappyEventsExtracted}");
+            Console.WriteLine($"Happy delta events extracted: {result.Stats.HappyDeltaEventsExtracted}");
         }
+
+        return;
+    }
+
+    if (args[0].Equals("export-csv", StringComparison.OrdinalIgnoreCase))
+    {
+        var jsonlPath = GetArg("--jsonl") ?? paths.LogsJsonlPath;
+        var derivedPath = GetArg("--derived") ?? paths.DerivedGymTrainsJsonlPath;
+        var derivedHappyPath = GetArg("--derived-happy") ?? paths.DerivedHappyEventsJsonlPath;
+        var csvPath = GetArg("--csv") ?? paths.LogsCsvPath;
+        var debugCsvPath = GetArg("--debug-csv") ?? paths.LogsDebugCsvPath;
+        var timelinePath = GetArg("--timeline") ?? paths.HappyTimelineCsvPath;
+
+        var result = CsvExportRunner.Run(jsonlPath, csvPath, derivedPath);
+        if (!result.Success)
+        {
+            Console.Error.WriteLine(result.ErrorMessage ?? "CSV export failed.");
+            return;
+        }
+
+        Console.WriteLine($"CSV output: {result.OutputPath} (rows={result.RowsWritten})");
+
+        var debugResult = CsvExportRunner.RunDebug(jsonlPath, debugCsvPath, derivedPath, derivedHappyPath);
+        if (!debugResult.Success)
+        {
+            Console.Error.WriteLine(debugResult.ErrorMessage ?? "Debug CSV export failed.");
+            return;
+        }
+
+        Console.WriteLine($"Debug CSV output: {debugResult.OutputPath} (rows={debugResult.RowsWritten})");
+
+        var timelineResult = HappyTimelineCsvWriter.Write(derivedHappyPath, timelinePath);
+        if (!timelineResult.Success)
+        {
+            Console.Error.WriteLine(timelineResult.ErrorMessage ?? "Happy timeline CSV export failed.");
+            return;
+        }
+
+        Console.WriteLine($"Happy timeline CSV output: {timelineResult.OutputPath} (rows={timelineResult.RowsWritten})");
+        return;
+    }
+
+    // Verification / debugging mode.
+    // Usage:
+    //   HappyGymStats verify-export [--csv <path>] [--jsonl <path>] [--derived <path>] [--html <path>] [--top <n>]
+    if (args[0].Equals("verify-export", StringComparison.OrdinalIgnoreCase))
+    {
+        var csvPath = GetArg("--csv") ?? paths.LogsCsvPath;
+        var jsonlPath = GetArg("--jsonl") ?? paths.LogsJsonlPath;
+        var derivedPath = GetArg("--derived") ?? paths.DerivedGymTrainsJsonlPath;
+        var htmlPath = GetArg("--html");
+
+        var topText = GetArg("--top");
+        var top = 20;
+        if (!string.IsNullOrWhiteSpace(topText) && int.TryParse(topText, out var parsedTop) && parsedTop >= 0)
+            top = parsedTop;
+
+        if (!File.Exists(csvPath))
+        {
+            Console.Error.WriteLine($"CSV not found: {csvPath}");
+            return;
+        }
+
+        var report = ExportVerifier.Verify(new ExportVerifier.VerifyOptions(
+            CsvPath: csvPath,
+            LogsJsonlPath: File.Exists(jsonlPath) ? jsonlPath : null,
+            DerivedGymTrainsJsonlPath: File.Exists(derivedPath) ? derivedPath : null,
+            SurfacesHtmlPath: (htmlPath is not null && File.Exists(htmlPath)) ? htmlPath : null,
+            TopOutliers: top));
+
+        Console.WriteLine($"Stat rows (gym trains): {report.StatRows}");
+        if (report.JsonlRowsFound > 0)
+            Console.WriteLine($"JSONL rows matched: {report.JsonlRowsFound}");
+        if (report.DerivedRowsFound > 0)
+            Console.WriteLine($"Derived gym-train rows matched: {report.DerivedRowsFound}");
+
+        Console.WriteLine($"Mismatches: {report.Mismatches}");
+        foreach (var m in report.SampleMismatches)
+            Console.WriteLine($"MISMATCH id={m.LogId} field={m.Field} expected={m.Expected} actual={m.Actual}");
+
+        if (report.TopOutlierLines.Count > 0)
+        {
+            Console.WriteLine($"Top {report.TopOutlierLines.Count} outliers (stat gained / energy):");
+            foreach (var line in report.TopOutlierLines)
+                Console.WriteLine(line);
+        }
+
+        if (report.VisualizationHtmlMatchesCsv)
+            Console.WriteLine("Surfaces.html check: PASS (raw point cloud matches CSV-derived stat rows)");
+        else if (htmlPath is not null)
+            Console.WriteLine("Surfaces.html check: FAIL (raw point cloud could not be parsed or did not match)");
 
         return;
     }
@@ -230,6 +344,35 @@ while (true)
                         paths.DerivedGymTrainsJsonlPath);
 
                     ui.RenderCsvExportSummary(result);
+
+                    ui.RenderInfo("Starting debug CSV export...");
+                    var debugResult = CsvExportRunner.RunDebug(
+                        paths.LogsJsonlPath,
+                        paths.LogsDebugCsvPath,
+                        paths.DerivedGymTrainsJsonlPath,
+                        paths.DerivedHappyEventsJsonlPath);
+
+                    if (debugResult.Success)
+                    {
+                        ui.RenderInfo($"Debug CSV output: {debugResult.OutputPath} (rows={debugResult.RowsWritten})");
+
+                        var timelineResult = HappyTimelineCsvWriter.Write(
+                            paths.DerivedHappyEventsJsonlPath,
+                            paths.HappyTimelineCsvPath);
+
+                        if (timelineResult.Success)
+                        {
+                            ui.RenderInfo($"Happy timeline CSV output: {timelineResult.OutputPath} (rows={timelineResult.RowsWritten})");
+                        }
+                        else
+                        {
+                            ui.RenderError(timelineResult.ErrorMessage ?? "Happy timeline CSV export failed.");
+                        }
+                    }
+                    else
+                    {
+                        ui.RenderError(debugResult.ErrorMessage ?? "Debug CSV export failed.");
+                    }
                 }
                 catch (OperationCanceledException)
                 {
