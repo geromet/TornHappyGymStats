@@ -141,6 +141,78 @@ dotnet test
 bash scripts/publish-all.sh            # builds all 6 RIDs to dist/
 ```
 
+## Deployment
+
+### Frontend (GitHub Pages)
+
+`main` pushes automatically deploy `web/` using `.github/workflows/pages.yml`.
+
+### Backend (`www.geromet.com` via Cloudflare Access SSH)
+
+Use:
+
+```bash
+bash scripts/deploy-backend.sh
+```
+
+This script:
+- publishes `src/HappyGymStats.Api` to `dist/backend-api/`
+- connects via your Cloudflare Access SSH tunnel
+- uploads to a timestamped release directory
+- flips `current` symlink
+- restarts the backend systemd service
+
+Default SSH transport matches your setup:
+
+```bash
+ssh -i ~/.ssh/id_token2_bio3_hetzner anon@ssh.geromet.com \
+  -o ProxyCommand="cloudflared access ssh --hostname ssh.geromet.com"
+```
+
+Optional overrides can be placed in `.env.deploy` (kept local):
+
+```bash
+DEPLOY_SSH_HOST=ssh.geromet.com
+DEPLOY_SSH_USER=anon
+DEPLOY_SSH_KEY=~/.ssh/id_token2_bio3_hetzner
+DEPLOY_PROXY_COMMAND='cloudflared access ssh --hostname ssh.geromet.com'
+DEPLOY_REMOTE_ROOT=/var/www/happygymstats
+DEPLOY_REMOTE_SERVICE=happygymstats-api
+DEPLOY_CONFIGURATION=Release
+DEPLOY_RUNTIME=linux-x64
+DEPLOY_USE_SUDO=1
+DEPLOY_SUDO_NON_INTERACTIVE=0
+DEPLOY_RESTART_SERVICE=1
+```
+
+### Sudo behavior
+
+By default, deployment uses interactive `sudo` on the remote host when privileged commands are needed. If remote sudo prompts for a password, enter it in your terminal.
+
+- `DEPLOY_USE_SUDO=1` — use sudo for privileged remote operations (default).
+- `DEPLOY_SUDO_NON_INTERACTIVE=0` — allow interactive sudo prompts (default).
+- `DEPLOY_SUDO_NON_INTERACTIVE=1` — force non-interactive sudo (`sudo -n`), fail fast if passwordless sudo is not configured.
+- `DEPLOY_USE_SUDO=0` — do not use sudo (requires user-writable deploy root + user-manageable service flow).
+
+
+If backend deploy runs as `anon` and writes to `/var/www/...`, configure passwordless sudo for only the commands used by `scripts/deploy-backend.sh`.
+
+Create `/etc/sudoers.d/happygymstats-deploy` (via `visudo -f /etc/sudoers.d/happygymstats-deploy`) with:
+
+```sudoers
+Defaults:anon !requiretty
+Cmnd_Alias HGS_DEPLOY = /usr/bin/mkdir, /usr/bin/rsync, /usr/bin/ln, /usr/bin/systemctl
+anon ALL=(root) NOPASSWD: HGS_DEPLOY
+```
+
+Then validate on the server:
+
+```bash
+sudo -l
+```
+
+You should see NOPASSWD access for those commands. If your distro places binaries elsewhere, adjust absolute paths (`command -v mkdir rsync ln systemctl`).
+
 ## Storage mode after wave 7
 
 - `userlogs.jsonl`, derived JSONL sidecars, and `checkpoint.json` remain the legacy interchange/backup format.
