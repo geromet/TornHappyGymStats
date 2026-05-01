@@ -53,7 +53,7 @@ app.UseStaticFiles();
 
 // ---- Import endpoints -------------------------------------------------------
 
-app.MapPost("/v1/import", (
+app.MapPost("/api/v1/torn/import-jobs", (
     ImportService importService,
     HttpContext httpContext,
     ImportRequest? request) =>
@@ -73,7 +73,7 @@ app.MapPost("/v1/import", (
     .WithName("StartImport")
     .WithOpenApi();
 
-app.MapGet("/v1/import/latest", (ImportService importService, HttpContext httpContext) =>
+app.MapGet("/api/v1/torn/import-jobs/latest", (ImportService importService, HttpContext httpContext) =>
 {
     var status = importService.Latest;
     if (status is null)
@@ -86,7 +86,7 @@ app.MapGet("/v1/import/latest", (ImportService importService, HttpContext httpCo
 
 // ---- Read endpoints ---------------------------------------------------------
 
-app.MapGet("/v1/health", async (HappyGymStatsDbContext db, CancellationToken ct) =>
+app.MapGet("/api/v1/torn/health", async (HappyGymStatsDbContext db, CancellationToken ct) =>
     Results.Ok(new HealthResponse(
         Status: await db.Database.CanConnectAsync(ct) ? "ok" : "degraded",
         Api: "HappyGymStats.Api",
@@ -94,7 +94,7 @@ app.MapGet("/v1/health", async (HappyGymStatsDbContext db, CancellationToken ct)
     .WithName("GetHealth")
     .WithOpenApi();
 
-app.MapGet("/v1/surfaces/meta", async (HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/api/v1/torn/surfaces/meta", async (HttpContext httpContext, CancellationToken ct) =>
 {
     var path = Path.Combine(surfacesCacheDirectory, "meta.json");
     if (!File.Exists(path))
@@ -106,7 +106,7 @@ app.MapGet("/v1/surfaces/meta", async (HttpContext httpContext, CancellationToke
     .WithName("GetSurfacesMeta")
     .WithOpenApi();
 
-app.MapGet("/v1/surfaces/latest", async (HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/api/v1/torn/surfaces/latest", async (HttpContext httpContext, CancellationToken ct) =>
 {
     var path = Path.Combine(surfacesCacheDirectory, "latest.json");
     if (!File.Exists(path))
@@ -118,7 +118,7 @@ app.MapGet("/v1/surfaces/latest", async (HttpContext httpContext, CancellationTo
     .WithName("GetSurfacesLatest")
     .WithOpenApi();
 
-app.MapGet("/v1/gym-trains", async (
+app.MapGet("/api/v1/torn/gym-trains", async (
     HappyGymStatsDbContext db,
     HttpContext httpContext,
     int? limit,
@@ -154,7 +154,7 @@ app.MapGet("/v1/gym-trains", async (
     .WithName("ListGymTrains")
     .WithOpenApi();
 
-app.MapGet("/v1/happy-events", async (
+app.MapGet("/api/v1/torn/happy-events", async (
     HappyGymStatsDbContext db,
     HttpContext httpContext,
     int? limit,

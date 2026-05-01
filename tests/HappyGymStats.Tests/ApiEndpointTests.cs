@@ -32,7 +32,7 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
     {
         using var client = _factory.CreateClient();
 
-        var response = await client.GetAsync("/v1/health");
+        var response = await client.GetAsync("/api/v1/torn/health");
 
         response.EnsureSuccessStatusCode();
         var payload = await response.Content.ReadFromJsonAsync<HealthResponse>(JsonOptions);
@@ -47,7 +47,7 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
     public async Task Read_endpoints_allow_cross_origin_get_requests()
     {
         using var client = _factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/v1/health");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/torn/health");
         request.Headers.Add("Origin", "https://example.com");
 
         var response = await client.SendAsync(request);
@@ -99,13 +99,13 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
 
         using var client = _factory.CreateClient();
 
-        var firstPage = await client.GetFromJsonAsync<CursorPage<GymTrainDto>>("/v1/gym-trains?limit=2", JsonOptions);
+        var firstPage = await client.GetFromJsonAsync<CursorPage<GymTrainDto>>("/api/v1/torn/gym-trains?limit=2", JsonOptions);
 
         Assert.NotNull(firstPage);
         Assert.Equal(new[] { "train-c", "train-b" }, firstPage.Items.Select(x => x.LogId).ToArray());
         Assert.False(string.IsNullOrWhiteSpace(firstPage.NextCursor));
 
-        var secondPage = await client.GetFromJsonAsync<CursorPage<GymTrainDto>>($"/v1/gym-trains?limit=2&cursor={Uri.EscapeDataString(firstPage.NextCursor!)}", JsonOptions);
+        var secondPage = await client.GetFromJsonAsync<CursorPage<GymTrainDto>>($"/api/v1/torn/gym-trains?limit=2&cursor={Uri.EscapeDataString(firstPage.NextCursor!)}", JsonOptions);
 
         Assert.NotNull(secondPage);
         Assert.Equal(new[] { "train-a" }, secondPage.Items.Select(x => x.LogId).ToArray());
@@ -152,13 +152,13 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
 
         using var client = _factory.CreateClient();
 
-        var firstPage = await client.GetFromJsonAsync<CursorPage<HappyEventDto>>("/v1/happy-events?limit=2", JsonOptions);
+        var firstPage = await client.GetFromJsonAsync<CursorPage<HappyEventDto>>("/api/v1/torn/happy-events?limit=2", JsonOptions);
 
         Assert.NotNull(firstPage);
         Assert.Equal(new[] { "event-c", "event-b" }, firstPage.Items.Select(x => x.EventId).ToArray());
         Assert.False(string.IsNullOrWhiteSpace(firstPage.NextCursor));
 
-        var secondPage = await client.GetFromJsonAsync<CursorPage<HappyEventDto>>($"/v1/happy-events?limit=2&cursor={Uri.EscapeDataString(firstPage.NextCursor!)}", JsonOptions);
+        var secondPage = await client.GetFromJsonAsync<CursorPage<HappyEventDto>>($"/api/v1/torn/happy-events?limit=2&cursor={Uri.EscapeDataString(firstPage.NextCursor!)}", JsonOptions);
 
         Assert.NotNull(secondPage);
         Assert.Equal(new[] { "event-a" }, secondPage.Items.Select(x => x.EventId).ToArray());
@@ -170,7 +170,7 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
     {
         using var client = _factory.CreateClient();
 
-        var response = await client.GetAsync("/v1/gym-trains?limit=999");
+        var response = await client.GetAsync("/api/v1/torn/gym-trains?limit=999");
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         var payload = await response.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
@@ -187,7 +187,7 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
     {
         using var client = _factory.CreateClient();
 
-        var response = await client.GetAsync("/v1/happy-events?cursor=not-base64");
+        var response = await client.GetAsync("/api/v1/torn/happy-events?cursor=not-base64");
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         var payload = await response.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
@@ -203,7 +203,7 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
     {
         using var client = _factory.CreateClient();
 
-        var response = await client.GetAsync("/v1/import/latest");
+        var response = await client.GetAsync("/api/v1/torn/import-jobs/latest");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         var payload = await response.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
@@ -217,7 +217,7 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
     {
         using var client = _factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync("/v1/import", new { fresh = true });
+        var response = await client.PostAsJsonAsync("/api/v1/torn/import-jobs", new { fresh = true });
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         var payload = await response.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
@@ -232,14 +232,14 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
     {
         using var client = _factory.CreateClient();
 
-        var startResponse = await client.PostAsJsonAsync("/v1/import", new { apiKey = "bad-key-for-test", fresh = true });
+        var startResponse = await client.PostAsJsonAsync("/api/v1/torn/import-jobs", new { apiKey = "bad-key-for-test", fresh = true });
         Assert.True(startResponse.StatusCode is HttpStatusCode.Accepted or HttpStatusCode.OK);
 
         var startPayload = await startResponse.Content.ReadFromJsonAsync<ImportStatusDto>(JsonOptions);
         Assert.NotNull(startPayload);
         Assert.False(string.IsNullOrWhiteSpace(startPayload.Id));
 
-        var latestResponse = await client.GetAsync("/v1/import/latest");
+        var latestResponse = await client.GetAsync("/api/v1/torn/import-jobs/latest");
         latestResponse.EnsureSuccessStatusCode();
 
         var latestPayload = await latestResponse.Content.ReadFromJsonAsync<ImportStatusDto>(JsonOptions);
