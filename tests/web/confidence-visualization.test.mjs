@@ -1,5 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const {
   clampConfidence,
@@ -72,4 +78,20 @@ test('buildGymMarkerColors defaults to low confidence color when metadata missin
     'rgb(214, 64, 69)',
     'rgb(214, 64, 69)',
   ]);
+});
+
+test('fixture payload produces deterministic marker colors and fallback evidence copy', async () => {
+  const fixturePath = path.resolve(__dirname, '../fixtures/surfaces/latest-confidence-sample.json');
+  const payload = JSON.parse(await readFile(fixturePath, 'utf8'));
+  const series = payload.series.gymCloud;
+
+  const trace = buildGymTrace(series);
+
+  assert.deepEqual(trace.marker.color, [
+    'rgb(56, 201, 110)',
+    'rgb(135, 133, 90)',
+    'rgb(214, 64, 69)',
+  ]);
+  assert.match(trace.text[0], /Evidence: source:api, source:history/);
+  assert.match(trace.text[2], /Evidence: missing-provenance-record/);
 });
