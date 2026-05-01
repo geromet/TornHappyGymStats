@@ -123,8 +123,44 @@ public sealed class DbPipelineIntegrationTests
             .Options;
 
         await using var db = new HappyGymStatsDbContext(dbOptions);
-        Assert.True(await db.DerivedGymTrains.AsNoTracking().AnyAsync());
+        var derivedTrainsCount = await db.DerivedGymTrains.AsNoTracking().CountAsync();
+        Assert.True(derivedTrainsCount > 0);
         Assert.True(await db.DerivedHappyEvents.AsNoTracking().AnyAsync());
+
+        var provenance = await db.ModifierProvenance
+            .AsNoTracking()
+            .OrderBy(p => p.DerivedGymTrainLogId)
+            .ThenBy(p => p.Scope)
+            .ToListAsync();
+
+        Assert.Equal(derivedTrainsCount * 3, provenance.Count);
+
+        Assert.All(
+            provenance.Where(p => p.Scope == HappyReconstructionModels.ModifierProvenanceScopes.Personal),
+            row =>
+            {
+                Assert.Equal(HappyReconstructionModels.ModifierProvenanceStatuses.Verified, row.VerificationStatus);
+                Assert.Equal(HappyReconstructionModels.ModifierProvenanceReasonCodes.SourceLog, row.VerificationReasonCode);
+                Assert.False(string.IsNullOrWhiteSpace(row.SubjectId));
+            });
+
+        Assert.All(
+            provenance.Where(p => p.Scope == HappyReconstructionModels.ModifierProvenanceScopes.Faction),
+            row =>
+            {
+                Assert.Equal(HappyReconstructionModels.ModifierProvenanceStatuses.Unresolved, row.VerificationStatus);
+                Assert.Equal(HappyReconstructionModels.ModifierProvenanceReasonCodes.MissingFactionRecord, row.VerificationReasonCode);
+                Assert.False(string.IsNullOrWhiteSpace(row.FactionId));
+            });
+
+        Assert.All(
+            provenance.Where(p => p.Scope == HappyReconstructionModels.ModifierProvenanceScopes.Company),
+            row =>
+            {
+                Assert.Equal(HappyReconstructionModels.ModifierProvenanceStatuses.Unresolved, row.VerificationStatus);
+                Assert.Equal(HappyReconstructionModels.ModifierProvenanceReasonCodes.MissingCompanyRecord, row.VerificationReasonCode);
+                Assert.False(string.IsNullOrWhiteSpace(row.CompanyId));
+            });
     }
 
     private static string CreateTempDirectory()
