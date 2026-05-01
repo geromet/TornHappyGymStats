@@ -9,6 +9,7 @@ namespace HappyGymStats.Api;
 public sealed class SurfacesCacheWriter
 {
     private const int MaxWarningsPerLog = 20;
+    private static readonly string OverrideFileName = "modifier-overrides.local.json";
 
     private static readonly HashSet<string> KnownScopes = new(StringComparer.Ordinal)
     {
@@ -85,7 +86,9 @@ public sealed class SurfacesCacheWriter
                 StringComparer.Ordinal);
 
         var surfaces = SurfaceSeriesBuilder.Build(rawRows, derivedByLogId, eventRows, provenanceByLogId);
-        var warningProjection = ProjectProvenanceWarnings(provenanceRows);
+        var overridePath = Path.Combine(_cacheDirectory, OverrideFileName);
+        var overrideResult = ModifierOverrideLoader.LoadFromFile(overridePath);
+        var warningProjection = ProjectProvenanceWarnings(provenanceRows, overrideResult);
 
         var payload = new
         {
@@ -121,6 +124,10 @@ public sealed class SurfacesCacheWriter
                 {
                     warningCount = warningProjection.Warnings.Count,
                     skippedMalformedRowCount = warningProjection.SkippedMalformedRowCount,
+                    overrideLoadedEntryCount = overrideResult.LoadedEntryCount,
+                    overrideSkippedMalformedEntryCount = overrideResult.SkippedMalformedEntryCount,
+                    overrideHitEntryCap = overrideResult.HitEntryCap,
+                    overrideDiagnostics = overrideResult.Diagnostics,
                     queryFailed = false,
                     reason = "ok"
                 }
@@ -150,7 +157,7 @@ public sealed class SurfacesCacheWriter
         File.Move(metaTemp, metaPath, overwrite: true);
     }
 
-    private WarningProjection ProjectProvenanceWarnings(IEnumerable<dynamic> provenanceRows)
+    private WarningProjection ProjectProvenanceWarnings(IEnumerable<dynamic> provenanceRows, ModifierOverrideLoadResult overrideResult)
     {
         var skippedMalformedRows = 0;
 
@@ -174,15 +181,22 @@ public sealed class SurfacesCacheWriter
                     Scope = (string)row.Scope,
                     Status = (string)row.VerificationStatus,
                     Reason = (string)row.VerificationReasonCode,
-                    LinkTarget = BuildLinkTarget((string)row.Scope, (string?)row.SubjectId, (string?)row.FactionId, (string?)row.CompanyId)
+                    LinkTarget = BuildLinkTarget((string)row.Scope, (string?)row.SubjectId, (string?)row.FactionId, (string?)row.CompanyId),
+                    PlaceholderId = ResolvePlaceholder((string)row.Scope, (string?)row.FactionId, (string?)row.CompanyId)
                 })
-            .Select(g => new ProvenanceWarning(
-                LogId: g.Key.LogId,
-                Scope: g.Key.Scope,
-                VerificationStatus: g.Key.Status,
-                ReasonCode: g.Key.Reason,
-                LinkTarget: g.Key.LinkTarget,
-                RowCount: g.Count()))
+            .Select(g =>
+            {
+                var ov = overrideResult.Find(g.Key.Scope, g.Key.PlaceholderId);
+                return new ProvenanceWarning(
+                    LogId: g.Key.LogId,
+                    Scope: g.Key.Scope,
+                    VerificationStatus: g.Key.Status,
+                    ReasonCode: g.Key.Reason,
+                    LinkTarget: ov?.LinkTarget ?? g.Key.LinkTarget,
+                    RowCount: g.Count(),
+                    HasManualOverride: ov is not null,
+                    ManualOverrideSource: ov is null ? null : "local-manual");
+            })
             .OrderBy(x => x.LogId, StringComparer.Ordinal)
             .ThenBy(x => x.Scope, StringComparer.Ordinal)
             .ThenBy(x => x.ReasonCode, StringComparer.Ordinal)
@@ -210,6 +224,23 @@ public sealed class SurfacesCacheWriter
             _ => "/provenance/unresolved"
         };
 
-    private sealed record ProvenanceWarning(string LogId, string Scope, string VerificationStatus, string ReasonCode, string LinkTarget, int RowCount);
+    private static string? ResolvePlaceholder(string scope, string? factionId, string? companyId)
+        => scope switch
+        {
+            "faction" => factionId,
+            "company" => companyId,
+            _ => null
+        };
+
+    private sealed record ProvenanceWarning(
+        string LogId,
+        string Scope,
+        string VerificationStatus,
+        string ReasonCode,
+        string LinkTarget,
+        int RowCount,
+        bool HasManualOverride,
+        string? ManualOverrideSource);
+
     private sealed record WarningProjection(IReadOnlyList<ProvenanceWarning> Warnings, int SkippedMalformedRowCount);
 }

@@ -254,11 +254,17 @@ public sealed class DbPipelineIntegrationTests
         Assert.Equal("unresolved", warnings[0].GetProperty("VerificationStatus").GetString());
         Assert.Equal("missing-faction-record", warnings[0].GetProperty("ReasonCode").GetString());
         Assert.Equal("/factions/unknown-faction", warnings[0].GetProperty("LinkTarget").GetString());
+        Assert.False(warnings[0].GetProperty("HasManualOverride").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, warnings[0].GetProperty("ManualOverrideSource").ValueKind);
         Assert.Equal(1, warnings[0].GetProperty("RowCount").GetInt32());
 
         var warningDiagnostics = json.RootElement.GetProperty("meta").GetProperty("provenanceWarningsDiagnostics");
         Assert.Equal(1, warningDiagnostics.GetProperty("warningCount").GetInt32());
         Assert.Equal(0, warningDiagnostics.GetProperty("skippedMalformedRowCount").GetInt32());
+        Assert.Equal(0, warningDiagnostics.GetProperty("overrideLoadedEntryCount").GetInt32());
+        Assert.Equal(0, warningDiagnostics.GetProperty("overrideSkippedMalformedEntryCount").GetInt32());
+        Assert.False(warningDiagnostics.GetProperty("overrideHitEntryCap").GetBoolean());
+        Assert.Contains("override-read-failed", warningDiagnostics.GetProperty("overrideDiagnostics").EnumerateArray().Select(x => x.GetString()));
         Assert.False(warningDiagnostics.GetProperty("queryFailed").GetBoolean());
 
         Assert.True(gymCloud.TryGetProperty("x", out _));
@@ -401,6 +407,87 @@ public sealed class DbPipelineIntegrationTests
         var warningDiagnostics = json.RootElement.GetProperty("meta").GetProperty("provenanceWarningsDiagnostics");
         Assert.Equal(1, warningDiagnostics.GetProperty("warningCount").GetInt32());
         Assert.Equal(1, warningDiagnostics.GetProperty("skippedMalformedRowCount").GetInt32());
+    }
+
+    [Fact]
+    public async Task Surfaces_cache_payload_applies_local_manual_override_for_unresolved_faction_warning()
+    {
+        var tempDir = CreateTempDirectory();
+        var dbPath = SqlitePaths.ResolveDatabasePath(tempDir);
+
+        var dbOptions = new DbContextOptionsBuilder<HappyGymStatsDbContext>()
+            .UseSqlite($"Data Source={dbPath}")
+            .Options;
+
+        await using (var db = new HappyGymStatsDbContext(dbOptions))
+        {
+            await db.Database.EnsureCreatedAsync();
+
+            db.RawUserLogs.Add(new RawUserLogEntity
+            {
+                LogId = "log-override",
+                OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
+                RawJson = """{"details":{"category":"Gym"},"data":{"energy_used":5,"strength_before":500,"strength_increased":5}}"""
+            });
+
+            db.DerivedGymTrains.Add(new DerivedGymTrainEntity
+            {
+                LogId = "log-override",
+                OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
+                HappyBeforeTrain = 2500
+            });
+
+            db.ModifierProvenance.Add(new ModifierProvenanceEntity
+            {
+                DerivedGymTrainLogId = "log-override",
+                Scope = "faction",
+                FactionId = "unknown-faction",
+                VerificationStatus = "unresolved",
+                VerificationReasonCode = "missing-faction-record",
+                ValidFromUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z")
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        var services = new ServiceCollection();
+        services.AddDbContext<HappyGymStatsDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
+        await using var provider = services.BuildServiceProvider();
+
+        var cacheDir = Path.Combine(tempDir, "surfaces");
+        Directory.CreateDirectory(cacheDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(cacheDir, "modifier-overrides.local.json"),
+            """
+            {
+              "overrides": [
+                {
+                  "scope": "faction",
+                  "placeholderId": "unknown-faction",
+                  "resolvedId": "321",
+                  "linkTarget": "/factions/321"
+                }
+              ]
+            }
+            """);
+
+        var writer = new SurfacesCacheWriter(provider.GetRequiredService<IServiceScopeFactory>(), cacheDir);
+        await writer.WriteLatestAsync("test-v1", DateTimeOffset.UtcNow, CancellationToken.None);
+
+        var latestPath = Path.Combine(cacheDir, "latest.json");
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(latestPath));
+
+        var warning = json.RootElement.GetProperty("series").GetProperty("gymCloud").GetProperty("provenanceWarnings")
+            .EnumerateArray()
+            .Single();
+
+        Assert.Equal("/factions/321", warning.GetProperty("LinkTarget").GetString());
+        Assert.True(warning.GetProperty("HasManualOverride").GetBoolean());
+        Assert.Equal("local-manual", warning.GetProperty("ManualOverrideSource").GetString());
+
+        var warningDiagnostics = json.RootElement.GetProperty("meta").GetProperty("provenanceWarningsDiagnostics");
+        Assert.Equal(1, warningDiagnostics.GetProperty("overrideLoadedEntryCount").GetInt32());
+        Assert.Empty(warningDiagnostics.GetProperty("overrideDiagnostics").EnumerateArray());
     }
 
     private static string CreateTempDirectory()
