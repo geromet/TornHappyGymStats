@@ -36,7 +36,7 @@ public static class SurfaceSeriesBuilder
 
         foreach (var row in raws)
         {
-            if (!TryReadGymPoint(row.RawJson, out var statBefore, out var energyUsed, out var statIncreased, out var statType))
+            if (!TryReadGymPoint(row.RawJson, out var statBefore, out var energyUsed, out var statIncreased, out var statType, out var happyBeforeFromRaw))
                 continue;
 
             if (energyUsed <= 0)
@@ -46,7 +46,7 @@ public static class SurfaceSeriesBuilder
             provenanceByLogId.TryGetValue(row.LogId, out var provenanceRows);
 
             gymX.Add(statBefore);
-            gymY.Add(derived?.HappyBeforeTrain ?? 0);
+            gymY.Add(derived?.HappyBeforeTrain ?? happyBeforeFromRaw ?? 0);
             gymZ.Add(statIncreased / energyUsed);
             gymText.Add($"{statType} {row.OccurredAtUtc:O}");
 
@@ -104,12 +104,13 @@ public static class SurfaceSeriesBuilder
         ("dexterity", "dexterity"),
     };
 
-    private static bool TryReadGymPoint(string rawJson, out double statBefore, out double energyUsed, out double statIncreased, out string statType)
+    private static bool TryReadGymPoint(string rawJson, out double statBefore, out double energyUsed, out double statIncreased, out string statType, out int? happyBeforeTrain)
     {
         statBefore = 0;
         energyUsed = 0;
         statIncreased = 0;
         statType = string.Empty;
+        happyBeforeTrain = null;
 
         using var doc = JsonDocument.Parse(rawJson);
         if (!TryGetPropertyIgnoreCase(doc.RootElement, "data", out var dataEl) || dataEl.ValueKind != JsonValueKind.Object)
@@ -117,6 +118,11 @@ public static class SurfaceSeriesBuilder
 
         if (!TryGetDouble(dataEl, "energy_used", out energyUsed))
             return false;
+
+        if (TryGetDouble(dataEl, "happy_before", out var happyBeforeRaw))
+        {
+            happyBeforeTrain = (int)Math.Round(happyBeforeRaw);
+        }
 
         foreach (var (type, key) in KnownStatTypes)
         {
