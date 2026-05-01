@@ -14,16 +14,18 @@ public sealed class ImportService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly string _databasePath;
+    private readonly SurfacesCacheWriter _surfacesCacheWriter;
 
     private readonly SemaphoreSlim _slot = new(1, 1);
     private readonly ConcurrentQueue<ImportJobRequest> _queue = new();
 
     private volatile ImportJobStatus? _latest;
 
-    public ImportService(IServiceScopeFactory scopeFactory, string databasePath)
+    public ImportService(IServiceScopeFactory scopeFactory, string databasePath, SurfacesCacheWriter surfacesCacheWriter)
     {
         _scopeFactory = scopeFactory;
         _databasePath = databasePath;
+        _surfacesCacheWriter = surfacesCacheWriter;
     }
 
     public ImportJobStatus? Latest => _latest;
@@ -109,10 +111,14 @@ public sealed class ImportService : BackgroundService
                     });
                 }).ConfigureAwait(false);
 
+            var syncedAtUtc = DateTimeOffset.UtcNow;
+            var version = $"{syncedAtUtc:O}-{request.JobId}";
+            await _surfacesCacheWriter.WriteLatestAsync(version, syncedAtUtc, stoppingToken).ConfigureAwait(false);
+
             Update(request.JobId, s => s with
             {
                 Outcome = "completed",
-                CompletedAtUtc = DateTimeOffset.UtcNow,
+                CompletedAtUtc = syncedAtUtc,
                 PagesFetched = result.PagesFetched,
                 LogsFetched = result.LogsFetched,
                 LogsAppended = result.LogsAppended,

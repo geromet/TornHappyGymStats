@@ -138,7 +138,9 @@ http://localhost:8000/?api=http://localhost:5047
 ```bash
 dotnet build
 dotnet test
-bash scripts/publish-all.sh            # builds all 6 RIDs to dist/
+bash scripts/publish.sh --target cli   # builds CLI for default RIDs to dist/cli/
+bash scripts/publish.sh --target api   # builds API for default RIDs to dist/api/
+bash scripts/publish.sh --target all --rid linux-x64 --rid osx-arm64
 ```
 
 ## Deployment

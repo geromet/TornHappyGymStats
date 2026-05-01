@@ -1,222 +1,124 @@
-const storageKey = "happy-gym-stats.api-base-url";
-const params = new URLSearchParams(window.location.search);
+const API_BASE = "https://www.geromet.com";
+const DATA_BASE = "./data/surfaces";
 
-const elements = {
-  apiBaseInput: document.querySelector("#api-base-url"),
-  saveApiBaseButton: document.querySelector("#save-api-base"),
-  reloadButton: document.querySelector("#reload-dashboard"),
-  connectionBadge: document.querySelector("#connection-badge"),
-  healthPill: document.querySelector("#health-pill"),
-  healthStatus: document.querySelector("#health-status"),
-  healthApi: document.querySelector("#health-api"),
-  healthDb: document.querySelector("#health-db"),
-  gymTrainsCount: document.querySelector("#gym-trains-count"),
-  happyEventsCount: document.querySelector("#happy-events-count"),
-  gymTrainsBody: document.querySelector("#gym-trains-body"),
-  happyEventsBody: document.querySelector("#happy-events-body"),
-  activityLog: document.querySelector("#activity-log"),
+const el = {
+  apiKey: document.getElementById("api-key"),
+  runImport: document.getElementById("run-import"),
+  status: document.getElementById("status"),
 };
 
-initialize();
+el.runImport.addEventListener("click", runImportAndRefresh);
+void loadCachedSurfaces();
 
-function initialize() {
-  const defaultBase = params.get("api")
-    ?? window.localStorage.getItem(storageKey)
-    ?? "https://www.geromet.com";
-
-  elements.apiBaseInput.value = defaultBase;
-
-  elements.saveApiBaseButton.addEventListener("click", () => {
-    const value = normalizeBaseUrl(elements.apiBaseInput.value);
-    if (!value) {
-      log("Cannot save empty API base URL.");
-      setBadge(elements.connectionBadge, "warning", "Missing URL");
-      return;
-    }
-
-    window.localStorage.setItem(storageKey, value);
-    elements.apiBaseInput.value = value;
-    log(`Saved API base URL: ${value}`);
-    setBadge(elements.connectionBadge, "idle", "Saved");
-  });
-
-  elements.reloadButton.addEventListener("click", () => refreshDashboard());
-
-  refreshDashboard();
-}
-
-async function refreshDashboard() {
-  const baseUrl = normalizeBaseUrl(elements.apiBaseInput.value);
-  if (!baseUrl) {
-    setBadge(elements.connectionBadge, "warning", "Missing URL");
-    log("Set an API base URL before refreshing.");
+async function runImportAndRefresh() {
+  const apiKey = (el.apiKey.value || "").trim();
+  if (!apiKey) {
+    setStatus("API key is required.", true);
     return;
   }
 
-  window.localStorage.setItem(storageKey, baseUrl);
-  elements.apiBaseInput.value = baseUrl;
-  setBadge(elements.connectionBadge, "idle", "Checking");
-  log(`Refreshing dashboard from ${baseUrl}`);
-
   try {
-    const [health, gymTrainsPage, happyEventsPage] = await Promise.all([
-      fetchJson(baseUrl, "/v1/health"),
-      fetchJson(baseUrl, "/v1/gym-trains?limit=5"),
-      fetchJson(baseUrl, "/v1/happy-events?limit=5"),
-    ]);
+    setStatus("Starting import…");
+    await postJson("/v1/import", { apiKey, fresh: false });
 
-    renderHealth(health);
-    renderGymTrains(gymTrainsPage.items ?? []);
-    renderHappyEvents(happyEventsPage.items ?? []);
+    setStatus("Import started. Waiting for cache refresh…");
+    await delay(4000);
 
-    setBadge(elements.connectionBadge, "ok", "Connected");
-    log("Refresh complete.");
-  } catch (error) {
-    renderHealthFailure(error);
-    renderGymTrains([]);
-    renderHappyEvents([]);
-    setBadge(elements.connectionBadge, "error", "Failed");
-    log(error instanceof Error ? error.message : String(error));
+    await loadCachedSurfaces();
+  } catch (err) {
+    setStatus(err instanceof Error ? err.message : String(err), true);
   }
 }
 
-async function fetchJson(baseUrl, path) {
-  const response = await fetch(`${baseUrl}${path}`, {
-    headers: {
-      Accept: "application/json",
+async function loadCachedSurfaces() {
+  try {
+    setStatus("Checking cached dataset…");
+
+    const metaRes = await fetch(`${DATA_BASE}/meta.json`, { cache: "no-cache" });
+    if (!metaRes.ok) throw new Error(`Failed to load meta.json (${metaRes.status}).`);
+    const meta = await metaRes.json();
+
+    const dataRes = await fetch(`${DATA_BASE}/latest.json?v=${encodeURIComponent(meta.currentVersion)}`);
+    if (!dataRes.ok) throw new Error(`Failed to load latest.json (${dataRes.status}).`);
+    const payload = await dataRes.json();
+
+    renderGymCloudFromSeries(payload.series.gymCloud);
+    renderEventsCloudFromSeries(payload.series.eventsCloud);
+
+    setStatus(`Loaded cached dataset ${payload.version} (synced ${payload.syncedAtUtc}).`);
+  } catch (err) {
+    setStatus(`Cache load failed: ${err instanceof Error ? err.message : String(err)}`, true);
+  }
+}
+
+function renderGymCloudFromSeries(series) {
+  const trace = {
+    type: "scatter3d",
+    mode: "markers",
+    name: "Gym trains",
+    x: series.x,
+    y: series.y,
+    z: series.z,
+    marker: { size: 3, opacity: 0.75 },
+    text: series.text,
+    hovertemplate: "Happy before: %{x}<br>Happy used: %{y}<br>Regen gained: %{z}<br>%{text}<extra></extra>",
+  };
+
+  const layout = {
+    margin: { l: 0, r: 0, t: 20, b: 0 },
+    scene: {
+      xaxis: { title: "Happy before train" },
+      yaxis: { title: "Happy used" },
+      zaxis: { title: "Regen happy gained" },
     },
+  };
+
+  Plotly.newPlot("gym-cloud", [trace], layout, { responsive: true });
+}
+
+function renderEventsCloudFromSeries(series) {
+  const trace = {
+    type: "scatter3d",
+    mode: "markers",
+    name: "Happy events",
+    x: series.x,
+    y: series.y,
+    z: series.z,
+    marker: { size: 3, opacity: 0.75 },
+    text: series.text,
+    hovertemplate: "Before: %{x}<br>Delta: %{y}<br>After: %{z}<br>%{text}<extra></extra>",
+  };
+
+  const layout = {
+    margin: { l: 0, r: 0, t: 20, b: 0 },
+    scene: {
+      xaxis: { title: "Happy before event" },
+      yaxis: { title: "Delta" },
+      zaxis: { title: "Happy after event" },
+    },
+  };
+
+  Plotly.newPlot("events-cloud", [trace], layout, { responsive: true });
+}
+
+async function postJson(path, body) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
   });
-
-  if (!response.ok) {
-    const body = await safeReadText(response);
-    throw new Error(`${response.status} ${response.statusText} from ${path}${body ? ` — ${body}` : ""}`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`${res.status} ${res.statusText} from ${path}: ${text}`);
   }
-
-  return await response.json();
+  return res.json();
 }
 
-async function safeReadText(response) {
-  try {
-    return await response.text();
-  } catch {
-    return "";
-  }
+function setStatus(text, isError = false) {
+  el.status.textContent = text;
+  el.status.style.color = isError ? "#ff7676" : "#b8e1ff";
 }
 
-function renderHealth(health) {
-  elements.healthStatus.textContent = health.status ?? "unknown";
-  elements.healthApi.textContent = health.api ?? "unknown";
-  elements.healthDb.textContent = health.databaseProvider ?? "unknown";
-
-  if (health.status === "ok") {
-    setBadge(elements.healthPill, "ok", "Healthy");
-  } else {
-    setBadge(elements.healthPill, "warn", String(health.status ?? "Unknown"));
-  }
-}
-
-function renderHealthFailure(error) {
-  elements.healthStatus.textContent = "unreachable";
-  elements.healthApi.textContent = "—";
-  elements.healthDb.textContent = "—";
-  setBadge(elements.healthPill, "error", "Unavailable");
-
-  if (error instanceof Error)
-    log(`Health check failed: ${error.message}`);
-}
-
-function renderGymTrains(rows) {
-  elements.gymTrainsCount.textContent = `${rows.length} row${rows.length === 1 ? "" : "s"}`;
-
-  if (rows.length === 0) {
-    elements.gymTrainsBody.innerHTML = `<tr><td colspan="6" class="table-empty">No rows returned.</td></tr>`;
-    return;
-  }
-
-  elements.gymTrainsBody.innerHTML = rows.map(row => `
-    <tr>
-      <td>${formatDate(row.occurredAtUtc)}</td>
-      <td>${formatNumber(row.happyBeforeTrain)}</td>
-      <td>${formatNumber(row.happyUsed)}</td>
-      <td>${formatNumber(row.happyAfterTrain)}</td>
-      <td>${formatNumber(row.regenHappyGained)}</td>
-      <td>${row.maxHappyAtTimeUtc == null ? "—" : formatNumber(row.maxHappyAtTimeUtc)}</td>
-    </tr>`).join("");
-}
-
-function renderHappyEvents(rows) {
-  elements.happyEventsCount.textContent = `${rows.length} row${rows.length === 1 ? "" : "s"}`;
-
-  if (rows.length === 0) {
-    elements.happyEventsBody.innerHTML = `<tr><td colspan="6" class="table-empty">No rows returned.</td></tr>`;
-    return;
-  }
-
-  elements.happyEventsBody.innerHTML = rows.map(row => `
-    <tr>
-      <td>${formatDate(row.occurredAtUtc)}</td>
-      <td>${escapeHtml(row.eventType ?? "—")}</td>
-      <td>${row.delta == null ? "—" : formatSignedNumber(row.delta)}</td>
-      <td>${row.happyBeforeEvent == null ? "—" : formatNumber(row.happyBeforeEvent)}</td>
-      <td>${row.happyAfterEvent == null ? "—" : formatNumber(row.happyAfterEvent)}</td>
-      <td>${escapeHtml(row.note ?? "—")}</td>
-    </tr>`).join("");
-}
-
-function normalizeBaseUrl(value) {
-  const trimmed = (value ?? "").trim();
-  if (!trimmed)
-    return "";
-
-  return trimmed.replace(/\/+$/, "");
-}
-
-function setBadge(element, state, text) {
-  element.className = `badge badge--${state}`;
-  element.textContent = text;
-}
-
-function log(message) {
-  const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  const previous = elements.activityLog.textContent?.trim();
-  elements.activityLog.textContent = previous && previous !== "Waiting for first refresh…"
-    ? `[${timestamp}] ${message}\n${previous}`
-    : `[${timestamp}] ${message}`;
-}
-
-function formatDate(value) {
-  if (!value)
-    return "—";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.valueOf()))
-    return escapeHtml(String(value));
-
-  return date.toLocaleString([], {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZoneName: "short",
-  });
-}
-
-function formatNumber(value) {
-  return new Intl.NumberFormat().format(Number(value));
-}
-
-function formatSignedNumber(value) {
-  const numeric = Number(value);
-  const formatter = new Intl.NumberFormat(undefined, { signDisplay: "always" });
-  return formatter.format(numeric);
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
