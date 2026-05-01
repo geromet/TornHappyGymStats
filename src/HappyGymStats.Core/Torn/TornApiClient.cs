@@ -65,8 +65,8 @@ public sealed class TornApiClient
             throw new ArgumentException("URL must be an absolute URI.", nameof(url));
         }
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.Authorization = new AuthenticationHeaderValue("ApiKey", apiKey);
+        var requestUrl = BuildUrlWithApiKey(url, apiKey);
+        using var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
         HttpResponseMessage response;
@@ -200,6 +200,22 @@ public sealed class TornApiClient
 
             return new UserLogPage(logs, nextUrl);
         }
+    }
+
+    private static Uri BuildUrlWithApiKey(Uri baseUrl, string apiKey)
+    {
+        var ub = new UriBuilder(baseUrl);
+        var existing = ub.Query;
+        if (existing.StartsWith("?", StringComparison.Ordinal))
+            existing = existing[1..];
+
+        var filtered = string.Join("&",
+            existing.Split('&', StringSplitOptions.RemoveEmptyEntries)
+                .Where(p => !p.StartsWith("key=", StringComparison.OrdinalIgnoreCase)));
+
+        var keyPair = $"key={Uri.EscapeDataString(apiKey)}";
+        ub.Query = string.IsNullOrWhiteSpace(filtered) ? keyPair : $"{filtered}&{keyPair}";
+        return ub.Uri;
     }
 
     private static bool TryGetNextUrl(JsonElement root, out Uri? nextUrl, out string? error)

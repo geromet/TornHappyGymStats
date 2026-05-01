@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using HappyGymStats.Fetch;
 using HappyGymStats.Storage;
 using HappyGymStats.Torn;
+using Microsoft.Extensions.Logging;
 
 namespace HappyGymStats.Api;
 
@@ -21,11 +22,14 @@ public sealed class ImportService : BackgroundService
 
     private volatile ImportJobStatus? _latest;
 
-    public ImportService(IServiceScopeFactory scopeFactory, string databasePath, SurfacesCacheWriter surfacesCacheWriter)
+    private readonly ILogger<ImportService> _logger;
+
+    public ImportService(IServiceScopeFactory scopeFactory, string databasePath, SurfacesCacheWriter surfacesCacheWriter, ILogger<ImportService> logger)
     {
         _scopeFactory = scopeFactory;
         _databasePath = databasePath;
         _surfacesCacheWriter = surfacesCacheWriter;
+        _logger = logger;
     }
 
     public ImportJobStatus? Latest => _latest;
@@ -78,6 +82,7 @@ public sealed class ImportService : BackgroundService
 
     private async Task RunImportAsync(ImportJobRequest request, CancellationToken stoppingToken)
     {
+        _logger.LogInformation("Import job {JobId} started. Mode={Mode}", request.JobId, request.Fresh ? "fresh" : "resume");
         Update(request.JobId, s => s with { Outcome = "running" });
 
         try
@@ -102,6 +107,7 @@ public sealed class ImportService : BackgroundService
                 ct: stoppingToken,
                 log: msg =>
                 {
+                    _logger.LogInformation("Import job {JobId}: {Message}", request.JobId, msg);
                     if (msg.StartsWith("Page "))
                         pagesRunning++;
 
@@ -114,6 +120,13 @@ public sealed class ImportService : BackgroundService
             var syncedAtUtc = DateTimeOffset.UtcNow;
             var version = $"{syncedAtUtc:O}-{request.JobId}";
             await _surfacesCacheWriter.WriteLatestAsync(version, syncedAtUtc, stoppingToken).ConfigureAwait(false);
+
+            _logger.LogInformation(
+                "Import job {JobId} completed: pages={Pages} fetched={Fetched} appended={Appended}",
+                request.JobId,
+                result.PagesFetched,
+                result.LogsFetched,
+                result.LogsAppended);
 
             Update(request.JobId, s => s with
             {
@@ -134,6 +147,7 @@ public sealed class ImportService : BackgroundService
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Import job {JobId} failed", request.JobId);
             Update(request.JobId, s => s with
             {
                 Outcome = "failed",
