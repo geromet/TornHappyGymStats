@@ -1,10 +1,9 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using HappyGymStats.Core.Torn.Models;
 
-using HappyGymStats.Torn.Models;
-
-namespace HappyGymStats.Torn;
+namespace HappyGymStats.Core.Torn;
 
 public sealed record UserLogPage(IReadOnlyList<UserLog> Logs, Uri? NextUrl);
 

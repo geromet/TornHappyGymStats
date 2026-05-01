@@ -1,33 +1,13 @@
 using System.Globalization;
 using System.Text.Json;
-using System.Text.RegularExpressions;
-using HappyGymStats.Export;
-using HappyGymStats.Reconstruction;
-using HappyGymStats.Storage;
+using HappyGymStats.Core.Reconstruction;
+using HappyGymStats.Legacy.Cli.Export;
 using HappyGymStats.Visualizer;
 
-namespace HappyGymStats.Verification;
+namespace HappyGymStats.Legacy.Cli.Verification;
 
 public static class ExportVerifier
 {
-    public sealed record VerifyOptions(
-        string CsvPath,
-        string? LogsJsonlPath,
-        string? DerivedGymTrainsJsonlPath,
-        string? SurfacesHtmlPath,
-        int TopOutliers);
-
-    public sealed record Mismatch(string LogId, string Field, string Expected, string Actual);
-
-    public sealed record VerifyReport(
-        int StatRows,
-        int JsonlRowsFound,
-        int DerivedRowsFound,
-        int Mismatches,
-        IReadOnlyList<Mismatch> SampleMismatches,
-        IReadOnlyList<string> TopOutlierLines,
-        bool VisualizationHtmlMatchesCsv);
-
     public static VerifyReport Verify(VerifyOptions opt)
     {
         if (string.IsNullOrWhiteSpace(opt.CsvPath))
@@ -49,7 +29,7 @@ public static class ExportVerifier
         }
 
         // Optional: derived gym trains lookup
-        Dictionary<string, HappyGymStats.Reconstruction.HappyReconstructionModels.DerivedGymTrain>? derivedById = null;
+        Dictionary<string, HappyReconstructionModels.DerivedGymTrain>? derivedById = null;
         if (!string.IsNullOrWhiteSpace(opt.DerivedGymTrainsJsonlPath))
         {
             var derivedRead = DerivedGymTrainReader.Read(opt.DerivedGymTrainsJsonlPath!);
@@ -78,7 +58,10 @@ public static class ExportVerifier
             .Select((h, i) => (Name: h.Trim(), Index: i))
             .ToDictionary(t => t.Name, t => t.Index, StringComparer.Ordinal);
 
-        int? TryCol(string name) => idx.TryGetValue(name, out var i) ? i : null;
+        int? TryCol(string name)
+        {
+            return idx.TryGetValue(name, out var i) ? i : null;
+        }
 
         static double? TryParseDouble(string s)
         {
@@ -87,43 +70,52 @@ public static class ExportVerifier
         }
 
         // Helpers for stat columns.
-        static string StatBeforeCol(StatType st) => st.Tag switch
+        static string StatBeforeCol(StatType st)
         {
-            0 => "data.strength_before",
-            1 => "data.defense_before",
-            2 => "data.speed_before",
-            3 => "data.dexterity_before",
-            _ => throw new ArgumentOutOfRangeException(nameof(st))
-        };
+            return st.Tag switch
+            {
+                0 => "data.strength_before",
+                1 => "data.defense_before",
+                2 => "data.speed_before",
+                3 => "data.dexterity_before",
+                _ => throw new ArgumentOutOfRangeException(nameof(st))
+            };
+        }
 
-        static (string norm, string raw) StatIncreasedCols(StatType st) => st.Tag switch
+        static (string norm, string raw) StatIncreasedCols(StatType st)
         {
-            0 => ("data.strength_increased_normalized", "data.strength_increased"),
-            1 => ("data.defense_increased_normalized", "data.defense_increased"),
-            2 => ("data.speed_increased_normalized", "data.speed_increased"),
-            3 => ("data.dexterity_increased_normalized", "data.dexterity_increased"),
-            _ => throw new ArgumentOutOfRangeException(nameof(st))
-        };
+            return st.Tag switch
+            {
+                0 => ("data.strength_increased_normalized", "data.strength_increased"),
+                1 => ("data.defense_increased_normalized", "data.defense_increased"),
+                2 => ("data.speed_increased_normalized", "data.speed_increased"),
+                3 => ("data.dexterity_increased_normalized", "data.dexterity_increased"),
+                _ => throw new ArgumentOutOfRangeException(nameof(st))
+            };
+        }
 
-        static string StatKey(StatType st) => st.Tag switch
+        static string StatKey(StatType st)
         {
-            0 => "strength",
-            1 => "defense",
-            2 => "speed",
-            3 => "dexterity",
-            _ => throw new ArgumentOutOfRangeException(nameof(st))
-        };
+            return st.Tag switch
+            {
+                0 => "strength",
+                1 => "defense",
+                2 => "speed",
+                3 => "dexterity",
+                _ => throw new ArgumentOutOfRangeException(nameof(st))
+            };
+        }
 
         var mismatches = new List<Mismatch>();
 
-        int jsonlFound = 0;
-        int derivedFound = 0;
+        var jsonlFound = 0;
+        var derivedFound = 0;
 
         // Compute top outliers (by stat gained per energy) directly from the extracted records.
         var outlierLines = statRows
             .Select(r =>
             {
-                var perEnergy = r.EnergyUsed > 0.0 ? (r.StatIncreased / r.EnergyUsed) : double.NaN;
+                var perEnergy = r.EnergyUsed > 0.0 ? r.StatIncreased / r.EnergyUsed : double.NaN;
                 return (r, perEnergy);
             })
             .OrderByDescending(t => t.perEnergy)
@@ -131,7 +123,8 @@ public static class ExportVerifier
             .Select(t =>
             {
                 var r = t.r;
-                return $"id={r.LogId} stat={r.StatType} before={r.StatBefore.ToString(CultureInfo.InvariantCulture)} happy={r.HappyBeforeTrain.ToString(CultureInfo.InvariantCulture)} increased={r.StatIncreased.ToString(CultureInfo.InvariantCulture)} energy={r.EnergyUsed.ToString(CultureInfo.InvariantCulture)} perEnergy={t.perEnergy.ToString("0.####", CultureInfo.InvariantCulture)}";
+                return
+                    $"id={r.LogId} stat={r.StatType} before={r.StatBefore.ToString(CultureInfo.InvariantCulture)} happy={r.HappyBeforeTrain.ToString(CultureInfo.InvariantCulture)} increased={r.StatIncreased.ToString(CultureInfo.InvariantCulture)} energy={r.EnergyUsed.ToString(CultureInfo.InvariantCulture)} perEnergy={t.perEnergy.ToString("0.####", CultureInfo.InvariantCulture)}";
             })
             .ToList();
 
@@ -157,7 +150,10 @@ public static class ExportVerifier
                 continue;
             }
 
-            string Field(int? col) => col is null || col.Value >= fields.Length ? "" : fields[col.Value].Trim();
+            string Field(int? col)
+            {
+                return col is null || col.Value >= fields.Length ? "" : fields[col.Value].Trim();
+            }
 
             // Verify derived happy join.
             if (derivedById is not null)
@@ -168,9 +164,8 @@ public static class ExportVerifier
                     var csvHappyText = Field(TryCol("happy_before_train"));
                     var csvHappy = TryParseDouble(csvHappyText);
                     if (csvHappy is not null && Math.Abs(csvHappy.Value - d.HappyBeforeTrain) > 0.0001)
-                    {
-                        mismatches.Add(new Mismatch(r.LogId, "happy_before_train", d.HappyBeforeTrain.ToString(CultureInfo.InvariantCulture), csvHappyText));
-                    }
+                        mismatches.Add(new Mismatch(r.LogId, "happy_before_train",
+                            d.HappyBeforeTrain.ToString(CultureInfo.InvariantCulture), csvHappyText));
                 }
                 else
                 {
@@ -202,24 +197,30 @@ public static class ExportVerifier
                 var csvEnergyText = Field(TryCol("data.energy_used"));
                 var csvEnergy = TryParseDouble(csvEnergyText);
                 var jsonEnergy = TryGetNumber(dataEl, "energy_used");
-                if (csvEnergy is not null && jsonEnergy is not null && Math.Abs(csvEnergy.Value - jsonEnergy.Value) > 0.0001)
-                    mismatches.Add(new Mismatch(r.LogId, "data.energy_used", jsonEnergy.Value.ToString(CultureInfo.InvariantCulture), csvEnergyText));
+                if (csvEnergy is not null && jsonEnergy is not null &&
+                    Math.Abs(csvEnergy.Value - jsonEnergy.Value) > 0.0001)
+                    mismatches.Add(new Mismatch(r.LogId, "data.energy_used",
+                        jsonEnergy.Value.ToString(CultureInfo.InvariantCulture), csvEnergyText));
 
                 // stat_before
                 var beforeCol = StatBeforeCol(r.StatType);
                 var csvBeforeText = Field(TryCol(beforeCol));
                 var csvBefore = TryParseDouble(csvBeforeText);
                 var jsonBefore = TryGetNumber(dataEl, beforeCol[5..]); // strip "data."
-                if (csvBefore is not null && jsonBefore is not null && Math.Abs(csvBefore.Value - jsonBefore.Value) > 0.0001)
-                    mismatches.Add(new Mismatch(r.LogId, beforeCol, jsonBefore.Value.ToString(CultureInfo.InvariantCulture), csvBeforeText));
+                if (csvBefore is not null && jsonBefore is not null &&
+                    Math.Abs(csvBefore.Value - jsonBefore.Value) > 0.0001)
+                    mismatches.Add(new Mismatch(r.LogId, beforeCol,
+                        jsonBefore.Value.ToString(CultureInfo.InvariantCulture), csvBeforeText));
 
                 // stat_increased RAW (not normalized) should match JSONL.
                 var (normCol, rawCol) = StatIncreasedCols(r.StatType);
                 var csvIncRawText = Field(TryCol(rawCol));
                 var csvIncRaw = TryParseDouble(csvIncRawText);
                 var jsonIncRaw = TryGetNumber(dataEl, rawCol[5..]);
-                if (csvIncRaw is not null && jsonIncRaw is not null && Math.Abs(csvIncRaw.Value - jsonIncRaw.Value) > 0.0001)
-                    mismatches.Add(new Mismatch(r.LogId, rawCol, jsonIncRaw.Value.ToString(CultureInfo.InvariantCulture), csvIncRawText));
+                if (csvIncRaw is not null && jsonIncRaw is not null &&
+                    Math.Abs(csvIncRaw.Value - jsonIncRaw.Value) > 0.0001)
+                    mismatches.Add(new Mismatch(r.LogId, rawCol,
+                        jsonIncRaw.Value.ToString(CultureInfo.InvariantCulture), csvIncRawText));
 
                 // If a normalized increased column exists, validate it against gyms.json multiplier.
                 // This catches cases where normalization could introduce spikes.
@@ -227,7 +228,6 @@ public static class ExportVerifier
                 {
                     var csvGymText = Field(TryCol("data.gym"));
                     if (int.TryParse(csvGymText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var gymId))
-                    {
                         if (gymTable.TryGetMultiplier(gymId, StatKey(r.StatType), out var mult) && mult > 0)
                         {
                             var csvNormText = Field(TryCol(normCol));
@@ -237,10 +237,10 @@ public static class ExportVerifier
                             {
                                 var expected = csvIncRaw.Value / mult;
                                 if (Math.Abs(csvNorm.Value - expected) > 0.000001)
-                                    mismatches.Add(new Mismatch(r.LogId, normCol, expected.ToString(CultureInfo.InvariantCulture), csvNormText));
+                                    mismatches.Add(new Mismatch(r.LogId, normCol,
+                                        expected.ToString(CultureInfo.InvariantCulture), csvNormText));
                             }
                         }
-                    }
                 }
             }
         }
@@ -257,13 +257,13 @@ public static class ExportVerifier
         var statRowCount = statRows.Count();
 
         return new VerifyReport(
-            StatRows: statRowCount,
-            JsonlRowsFound: jsonlFound,
-            DerivedRowsFound: derivedFound,
-            Mismatches: mismatches.Count,
-            SampleMismatches: mismatches.Take(25).ToList(),
-            TopOutlierLines: outlierLines,
-            VisualizationHtmlMatchesCsv: visualizationMatches);
+            statRowCount,
+            jsonlFound,
+            derivedFound,
+            mismatches.Count,
+            mismatches.Take(25).ToList(),
+            outlierLines,
+            visualizationMatches);
     }
 
     private static double? TryGetNumber(JsonElement obj, string prop)
@@ -292,13 +292,11 @@ public static class ExportVerifier
                 return true;
 
             foreach (var prop in obj.EnumerateObject())
-            {
                 if (string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase))
                 {
                     value = prop.Value;
                     return true;
                 }
-            }
         }
 
         value = default;
@@ -361,11 +359,7 @@ public static class ExportVerifier
                     continue;
                 }
 
-                if (ch == '"')
-                {
-                    inString = false;
-                    continue;
-                }
+                if (ch == '"') inString = false;
 
                 continue;
             }
@@ -390,4 +384,22 @@ public static class ExportVerifier
 
         return (null, -1);
     }
+
+    public sealed record VerifyOptions(
+        string CsvPath,
+        string? LogsJsonlPath,
+        string? DerivedGymTrainsJsonlPath,
+        string? SurfacesHtmlPath,
+        int TopOutliers);
+
+    public sealed record Mismatch(string LogId, string Field, string Expected, string Actual);
+
+    public sealed record VerifyReport(
+        int StatRows,
+        int JsonlRowsFound,
+        int DerivedRowsFound,
+        int Mismatches,
+        IReadOnlyList<Mismatch> SampleMismatches,
+        IReadOnlyList<string> TopOutlierLines,
+        bool VisualizationHtmlMatchesCsv);
 }

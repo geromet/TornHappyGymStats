@@ -1,14 +1,15 @@
-using System.Linq;
-using HappyGymStats.Data;
-using HappyGymStats.Export;
-using HappyGymStats.Fetch;
-using HappyGymStats.Reconstruction;
-using HappyGymStats.Storage;
-using HappyGymStats.Ui;
-using HappyGymStats.Torn;
+using System.Globalization;
+using HappyGymStats.Cli;
+using HappyGymStats.Legacy.Cli.Export;
+using HappyGymStats.Cli.Ui;
+using HappyGymStats.Legacy.Cli.Verification;
+using HappyGymStats.Core.Fetch;
+using HappyGymStats.Core.Reconstruction;
+using HappyGymStats.Core.Storage;
+using HappyGymStats.Core.Torn;
+using HappyGymStats.Data.Storage;
+using HappyGymStats.Legacy.Cli.Storage;
 using HappyGymStats.Visualizer;
-using HappyGymStats.Verification;
-using Microsoft.EntityFrameworkCore;
 
 var ui = new ConsoleUi();
 
@@ -30,10 +31,8 @@ if (args.Length > 0)
     string? GetArg(string name)
     {
         for (var i = 0; i < args.Length - 1; i++)
-        {
             if (args[i].Equals(name, StringComparison.OrdinalIgnoreCase))
                 return args[i + 1];
-        }
 
         return null;
     }
@@ -93,7 +92,8 @@ if (args.Length > 0)
     if (args[0].Equals("reconstruct-happy", StringComparison.OrdinalIgnoreCase))
     {
         var currentText = GetArg("--current");
-        if (string.IsNullOrWhiteSpace(currentText) || !int.TryParse(currentText, out var currentHappy) || currentHappy < 0)
+        if (string.IsNullOrWhiteSpace(currentText) || !int.TryParse(currentText, out var currentHappy) ||
+            currentHappy < 0)
         {
             Console.Error.WriteLine("Missing/invalid --current <int> (must be >= 0)");
             return;
@@ -102,10 +102,10 @@ if (args.Length > 0)
         var anchorText = GetArg("--anchor");
         var anchorTimeUtc = string.IsNullOrWhiteSpace(anchorText)
             ? DateTimeOffset.UtcNow
-            : DateTimeOffset.Parse(anchorText, null, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal);
+            : DateTimeOffset.Parse(anchorText, null, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
 
         var runner = new ReconstructionRunner(paths);
-        var result = runner.Run(currentHappy: currentHappy, anchorTimeUtc: anchorTimeUtc, ct: CancellationToken.None);
+        var result = runner.Run(currentHappy, anchorTimeUtc, CancellationToken.None);
 
         if (!result.Success)
         {
@@ -173,7 +173,8 @@ if (args.Length > 0)
                 return;
             }
 
-            Console.WriteLine($"CSV output: {dbExportResult.OutputPath} (rows={dbExportResult.RowsWritten}, source=db)");
+            Console.WriteLine(
+                $"CSV output: {dbExportResult.OutputPath} (rows={dbExportResult.RowsWritten}, source=db)");
 
             var dbDebugResult = await DbCsvExportRunner.RunDebugAsync(dbPath, debugCsvPath, CancellationToken.None);
             if (!dbDebugResult.Success)
@@ -182,16 +183,19 @@ if (args.Length > 0)
                 return;
             }
 
-            Console.WriteLine($"Debug CSV output: {dbDebugResult.OutputPath} (rows={dbDebugResult.RowsWritten}, source=db)");
+            Console.WriteLine(
+                $"Debug CSV output: {dbDebugResult.OutputPath} (rows={dbDebugResult.RowsWritten}, source=db)");
 
-            var dbTimelineResult = await DbHappyTimelineCsvWriter.WriteAsync(dbPath, timelinePath, CancellationToken.None);
+            var dbTimelineResult =
+                await DbHappyTimelineCsvWriter.WriteAsync(dbPath, timelinePath, CancellationToken.None);
             if (!dbTimelineResult.Success)
             {
                 Console.Error.WriteLine(dbTimelineResult.ErrorMessage ?? "DB-backed happy timeline CSV export failed.");
                 return;
             }
 
-            Console.WriteLine($"Happy timeline CSV output: {dbTimelineResult.OutputPath} (rows={dbTimelineResult.RowsWritten}, source=db)");
+            Console.WriteLine(
+                $"Happy timeline CSV output: {dbTimelineResult.OutputPath} (rows={dbTimelineResult.RowsWritten}, source=db)");
             return;
         }
 
@@ -211,7 +215,8 @@ if (args.Length > 0)
             return;
         }
 
-        Console.WriteLine($"Debug CSV output: {debugResult.OutputPath} (rows={debugResult.RowsWritten}, source=legacy)");
+        Console.WriteLine(
+            $"Debug CSV output: {debugResult.OutputPath} (rows={debugResult.RowsWritten}, source=legacy)");
 
         var timelineResult = HappyTimelineCsvWriter.Write(derivedHappyPath, timelinePath);
         if (!timelineResult.Success)
@@ -220,7 +225,8 @@ if (args.Length > 0)
             return;
         }
 
-        Console.WriteLine($"Happy timeline CSV output: {timelineResult.OutputPath} (rows={timelineResult.RowsWritten}, source=legacy)");
+        Console.WriteLine(
+            $"Happy timeline CSV output: {timelineResult.OutputPath} (rows={timelineResult.RowsWritten}, source=legacy)");
         return;
     }
 
@@ -246,11 +252,11 @@ if (args.Length > 0)
         }
 
         var report = ExportVerifier.Verify(new ExportVerifier.VerifyOptions(
-            CsvPath: csvPath,
-            LogsJsonlPath: File.Exists(jsonlPath) ? jsonlPath : null,
-            DerivedGymTrainsJsonlPath: File.Exists(derivedPath) ? derivedPath : null,
-            SurfacesHtmlPath: (htmlPath is not null && File.Exists(htmlPath)) ? htmlPath : null,
-            TopOutliers: top));
+            csvPath,
+            File.Exists(jsonlPath) ? jsonlPath : null,
+            File.Exists(derivedPath) ? derivedPath : null,
+            htmlPath is not null && File.Exists(htmlPath) ? htmlPath : null,
+            top));
 
         Console.WriteLine($"Stat rows (gym trains): {report.StatRows}");
         if (report.JsonlRowsFound > 0)
@@ -294,12 +300,13 @@ Console.CancelKeyPress += (_, e) =>
         if (operationCts is not null)
         {
             operationCts.Cancel();
-            ui.RenderInfo("Cancellation requested (will stop after the current request; press Ctrl+C again to force quit)." );
+            ui.RenderInfo(
+                "Cancellation requested (will stop after the current request; press Ctrl+C again to force quit).");
         }
         else
         {
             appCts.Cancel();
-            ui.RenderInfo("Cancellation requested (press Ctrl+C again to force quit)." );
+            ui.RenderInfo("Cancellation requested (press Ctrl+C again to force quit).");
         }
 
         return;
@@ -310,12 +317,12 @@ Console.CancelKeyPress += (_, e) =>
 };
 
 var state = new AppState(
-    ApiKey: null,
-    ThrottleDelay: TimeSpan.FromMilliseconds(1100));
+    null,
+    TimeSpan.FromMilliseconds(1100));
 
 using var httpClient = new HttpClient
 {
-    Timeout = TimeSpan.FromSeconds(30),
+    Timeout = TimeSpan.FromSeconds(30)
 };
 
 var torn = new TornApiClient(httpClient);
@@ -336,8 +343,8 @@ while (true)
     }
 
     var action = ui.PromptMainMenu(
-        hasCheckpoint: CheckpointStore.TryRead(paths.CheckpointPath) is not null,
-        hasJsonlData: File.Exists(paths.LogsJsonlPath) && new FileInfo(paths.LogsJsonlPath).Length > 0);
+        CheckpointStore.TryRead(paths.CheckpointPath) is not null,
+        File.Exists(paths.LogsJsonlPath) && new FileInfo(paths.LogsJsonlPath).Length > 0);
 
     if (action == MainMenuAction.Exit)
         break;
@@ -367,18 +374,14 @@ while (true)
                     ui.RenderInfo("Starting happy reconstruction...");
 
                     var result = runner.Run(
-                        currentHappy: currentHappy,
-                        anchorTimeUtc: DateTimeOffset.UtcNow,
-                        ct: opCts.Token);
+                        currentHappy,
+                        DateTimeOffset.UtcNow,
+                        opCts.Token);
 
                     if (!result.Success)
-                    {
                         ui.RenderError(result.ErrorMessage ?? "Reconstruction failed.");
-                    }
                     else
-                    {
                         ui.RenderReconstructionSummary(result);
-                    }
                 }
                 finally
                 {
@@ -415,8 +418,10 @@ while (true)
                     if (preferDatabase)
                     {
                         result = await DbCsvExportRunner.RunAsync(databasePath, paths.LogsCsvPath, opCts.Token);
-                        debugResult = await DbCsvExportRunner.RunDebugAsync(databasePath, paths.LogsDebugCsvPath, opCts.Token);
-                        timelineResult = await DbHappyTimelineCsvWriter.WriteAsync(databasePath, paths.HappyTimelineCsvPath, opCts.Token);
+                        debugResult =
+                            await DbCsvExportRunner.RunDebugAsync(databasePath, paths.LogsDebugCsvPath, opCts.Token);
+                        timelineResult = await DbHappyTimelineCsvWriter.WriteAsync(databasePath,
+                            paths.HappyTimelineCsvPath, opCts.Token);
                     }
                     else
                     {
@@ -443,22 +448,15 @@ while (true)
                         ui.RenderInfo($"Debug CSV output: {debugResult.OutputPath} (rows={debugResult.RowsWritten})");
 
                         if (timelineResult.Success)
-                        {
-                            ui.RenderInfo($"Happy timeline CSV output: {timelineResult.OutputPath} (rows={timelineResult.RowsWritten})");
-                        }
+                            ui.RenderInfo(
+                                $"Happy timeline CSV output: {timelineResult.OutputPath} (rows={timelineResult.RowsWritten})");
                         else
-                        {
                             ui.RenderError(timelineResult.ErrorMessage ?? "Happy timeline CSV export failed.");
-                        }
                     }
                     else
                     {
                         ui.RenderError(debugResult.ErrorMessage ?? "Debug CSV export failed.");
                     }
-                }
-                catch (OperationCanceledException)
-                {
-                    throw; // let outer catch handle it
                 }
                 finally
                 {
@@ -494,13 +492,14 @@ while (true)
                     ui.RenderInfo(mode == FetchMode.Fresh ? "Starting fetch (new)..." : "Resuming fetch...");
 
                     var result = await fetcher.RunAsync(
-                        apiKey: state.ApiKey!,
-                        mode: mode,
-                        options: options,
-                        ct: opCts.Token,
-                        log: ui.RenderInfo);
+                        state.ApiKey!,
+                        mode,
+                        options,
+                        opCts.Token,
+                        ui.RenderInfo);
 
-                    ui.RenderInfo($"Fetch finished. pages={result.PagesFetched}, fetched={result.LogsFetched}, appended={result.LogsAppended}.");
+                    ui.RenderInfo(
+                        $"Fetch finished. pages={result.PagesFetched}, fetched={result.LogsFetched}, appended={result.LogsAppended}.");
                 }
                 finally
                 {
@@ -530,7 +529,8 @@ while (true)
                         break;
                     }
 
-                    var generatedPaths = SurfacePlotter.generateStackedPlots(result.Records, paths.ExportDirectory).ToList();
+                    var generatedPaths = SurfacePlotter.generateStackedPlots(result.Records, paths.ExportDirectory)
+                        .ToList();
 
                     ui.RenderVisualizeSummary(generatedPaths, recordCount, result.ParseErrors.Count());
                 }
@@ -565,4 +565,7 @@ while (true)
 }
 
 // ReSharper disable once RedundantRecordBody
-internal readonly record struct AppState(string? ApiKey, TimeSpan ThrottleDelay);
+namespace HappyGymStats.Cli
+{
+    internal readonly record struct AppState(string? ApiKey, TimeSpan ThrottleDelay);
+}

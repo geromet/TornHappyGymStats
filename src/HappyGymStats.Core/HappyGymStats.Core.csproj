@@ -6,4 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\HappyGymStats.Data\HappyGymStats.Data.csproj" />
+  </ItemGroup>
+
 </Project>

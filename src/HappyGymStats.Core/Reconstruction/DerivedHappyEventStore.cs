@@ -1,21 +1,16 @@
 using System.Text;
 using System.Text.Json;
+using static HappyGymStats.Core.Reconstruction.HappyReconstructionModels;
 
-using static HappyGymStats.Reconstruction.HappyReconstructionModels;
-
-namespace HappyGymStats.Reconstruction;
+namespace HappyGymStats.Core.Reconstruction;
 
 /// <summary>
-/// Persists derived gym-train reconstruction output as a JSONL sidecar file.
+/// Persists derived happy timeline records as a JSONL sidecar file.
 /// </summary>
-/// <remarks>
-/// Writes are atomic (temp file + move/replace) to avoid leaving partial output.
-/// </remarks>
-public static class DerivedGymTrainStore
+public static class DerivedHappyEventStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
-        // Human-readable and grep-friendly, while still using stable camel->snake conversion.
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
         WriteIndented = false,
@@ -23,13 +18,13 @@ public static class DerivedGymTrainStore
 
     public sealed record WriteResult(bool Success, string? ErrorMessage, int RecordsWritten);
 
-    public static WriteResult WriteAllAtomic(string outputJsonlPath, IEnumerable<DerivedGymTrain> derived)
+    public static WriteResult WriteAllAtomic(string outputJsonlPath, IEnumerable<DerivedHappyEvent> events)
     {
         if (string.IsNullOrWhiteSpace(outputJsonlPath))
             throw new ArgumentException("Output path must be provided.", nameof(outputJsonlPath));
 
-        if (derived is null)
-            throw new ArgumentNullException(nameof(derived));
+        if (events is null)
+            throw new ArgumentNullException(nameof(events));
 
         var dir = Path.GetDirectoryName(outputJsonlPath);
         if (!string.IsNullOrWhiteSpace(dir))
@@ -44,7 +39,7 @@ public static class DerivedGymTrainStore
             using (var fs = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             using (var writer = new StreamWriter(fs, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
             {
-                foreach (var record in derived)
+                foreach (var record in events)
                 {
                     var json = JsonSerializer.Serialize(record, JsonOptions);
                     writer.WriteLine(json);
@@ -55,26 +50,17 @@ public static class DerivedGymTrainStore
                 fs.Flush(flushToDisk: true);
             }
 
-            // Rename within the same directory is an atomic replacement on all supported OSes.
             File.Move(tempPath, outputJsonlPath, overwrite: true);
 
             return new WriteResult(Success: true, ErrorMessage: null, RecordsWritten: written);
         }
         catch (Exception ex)
         {
-            try
-            {
-                if (File.Exists(tempPath))
-                    File.Delete(tempPath);
-            }
-            catch
-            {
-                // Best-effort cleanup.
-            }
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
 
             return new WriteResult(
                 Success: false,
-                ErrorMessage: $"Unable to write derived output '{outputJsonlPath}': {ex.Message}",
+                ErrorMessage: $"Unable to write derived happy timeline '{outputJsonlPath}': {ex.Message}",
                 RecordsWritten: 0);
         }
     }

@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace HappyGymStats.Torn.Models;
+namespace HappyGymStats.Core.Torn.Models;
 
 public sealed record UserLogPageResponse
 {

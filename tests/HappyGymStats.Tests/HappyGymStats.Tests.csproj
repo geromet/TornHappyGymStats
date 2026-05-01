@@ -23,5 +23,6 @@
     <ProjectReference Include="..\..\src\HappyGymStats.Core\HappyGymStats.Core.csproj" />
     <ProjectReference Include="..\..\src\HappyGymStats.Data\HappyGymStats.Data.csproj" />
     <ProjectReference Include="..\..\src\HappyGymStats.Api\HappyGymStats.Api.csproj" />
+    <ProjectReference Include="..\..\src\HappyGymStats.Legacy\HappyGymStats.Legacy.csproj" />
   </ItemGroup>
 </Project>

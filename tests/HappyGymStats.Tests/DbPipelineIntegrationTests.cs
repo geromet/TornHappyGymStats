@@ -1,10 +1,12 @@
 using System.Net;
 using System.Text;
+using HappyGymStats.Core.Fetch;
+using HappyGymStats.Core.Reconstruction;
+using HappyGymStats.Core.Storage;
+using HappyGymStats.Core.Torn;
 using HappyGymStats.Data;
-using HappyGymStats.Fetch;
-using HappyGymStats.Reconstruction;
-using HappyGymStats.Storage;
-using HappyGymStats.Torn;
+using HappyGymStats.Data.Storage;
+using HappyGymStats.Legacy.Cli.Storage;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 

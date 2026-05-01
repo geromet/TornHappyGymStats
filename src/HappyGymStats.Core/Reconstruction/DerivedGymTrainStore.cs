@@ -1,14 +1,14 @@
 using System.Text;
 using System.Text.Json;
+using static HappyGymStats.Core.Reconstruction.HappyReconstructionModels;
 
-using static HappyGymStats.Reconstruction.HappyReconstructionModels;
-
-namespace HappyGymStats.Reconstruction;
+namespace HappyGymStats.Core.Reconstruction;
 
 /// <summary>
-/// Persists derived happy timeline records as a JSONL sidecar file.
+/// Persists derived gym-train reconstruction output as a JSONL sidecar file.
+/// Writes are atomic (temp file + move/replace) to avoid leaving partial output.
 /// </summary>
-public static class DerivedHappyEventStore
+public static class DerivedGymTrainStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -19,13 +19,13 @@ public static class DerivedHappyEventStore
 
     public sealed record WriteResult(bool Success, string? ErrorMessage, int RecordsWritten);
 
-    public static WriteResult WriteAllAtomic(string outputJsonlPath, IEnumerable<DerivedHappyEvent> events)
+    public static WriteResult WriteAllAtomic(string outputJsonlPath, IEnumerable<DerivedGymTrain> derived)
     {
         if (string.IsNullOrWhiteSpace(outputJsonlPath))
             throw new ArgumentException("Output path must be provided.", nameof(outputJsonlPath));
 
-        if (events is null)
-            throw new ArgumentNullException(nameof(events));
+        if (derived is null)
+            throw new ArgumentNullException(nameof(derived));
 
         var dir = Path.GetDirectoryName(outputJsonlPath);
         if (!string.IsNullOrWhiteSpace(dir))
@@ -40,7 +40,7 @@ public static class DerivedHappyEventStore
             using (var fs = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             using (var writer = new StreamWriter(fs, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
             {
-                foreach (var record in events)
+                foreach (var record in derived)
                 {
                     var json = JsonSerializer.Serialize(record, JsonOptions);
                     writer.WriteLine(json);
@@ -57,19 +57,11 @@ public static class DerivedHappyEventStore
         }
         catch (Exception ex)
         {
-            try
-            {
-                if (File.Exists(tempPath))
-                    File.Delete(tempPath);
-            }
-            catch
-            {
-                // best-effort cleanup
-            }
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
 
             return new WriteResult(
                 Success: false,
-                ErrorMessage: $"Unable to write derived happy timeline '{outputJsonlPath}': {ex.Message}",
+                ErrorMessage: $"Unable to write derived output '{outputJsonlPath}': {ex.Message}",
                 RecordsWritten: 0);
         }
     }

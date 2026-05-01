@@ -2,7 +2,7 @@ using System.Text;
 using HappyGymStats.Data;
 using Microsoft.EntityFrameworkCore;
 
-namespace HappyGymStats.Export;
+namespace HappyGymStats.Legacy.Cli.Export;
 
 public static class DbHappyTimelineCsvWriter
 {
@@ -28,8 +28,8 @@ public static class DbHappyTimelineCsvWriter
 
             using var writer = new StreamWriter(
                 outputCsvPath,
-                append: false,
-                encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                false,
+                new UTF8Encoding(false));
 
             CsvWriter.WriteHeader(writer, HappyTimelineCsvWriter.Columns);
 
@@ -46,7 +46,7 @@ public static class DbHappyTimelineCsvWriter
                     ["delta"] = ev.Delta?.ToString() ?? string.Empty,
                     ["happy_used"] = ev.HappyUsed?.ToString() ?? string.Empty,
                     ["max_happy_at_time_utc"] = ev.MaxHappyAtTimeUtc?.ToString() ?? string.Empty,
-                    ["clamped_to_max"] = ev.ClampedToMax ? "true" : "false",
+                    ["clamped_to_max"] = ev.ClampedToMax ? "true" : "false"
                 };
 
                 CsvWriter.WriteRow(writer, HappyTimelineCsvWriter.Columns, row);
@@ -58,7 +58,7 @@ public static class DbHappyTimelineCsvWriter
                 OutputPath = outputCsvPath,
                 HeaderColumns = HappyTimelineCsvWriter.Columns,
                 RowsWritten = rows.Count,
-                DerivedFileMissing = false,
+                DerivedFileMissing = false
             };
         }
         catch (Exception ex)
@@ -67,7 +67,7 @@ public static class DbHappyTimelineCsvWriter
             {
                 Success = false,
                 ErrorMessage = $"Failed to write DB-backed happy timeline CSV file '{outputCsvPath}': {ex.Message}",
-                HeaderColumns = HappyTimelineCsvWriter.Columns,
+                HeaderColumns = HappyTimelineCsvWriter.Columns
             };
         }
     }

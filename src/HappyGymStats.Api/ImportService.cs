@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
-using HappyGymStats.Fetch;
-using HappyGymStats.Reconstruction;
-using HappyGymStats.Storage;
-using HappyGymStats.Torn;
+using HappyGymStats.Core.Fetch;
+using HappyGymStats.Core.Reconstruction;
+using HappyGymStats.Core.Storage;
+using HappyGymStats.Core.Torn;
 using Microsoft.Extensions.Logging;
 
 namespace HappyGymStats.Api;

@@ -1,12 +1,22 @@
+using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using HappyGymStats.Data;
-using HappyGymStats.Visualizer;
+using HappyGymStats.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
-namespace HappyGymStats.Export;
+namespace HappyGymStats.Legacy.Cli.Export;
 
 public static class DbCsvExportRunner
 {
+    private static readonly (string Type, string Key)[] KnownStatTypes =
+    {
+        ("strength", "strength"),
+        ("defense", "defense"),
+        ("speed", "speed"),
+        ("dexterity", "dexterity")
+    };
+
     public static async Task<CsvExportRunner.ExportResult> RunAsync(
         string databasePath,
         string outputCsvPath,
@@ -31,49 +41,45 @@ public static class DbCsvExportRunner
 
             var headerSet = new HashSet<string>(StringComparer.Ordinal);
             foreach (var row in rawRows)
-            {
                 try
                 {
                     var keys = JsonFlattener.DiscoverKeys(row.RawJson);
                     foreach (var key in keys)
                         headerSet.Add(key);
                 }
-                catch (System.Text.Json.JsonException)
+                catch (JsonException)
                 {
                     // Skip malformed payloads for key discovery.
                 }
-            }
 
             foreach (var col in CsvExportRunner.NormalizedColumns)
                 headerSet.Add(col);
 
-            var headerColumns = CsvExportRunner.BuildHeaderOrder(headerSet, includeDerived: true);
+            var headerColumns = CsvExportRunner.BuildHeaderOrder(headerSet, true);
 
             GymModifierNormalizer.GymModifierTable? gymTable = null;
             {
-                var ok = GymModifierNormalizer.GymModifierTable.TryLoadFromDefaultLocations(out gymTable, out var loadError);
+                var ok = GymModifierNormalizer.GymModifierTable.TryLoadFromDefaultLocations(out gymTable,
+                    out var loadError);
                 if (!ok)
-                {
                     return new CsvExportRunner.ExportResult
                     {
                         Success = false,
-                        ErrorMessage = loadError,
+                        ErrorMessage = loadError
                     };
-                }
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(outputCsvPath) ?? ".");
 
             using var writer = new StreamWriter(
                 outputCsvPath,
-                append: false,
-                encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                false,
+                new UTF8Encoding(false));
 
             CsvWriter.WriteHeader(writer, headerColumns);
 
             var rowsWritten = 0;
             foreach (var row in rawRows)
-            {
                 try
                 {
                     var flat = JsonFlattener.Flatten(row.RawJson);
@@ -84,18 +90,17 @@ public static class DbCsvExportRunner
                     CsvWriter.WriteRow(writer, headerColumns, flat);
                     rowsWritten++;
                 }
-                catch (System.Text.Json.JsonException)
+                catch (JsonException)
                 {
                     // Skip malformed payloads while preserving best-effort export.
                 }
-            }
 
             return new CsvExportRunner.ExportResult
             {
                 Success = true,
                 OutputPath = outputCsvPath,
                 HeaderColumns = headerColumns,
-                RowsWritten = rowsWritten,
+                RowsWritten = rowsWritten
             };
         }
         catch (Exception ex)
@@ -103,7 +108,7 @@ public static class DbCsvExportRunner
             return new CsvExportRunner.ExportResult
             {
                 Success = false,
-                ErrorMessage = $"Failed to write DB-backed CSV file '{outputCsvPath}': {ex.Message}",
+                ErrorMessage = $"Failed to write DB-backed CSV file '{outputCsvPath}': {ex.Message}"
             };
         }
     }
@@ -137,65 +142,70 @@ public static class DbCsvExportRunner
 
             GymModifierNormalizer.GymModifierTable? gymTable = null;
             {
-                var ok = GymModifierNormalizer.GymModifierTable.TryLoadFromDefaultLocations(out gymTable, out var loadError);
+                var ok = GymModifierNormalizer.GymModifierTable.TryLoadFromDefaultLocations(out gymTable,
+                    out var loadError);
                 if (!ok)
-                {
                     return new CsvExportRunner.ExportResult
                     {
                         Success = false,
-                        ErrorMessage = loadError,
+                        ErrorMessage = loadError
                     };
-                }
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(outputCsvPath) ?? ".");
 
             using var writer = new StreamWriter(
                 outputCsvPath,
-                append: false,
-                encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                false,
+                new UTF8Encoding(false));
 
             CsvWriter.WriteHeader(writer, CsvExportRunner.DebugColumns);
 
             var rowsWritten = 0;
             foreach (var record in rawRows)
-            {
                 try
                 {
-                    using var doc = System.Text.Json.JsonDocument.Parse(record.RawJson);
+                    using var doc = JsonDocument.Parse(record.RawJson);
                     var root = doc.RootElement;
 
                     var row = new Dictionary<string, string>(StringComparer.Ordinal)
                     {
                         ["id"] = record.LogId,
-                        ["timestamp"] = record.OccurredAtUtc.ToUnixTimeSeconds().ToString(),
+                        ["timestamp"] = record.OccurredAtUtc.ToUnixTimeSeconds().ToString()
                     };
 
-                    if (TryGetPropertyIgnoreCase(root, "data", out var dataEl) && dataEl.ValueKind == System.Text.Json.JsonValueKind.Object)
+                    if (TryGetPropertyIgnoreCase(root, "data", out var dataEl) &&
+                        dataEl.ValueKind == JsonValueKind.Object)
                     {
-                        row["data"] = System.Text.Json.JsonSerializer.Serialize(dataEl);
+                        row["data"] = JsonSerializer.Serialize(dataEl);
 
-                        if (TryGetPropertyIgnoreCase(dataEl, "energy_used", out var energyEl) && TryGetValueAsString(energyEl, out var energyText))
+                        if (TryGetPropertyIgnoreCase(dataEl, "energy_used", out var energyEl) &&
+                            TryGetValueAsString(energyEl, out var energyText))
                             row["data.energy_used"] = energyText;
 
-                        if (TryGetPropertyIgnoreCase(dataEl, "gym", out var gymEl) && TryGetValueAsString(gymEl, out var gymText))
+                        if (TryGetPropertyIgnoreCase(dataEl, "gym", out var gymEl) &&
+                            TryGetValueAsString(gymEl, out var gymText))
                             row["data.gym"] = gymText;
 
-                        if (TryGetPropertyIgnoreCase(dataEl, "maximum_happy_after", out var maxAfterEl) && TryGetValueAsString(maxAfterEl, out var maxAfterText))
+                        if (TryGetPropertyIgnoreCase(dataEl, "maximum_happy_after", out var maxAfterEl) &&
+                            TryGetValueAsString(maxAfterEl, out var maxAfterText))
                             row["data.maximum_happy_after"] = maxAfterText;
 
-                        if (TryGetPropertyIgnoreCase(dataEl, "maximum_happy_before", out var maxBeforeEl) && TryGetValueAsString(maxBeforeEl, out var maxBeforeText))
+                        if (TryGetPropertyIgnoreCase(dataEl, "maximum_happy_before", out var maxBeforeEl) &&
+                            TryGetValueAsString(maxBeforeEl, out var maxBeforeText))
                             row["data.maximum_happy_before"] = maxBeforeText;
 
                         var hasAny = false;
                         var delta = 0;
-                        if (TryGetPropertyIgnoreCase(dataEl, "happy_increased", out var incEl) && TryParseInt32(incEl, out var inc))
+                        if (TryGetPropertyIgnoreCase(dataEl, "happy_increased", out var incEl) &&
+                            TryParseInt32(incEl, out var inc))
                         {
                             hasAny = true;
                             delta += inc;
                         }
 
-                        if (TryGetPropertyIgnoreCase(dataEl, "happy_decreased", out var decEl) && TryParseInt32(decEl, out var dec))
+                        if (TryGetPropertyIgnoreCase(dataEl, "happy_decreased", out var decEl) &&
+                            TryParseInt32(decEl, out var dec))
                         {
                             hasAny = true;
                             delta -= dec;
@@ -229,18 +239,17 @@ public static class DbCsvExportRunner
                     CsvWriter.WriteRow(writer, CsvExportRunner.DebugColumns, row);
                     rowsWritten++;
                 }
-                catch (System.Text.Json.JsonException)
+                catch (JsonException)
                 {
                     // Skip malformed payloads.
                 }
-            }
 
             return new CsvExportRunner.ExportResult
             {
                 Success = true,
                 OutputPath = outputCsvPath,
                 HeaderColumns = CsvExportRunner.DebugColumns,
-                RowsWritten = rowsWritten,
+                RowsWritten = rowsWritten
             };
         }
         catch (Exception ex)
@@ -249,12 +258,12 @@ public static class DbCsvExportRunner
             {
                 Success = false,
                 ErrorMessage = $"Failed to write DB-backed debug CSV file '{outputCsvPath}': {ex.Message}",
-                HeaderColumns = CsvExportRunner.DebugColumns,
+                HeaderColumns = CsvExportRunner.DebugColumns
             };
         }
     }
 
-    private static void EnrichWithDerived(Dictionary<string, string> flat, HappyGymStats.Data.Entities.DerivedGymTrainEntity derived)
+    private static void EnrichWithDerived(Dictionary<string, string> flat, DerivedGymTrainEntity derived)
     {
         flat["happy_before_train"] = derived.HappyBeforeTrain.ToString();
         flat["happy_after_train"] = derived.HappyAfterTrain.ToString();
@@ -264,16 +273,8 @@ public static class DbCsvExportRunner
         flat["clamped_to_max"] = derived.ClampedToMax ? "true" : "false";
     }
 
-    private static readonly (string Type, string Key)[] KnownStatTypes =
-    {
-        ("strength", "strength"),
-        ("defense", "defense"),
-        ("speed", "speed"),
-        ("dexterity", "dexterity"),
-    };
-
     private static void ExtractStatFields(
-        System.Text.Json.JsonElement dataEl,
+        JsonElement dataEl,
         GymModifierNormalizer.GymModifierTable? gymTable,
         Dictionary<string, string> row)
     {
@@ -281,38 +282,38 @@ public static class DbCsvExportRunner
         {
             var hasAny = false;
 
-            if (TryGetPropertyIgnoreCase(dataEl, $"{key}_before", out var beforeEl) && TryGetValueAsString(beforeEl, out var beforeText))
+            if (TryGetPropertyIgnoreCase(dataEl, $"{key}_before", out var beforeEl) &&
+                TryGetValueAsString(beforeEl, out var beforeText))
             {
                 row["stat_before"] = beforeText;
                 hasAny = true;
             }
 
-            if (TryGetPropertyIgnoreCase(dataEl, $"{key}_after", out var afterEl) && TryGetValueAsString(afterEl, out var afterText))
+            if (TryGetPropertyIgnoreCase(dataEl, $"{key}_after", out var afterEl) &&
+                TryGetValueAsString(afterEl, out var afterText))
             {
                 row["stat_after"] = afterText;
                 hasAny = true;
             }
 
-            if (TryGetPropertyIgnoreCase(dataEl, $"{key}_increased", out var incEl) && TryGetValueAsString(incEl, out var incText))
+            if (TryGetPropertyIgnoreCase(dataEl, $"{key}_increased", out var incEl) &&
+                TryGetValueAsString(incEl, out var incText))
             {
                 if (gymTable is not null &&
                     row.TryGetValue("data.gym", out var gymText) &&
                     int.TryParse(gymText, out var gymId) &&
-                    double.TryParse(incText, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var incRaw) &&
+                    double.TryParse(incText, NumberStyles.Float, CultureInfo.InvariantCulture, out var incRaw) &&
                     gymTable.TryGetMultiplier(gymId, key, out var mult) &&
                     mult > 0)
-                {
-                    row["stat_increased"] = (incRaw / mult).ToString("0.###############", System.Globalization.CultureInfo.InvariantCulture);
-                }
+                    row["stat_increased"] = (incRaw / mult).ToString("0.###############", CultureInfo.InvariantCulture);
                 else
-                {
                     row["stat_increased"] = incText;
-                }
 
                 hasAny = true;
             }
 
-            if (TryGetPropertyIgnoreCase(dataEl, $"{key}_decreased", out var decEl) && TryGetValueAsString(decEl, out var decText))
+            if (TryGetPropertyIgnoreCase(dataEl, $"{key}_decreased", out var decEl) &&
+                TryGetValueAsString(decEl, out var decText))
             {
                 row["stat_decreased"] = decText;
                 hasAny = true;
@@ -326,15 +327,16 @@ public static class DbCsvExportRunner
         }
     }
 
-    private static bool TryParseInt32(System.Text.Json.JsonElement value, out int n)
+    private static bool TryParseInt32(JsonElement value, out int n)
     {
         n = 0;
         long? raw = value.ValueKind switch
         {
-            System.Text.Json.JsonValueKind.Number when value.TryGetInt64(out var i64) => i64,
-            System.Text.Json.JsonValueKind.Number when value.TryGetDouble(out var d) => (long)d,
-            System.Text.Json.JsonValueKind.String when long.TryParse(value.GetString(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var s) => s,
-            _ => null,
+            JsonValueKind.Number when value.TryGetInt64(out var i64) => i64,
+            JsonValueKind.Number when value.TryGetDouble(out var d) => (long)d,
+            JsonValueKind.String when long.TryParse(value.GetString(), NumberStyles.Integer,
+                CultureInfo.InvariantCulture, out var s) => s,
+            _ => null
         };
 
         if (raw is null || raw.Value is < int.MinValue or > int.MaxValue)
@@ -344,36 +346,34 @@ public static class DbCsvExportRunner
         return true;
     }
 
-    private static bool TryGetValueAsString(System.Text.Json.JsonElement element, out string value)
+    private static bool TryGetValueAsString(JsonElement element, out string value)
     {
         value = element.ValueKind switch
         {
-            System.Text.Json.JsonValueKind.String => element.GetString() ?? string.Empty,
-            System.Text.Json.JsonValueKind.Number => element.GetRawText(),
-            System.Text.Json.JsonValueKind.True => "true",
-            System.Text.Json.JsonValueKind.False => "false",
-            System.Text.Json.JsonValueKind.Null => string.Empty,
-            _ => element.GetRawText(),
+            JsonValueKind.String => element.GetString() ?? string.Empty,
+            JsonValueKind.Number => element.GetRawText(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            JsonValueKind.Null => string.Empty,
+            _ => element.GetRawText()
         };
 
         return true;
     }
 
-    private static bool TryGetPropertyIgnoreCase(System.Text.Json.JsonElement obj, string name, out System.Text.Json.JsonElement value)
+    private static bool TryGetPropertyIgnoreCase(JsonElement obj, string name, out JsonElement value)
     {
-        if (obj.ValueKind == System.Text.Json.JsonValueKind.Object)
+        if (obj.ValueKind == JsonValueKind.Object)
         {
             if (obj.TryGetProperty(name, out value))
                 return true;
 
             foreach (var prop in obj.EnumerateObject())
-            {
                 if (string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase))
                 {
                     value = prop.Value;
                     return true;
                 }
-            }
         }
 
         value = default;

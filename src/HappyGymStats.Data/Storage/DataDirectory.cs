@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace HappyGymStats.Storage;
+namespace HappyGymStats.Data.Storage;
 
 public static class DataDirectory
 {

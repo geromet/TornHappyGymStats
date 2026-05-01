@@ -1,9 +1,7 @@
 using System.Text.Json;
-using HappyGymStats.Reconstruction;
+using static HappyGymStats.Core.Reconstruction.HappyReconstructionModels;
 
-using static HappyGymStats.Reconstruction.HappyReconstructionModels;
-
-namespace HappyGymStats.Export;
+namespace HappyGymStats.Legacy.Cli.Export;
 
 public static class DerivedHappyEventReader
 {
@@ -11,17 +9,8 @@ public static class DerivedHappyEventReader
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
-        WriteIndented = false,
+        WriteIndented = false
     };
-
-    public sealed class ReadResult
-    {
-        public Dictionary<string, DerivedHappyEvent> BySourceLogId { get; init; } = new();
-        public List<DerivedHappyEvent> AllEvents { get; init; } = new();
-        public bool FileMissing { get; init; }
-        public int MalformedLines { get; init; }
-        public string? ErrorMessage { get; init; }
-    }
 
     public static ReadResult Read(string derivedJsonlPath)
     {
@@ -48,10 +37,8 @@ public static class DerivedHappyEventReader
                     all.Add(record);
 
                     if (!string.IsNullOrWhiteSpace(record.SourceLogId))
-                    {
                         // Latest-write-wins by log id (should be unique anyway).
                         byLogId[record.SourceLogId] = record;
-                    }
                 }
                 catch (JsonException)
                 {
@@ -66,10 +53,19 @@ public static class DerivedHappyEventReader
                 BySourceLogId = byLogId,
                 AllEvents = all,
                 MalformedLines = malformed,
-                ErrorMessage = $"Unable to read derived happy events file '{derivedJsonlPath}': {ex.Message}",
+                ErrorMessage = $"Unable to read derived happy events file '{derivedJsonlPath}': {ex.Message}"
             };
         }
 
         return new ReadResult { BySourceLogId = byLogId, AllEvents = all, MalformedLines = malformed };
+    }
+
+    public sealed class ReadResult
+    {
+        public Dictionary<string, DerivedHappyEvent> BySourceLogId { get; init; } = new();
+        public List<DerivedHappyEvent> AllEvents { get; init; } = new();
+        public bool FileMissing { get; init; }
+        public int MalformedLines { get; init; }
+        public string? ErrorMessage { get; init; }
     }
 }

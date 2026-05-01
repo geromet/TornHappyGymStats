@@ -3,8 +3,7 @@ using System.Text.Json;
 using HappyGymStats.Api;
 using HappyGymStats.Data;
 using HappyGymStats.Data.Entities;
-using HappyGymStats.Storage;
-using Microsoft.AspNetCore.Mvc;
+using HappyGymStats.Data.Storage;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -55,138 +54,138 @@ app.UseStaticFiles();
 // ---- Import endpoints -------------------------------------------------------
 
 app.MapPost("/api/v1/torn/import-jobs", (
-    ImportService importService,
-    HttpContext httpContext,
-    ImportRequest? request) =>
-{
-    var apiKey = request?.ApiKey?.Trim();
-    if (string.IsNullOrWhiteSpace(apiKey))
-        return ValidationError(httpContext, "apiKey is required.", new { field = "apiKey" });
+        ImportService importService,
+        HttpContext httpContext,
+        ImportRequest? request) =>
+    {
+        var apiKey = request?.ApiKey?.Trim();
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return ValidationError(httpContext, "apiKey is required.", new { field = "apiKey" });
 
-    var status = importService.Enqueue(apiKey, request?.Fresh ?? false);
+        var status = importService.Enqueue(apiKey, request?.Fresh ?? false);
 
-    var statusCode = status.IsTerminal
-        ? StatusCodes.Status200OK
-        : StatusCodes.Status202Accepted;
+        var statusCode = status.IsTerminal
+            ? StatusCodes.Status200OK
+            : StatusCodes.Status202Accepted;
 
-    return Results.Json(ToDto(status), statusCode: statusCode);
-})
+        return Results.Json(ToDto(status), statusCode: statusCode);
+    })
     .WithName("StartImport")
     .WithOpenApi();
 
 app.MapGet("/api/v1/torn/import-jobs/latest", (ImportService importService, HttpContext httpContext) =>
-{
-    var status = importService.Latest;
-    if (status is null)
-        return Error(httpContext, StatusCodes.Status404NotFound, "not_found", "No import has been started.", null);
+    {
+        var status = importService.Latest;
+        if (status is null)
+            return Error(httpContext, StatusCodes.Status404NotFound, "not_found", "No import has been started.", null);
 
-    return Results.Ok(ToDto(status));
-})
+        return Results.Ok(ToDto(status));
+    })
     .WithName("GetLatestImport")
     .WithOpenApi();
 
 // ---- Read endpoints ---------------------------------------------------------
 
 app.MapGet("/api/v1/torn/health", async (HappyGymStatsDbContext db, CancellationToken ct) =>
-    Results.Ok(new HealthResponse(
-        Status: await db.Database.CanConnectAsync(ct) ? "ok" : "degraded",
-        Api: "HappyGymStats.Api",
-        DatabaseProvider: db.Database.ProviderName ?? "unknown")))
+        Results.Ok(new HealthResponse(
+            Status: await db.Database.CanConnectAsync(ct) ? "ok" : "degraded",
+            Api: "HappyGymStats.Api",
+            DatabaseProvider: db.Database.ProviderName ?? "unknown")))
     .WithName("GetHealth")
     .WithOpenApi();
 
 app.MapGet("/api/v1/torn/surfaces/meta", async (HttpContext httpContext, CancellationToken ct) =>
-{
-    var path = Path.Combine(surfacesCacheDirectory, "meta.json");
-    if (!File.Exists(path))
-        return Error(httpContext, StatusCodes.Status404NotFound, "not_found", "No cached surfaces dataset found.", null);
+    {
+        var path = Path.Combine(surfacesCacheDirectory, "meta.json");
+        if (!File.Exists(path))
+            return Error(httpContext, StatusCodes.Status404NotFound, "not_found", "No cached surfaces dataset found.", null);
 
-    var json = await File.ReadAllTextAsync(path, ct);
-    return Results.Text(json, "application/json");
-})
+        var json = await File.ReadAllTextAsync(path, ct);
+        return Results.Text(json, "application/json");
+    })
     .WithName("GetSurfacesMeta")
     .WithOpenApi();
 
 app.MapGet("/api/v1/torn/surfaces/latest", async (HttpContext httpContext, CancellationToken ct) =>
-{
-    var path = Path.Combine(surfacesCacheDirectory, "latest.json");
-    if (!File.Exists(path))
-        return Error(httpContext, StatusCodes.Status404NotFound, "not_found", "No cached surfaces dataset found.", null);
+    {
+        var path = Path.Combine(surfacesCacheDirectory, "latest.json");
+        if (!File.Exists(path))
+            return Error(httpContext, StatusCodes.Status404NotFound, "not_found", "No cached surfaces dataset found.", null);
 
-    var json = await File.ReadAllTextAsync(path, ct);
-    return Results.Text(json, "application/json");
-})
+        var json = await File.ReadAllTextAsync(path, ct);
+        return Results.Text(json, "application/json");
+    })
     .WithName("GetSurfacesLatest")
     .WithOpenApi();
 
 app.MapGet("/api/v1/torn/gym-trains", async (
-    HappyGymStatsDbContext db,
-    HttpContext httpContext,
-    int? limit,
-    string? cursor,
-    CancellationToken ct) =>
-{
-    if (!TryGetLimit(limit, out var take, out var limitError))
-        return ValidationError(httpContext, limitError!, new { field = "limit", min = 1, max = Pagination.MaxLimit });
+        HappyGymStatsDbContext db,
+        HttpContext httpContext,
+        int? limit,
+        string? cursor,
+        CancellationToken ct) =>
+    {
+        if (!TryGetLimit(limit, out var take, out var limitError))
+            return ValidationError(httpContext, limitError!, new { field = "limit", min = 1, max = Pagination.MaxLimit });
 
-    if (!TryDecodeCursor(cursor, out var pageCursor))
-        return ValidationError(httpContext, "Cursor is invalid.", new { field = "cursor" });
+        if (!TryDecodeCursor(cursor, out var pageCursor))
+            return ValidationError(httpContext, "Cursor is invalid.", new { field = "cursor" });
 
-    var query = CreateGymTrainPageQuery(db, pageCursor)
-        .OrderByDescending(row => row.OccurredAtUtc)
-        .ThenByDescending(row => row.LogId)
-        .Take(take + 1)
-        .Select(row => new GymTrainDto(
-            row.LogId,
-            row.OccurredAtUtc,
-            row.HappyBeforeTrain,
-            row.HappyAfterTrain,
-            row.HappyUsed,
-            row.RegenTicksApplied,
-            row.RegenHappyGained,
-            row.MaxHappyAtTimeUtc,
-            row.ClampedToMax));
+        var query = CreateGymTrainPageQuery(db, pageCursor)
+            .OrderByDescending(row => row.OccurredAtUtc)
+            .ThenByDescending(row => row.LogId)
+            .Take(take + 1)
+            .Select(row => new GymTrainDto(
+                row.LogId,
+                row.OccurredAtUtc,
+                row.HappyBeforeTrain,
+                row.HappyAfterTrain,
+                row.HappyUsed,
+                row.RegenTicksApplied,
+                row.RegenHappyGained,
+                row.MaxHappyAtTimeUtc,
+                row.ClampedToMax));
 
-    var rows = await query.ToListAsync(ct);
-    var response = CreatePage(rows, take, row => new PageCursor(row.OccurredAtUtc, row.LogId));
+        var rows = await query.ToListAsync(ct);
+        var response = CreatePage(rows, take, row => new PageCursor(row.OccurredAtUtc, row.LogId));
 
-    return Results.Ok(response);
-})
+        return Results.Ok(response);
+    })
     .WithName("ListGymTrains")
     .WithOpenApi();
 
 app.MapGet("/api/v1/torn/happy-events", async (
-    HappyGymStatsDbContext db,
-    HttpContext httpContext,
-    int? limit,
-    string? cursor,
-    CancellationToken ct) =>
-{
-    if (!TryGetLimit(limit, out var take, out var limitError))
-        return ValidationError(httpContext, limitError!, new { field = "limit", min = 1, max = Pagination.MaxLimit });
+        HappyGymStatsDbContext db,
+        HttpContext httpContext,
+        int? limit,
+        string? cursor,
+        CancellationToken ct) =>
+    {
+        if (!TryGetLimit(limit, out var take, out var limitError))
+            return ValidationError(httpContext, limitError!, new { field = "limit", min = 1, max = Pagination.MaxLimit });
 
-    if (!TryDecodeCursor(cursor, out var pageCursor))
-        return ValidationError(httpContext, "Cursor is invalid.", new { field = "cursor" });
+        if (!TryDecodeCursor(cursor, out var pageCursor))
+            return ValidationError(httpContext, "Cursor is invalid.", new { field = "cursor" });
 
-    var query = CreateHappyEventPageQuery(db, pageCursor)
-        .OrderByDescending(row => row.OccurredAtUtc)
-        .ThenByDescending(row => row.EventId)
-        .Take(take + 1)
-        .Select(row => new HappyEventDto(
-            row.EventId,
-            row.EventType,
-            row.OccurredAtUtc,
-            row.SourceLogId,
-            row.HappyBeforeEvent,
-            row.HappyAfterEvent,
-            row.Delta,
-            row.Note));
+        var query = CreateHappyEventPageQuery(db, pageCursor)
+            .OrderByDescending(row => row.OccurredAtUtc)
+            .ThenByDescending(row => row.EventId)
+            .Take(take + 1)
+            .Select(row => new HappyEventDto(
+                row.EventId,
+                row.EventType,
+                row.OccurredAtUtc,
+                row.SourceLogId,
+                row.HappyBeforeEvent,
+                row.HappyAfterEvent,
+                row.Delta,
+                row.Note));
 
-    var rows = await query.ToListAsync(ct);
-    var response = CreatePage(rows, take, row => new PageCursor(row.OccurredAtUtc, row.EventId));
+        var rows = await query.ToListAsync(ct);
+        var response = CreatePage(rows, take, row => new PageCursor(row.OccurredAtUtc, row.EventId));
 
-    return Results.Ok(response);
-})
+        return Results.Ok(response);
+    })
     .WithName("ListHappyEvents")
     .WithOpenApi();
 
@@ -196,7 +195,7 @@ app.Run();
 
 static ImportStatusDto ToDto(ImportJobStatus s)
     => new(s.Id, s.Outcome, s.StartedAtUtc, s.CompletedAtUtc,
-           s.PagesFetched, s.LogsFetched, s.LogsAppended, s.ErrorMessage);
+        s.PagesFetched, s.LogsFetched, s.LogsAppended, s.ErrorMessage);
 
 static IQueryable<DerivedGymTrainEntity> CreateGymTrainPageQuery(HappyGymStatsDbContext db, PageCursor? cursor)
 {
@@ -313,7 +312,7 @@ static IResult Error(HttpContext httpContext, int statusCode, string code, strin
 static string ResolveDatabasePath(IConfiguration configuration, IWebHostEnvironment environment)
 {
     var configuredPath = configuration.GetConnectionString("HappyGymStats")
-        ?? configuration["HAPPYGYMSTATS_DATABASE"];
+                         ?? configuration["HAPPYGYMSTATS_DATABASE"];
 
     var fallbackDataDirectory = DataDirectory.ResolveBasePath("HappyGymStats");
     return SqlitePaths.ResolveDatabasePath(fallbackDataDirectory, configuredPath);
@@ -334,55 +333,58 @@ static string ResolveSurfacesCacheDirectory(IConfiguration configuration, IWebHo
     return Path.GetFullPath(Path.Combine(environment.ContentRootPath, "data", "surfaces"));
 }
 
-// ---- Types ------------------------------------------------------------------
-
-internal static class Pagination
+namespace HappyGymStats.Api
 {
-    public const int DefaultLimit = 100;
-    public const int MaxLimit = 200;
+    // ---- Types ------------------------------------------------------------------
+
+    internal static class Pagination
+    {
+        public const int DefaultLimit = 100;
+        public const int MaxLimit = 200;
+    }
+
+    public sealed record ImportRequest(string? ApiKey, bool? Fresh);
+
+    public sealed record ImportStatusDto(
+        string Id,
+        string Outcome,
+        DateTimeOffset StartedAtUtc,
+        DateTimeOffset? CompletedAtUtc,
+        int PagesFetched,
+        long LogsFetched,
+        long LogsAppended,
+        string? ErrorMessage);
+
+    public sealed record HealthResponse(string Status, string Api, string DatabaseProvider);
+
+    public sealed record GymTrainDto(
+        string LogId,
+        DateTimeOffset OccurredAtUtc,
+        int HappyBeforeTrain,
+        int HappyAfterTrain,
+        int HappyUsed,
+        long RegenTicksApplied,
+        int RegenHappyGained,
+        int? MaxHappyAtTimeUtc,
+        bool ClampedToMax);
+
+    public sealed record HappyEventDto(
+        string EventId,
+        string EventType,
+        DateTimeOffset OccurredAtUtc,
+        string? SourceLogId,
+        int? HappyBeforeEvent,
+        int? HappyAfterEvent,
+        int? Delta,
+        string? Note);
+
+    public sealed record CursorPage<T>(IReadOnlyList<T> Items, string? NextCursor);
+
+    public sealed record ApiError(string Code, string Message, object? Details, string RequestId);
+
+    public sealed record ErrorEnvelope(ApiError Error);
+
+    public sealed record PageCursor(DateTimeOffset OccurredAtUtc, string Id);
+
+    public partial class Program;
 }
-
-public sealed record ImportRequest(string? ApiKey, bool? Fresh);
-
-public sealed record ImportStatusDto(
-    string Id,
-    string Outcome,
-    DateTimeOffset StartedAtUtc,
-    DateTimeOffset? CompletedAtUtc,
-    int PagesFetched,
-    long LogsFetched,
-    long LogsAppended,
-    string? ErrorMessage);
-
-public sealed record HealthResponse(string Status, string Api, string DatabaseProvider);
-
-public sealed record GymTrainDto(
-    string LogId,
-    DateTimeOffset OccurredAtUtc,
-    int HappyBeforeTrain,
-    int HappyAfterTrain,
-    int HappyUsed,
-    long RegenTicksApplied,
-    int RegenHappyGained,
-    int? MaxHappyAtTimeUtc,
-    bool ClampedToMax);
-
-public sealed record HappyEventDto(
-    string EventId,
-    string EventType,
-    DateTimeOffset OccurredAtUtc,
-    string? SourceLogId,
-    int? HappyBeforeEvent,
-    int? HappyAfterEvent,
-    int? Delta,
-    string? Note);
-
-public sealed record CursorPage<T>(IReadOnlyList<T> Items, string? NextCursor);
-
-public sealed record ApiError(string Code, string Message, object? Details, string RequestId);
-
-public sealed record ErrorEnvelope(ApiError Error);
-
-public sealed record PageCursor(DateTimeOffset OccurredAtUtc, string Id);
-
-public partial class Program;

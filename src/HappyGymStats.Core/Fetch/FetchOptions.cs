@@ -1,4 +1,4 @@
-namespace HappyGymStats.Fetch;
+namespace HappyGymStats.Core.Fetch;
 
 public sealed record FetchOptions(
     Uri FreshStartUrl,

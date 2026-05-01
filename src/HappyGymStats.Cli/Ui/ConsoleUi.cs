@@ -1,10 +1,11 @@
 using System.Text;
-using HappyGymStats.Reconstruction;
-using HappyGymStats.Storage;
-using HappyGymStats.Storage.Models;
+using HappyGymStats.Core.Reconstruction;
+using HappyGymStats.Core.Storage;
+using HappyGymStats.Core.Storage.Models;
+using HappyGymStats.Legacy.Cli.Export;
 using Spectre.Console;
 
-namespace HappyGymStats.Ui;
+namespace HappyGymStats.Cli.Ui;
 
 public enum MainMenuAction
 {
@@ -15,7 +16,7 @@ public enum MainMenuAction
     ExportCsv,
     Visualize,
     ConfigureThrottle,
-    Exit,
+    Exit
 }
 
 public sealed class ConsoleUi
@@ -84,8 +85,9 @@ public sealed class ConsoleUi
 
     public TimeSpan PromptThrottleDelay(TimeSpan current)
     {
-        var prompt = new TextPrompt<int>($"Throttle delay in milliseconds ([grey]current: {current.TotalMilliseconds:0}[/])")
-            .DefaultValue((int)Math.Round(current.TotalMilliseconds));
+        var prompt =
+            new TextPrompt<int>($"Throttle delay in milliseconds ([grey]current: {current.TotalMilliseconds:0}[/])")
+                .DefaultValue((int)Math.Round(current.TotalMilliseconds));
         prompt.ShowDefaultValue = true;
 
         prompt.Validate(ms =>
@@ -165,21 +167,20 @@ public sealed class ConsoleUi
             .AddColumn("clamped");
 
         foreach (var row in result.DerivedGymTrains.TakeLast(Math.Max(1, previewCount)))
-        {
             preview.AddRow(
-                row.LogId.ToString(),
+                row.LogId,
                 Markup.Escape(row.OccurredAtUtc.ToString("u")),
                 row.HappyBeforeTrain.ToString(),
                 row.HappyUsed.ToString(),
                 row.HappyAfterTrain.ToString(),
                 row.MaxHappyAtTimeUtc?.ToString() ?? "(none)",
                 row.ClampedToMax ? "yes" : "no");
-        }
 
-        AnsiConsole.Write(new Panel(preview).Header($"[bold]Preview (last {Math.Min(previewCount, result.DerivedGymTrains.Count)})[/]", Justify.Left));
+        AnsiConsole.Write(new Panel(preview).Header(
+            $"[bold]Preview (last {Math.Min(previewCount, result.DerivedGymTrains.Count)})[/]", Justify.Left));
     }
 
-    public void RenderCsvExportSummary(Export.CsvExportRunner.ExportResult result)
+    public void RenderCsvExportSummary(CsvExportRunner.ExportResult result)
     {
         if (!result.Success)
         {
@@ -203,15 +204,11 @@ public sealed class ConsoleUi
         }
 
         if (result.DerivedFileMissing)
-        {
             summary.AddRow("Derived sidecar", "[yellow]Not found (derived columns left blank)[/]");
-        }
         else
-        {
             summary.AddRow("Derived sidecar", result.DerivedMalformedLines > 0
                 ? $"[yellow]{result.DerivedMalformedLines} malformed line(s) skipped[/]"
                 : "[green]Loaded[/]");
-        }
 
         AnsiConsole.Write(new Panel(summary).Header("[bold]CSV export summary[/]", Justify.Left));
     }
@@ -232,15 +229,9 @@ public sealed class ConsoleUi
         summary.AddRow("Output files", generatedPaths.Count.ToString());
         summary.AddRow("Records processed", recordCount.ToString());
 
-        foreach (var path in generatedPaths)
-        {
-            summary.AddRow("  →", Markup.Escape(path));
-        }
+        foreach (var path in generatedPaths) summary.AddRow("  →", Markup.Escape(path));
 
-        if (parseErrors > 0)
-        {
-            summary.AddRow("[yellow]Parse errors[/]", $"[yellow]{parseErrors} row(s) skipped[/]");
-        }
+        if (parseErrors > 0) summary.AddRow("[yellow]Parse errors[/]", $"[yellow]{parseErrors} row(s) skipped[/]");
 
         AnsiConsole.Write(new Panel(summary).Header("[bold]Visualization summary[/]", Justify.Left));
     }
@@ -274,7 +265,7 @@ public sealed class ConsoleUi
         }
         else
         {
-            var last = $"id={checkpoint.LastLogId?.ToString() ?? "(unknown)"}, " +
+            var last = $"id={checkpoint.LastLogId ?? "(unknown)"}, " +
                        $"ts={checkpoint.LastLogTimestamp?.ToString("u") ?? "(unknown)"}, " +
                        $"cat={checkpoint.LastLogCategory ?? "(unknown)"}, " +
                        $"title={checkpoint.LastLogTitle ?? "(unknown)"}";
@@ -295,7 +286,8 @@ public sealed class ConsoleUi
             }
             else
             {
-                var err = $"at={checkpoint.LastErrorAt?.ToString("u") ?? "(unknown)"}, msg={checkpoint.LastErrorMessage}";
+                var err =
+                    $"at={checkpoint.LastErrorAt?.ToString("u") ?? "(unknown)"}, msg={checkpoint.LastErrorMessage}";
                 table.AddRow("Last error", Markup.Escape(err));
             }
         }
@@ -328,9 +320,7 @@ public sealed class ConsoleUi
                 {
                     var safeStack = RedactSecrets(current.StackTrace, secretsToRedact);
                     foreach (var line in safeStack.Split('\n').Take(8))
-                    {
                         AnsiConsole.MarkupLine($"[dim grey]  {Markup.Escape(line.TrimEnd('\r'))}[/]");
-                    }
                     var remaining = safeStack.Split('\n').Length - 8;
                     if (remaining > 0)
                         AnsiConsole.MarkupLine($"[dim grey]  ... ({remaining} more frame(s))[/]");
@@ -360,7 +350,7 @@ public sealed class ConsoleUi
         {
             Border = BoxBorder.Rounded,
             BorderStyle = Style.Parse("yellow"),
-            Padding = new Padding(1, 1),
+            Padding = new Padding(1, 1)
         };
 
         AnsiConsole.Write(panel);
@@ -372,18 +362,21 @@ public sealed class ConsoleUi
         _ = Console.ReadLine();
     }
 
-    private static string ToMenuLabel(MainMenuAction action, bool hasCheckpoint, bool hasJsonlData) => action switch
+    private static string ToMenuLabel(MainMenuAction action, bool hasCheckpoint, bool hasJsonlData)
     {
-        MainMenuAction.Fetch => hasCheckpoint ? "Fetch logs (start over)" : "Fetch logs (new)",
-        MainMenuAction.Resume => "Resume fetch",
-        MainMenuAction.ShowStatus => "Show status",
-        MainMenuAction.ReconstructHappy => "Reconstruct happy",
-        MainMenuAction.ExportCsv => "Export CSV",
-        MainMenuAction.Visualize => "Visualize",
-        MainMenuAction.ConfigureThrottle => "Configure throttle",
-        MainMenuAction.Exit => "Exit",
-        _ => action.ToString(),
-    };
+        return action switch
+        {
+            MainMenuAction.Fetch => hasCheckpoint ? "Fetch logs (start over)" : "Fetch logs (new)",
+            MainMenuAction.Resume => "Resume fetch",
+            MainMenuAction.ShowStatus => "Show status",
+            MainMenuAction.ReconstructHappy => "Reconstruct happy",
+            MainMenuAction.ExportCsv => "Export CSV",
+            MainMenuAction.Visualize => "Visualize",
+            MainMenuAction.ConfigureThrottle => "Configure throttle",
+            MainMenuAction.Exit => "Exit",
+            _ => action.ToString()
+        };
+    }
 
     private static string RedactSecrets(string value, params string?[] secrets)
     {

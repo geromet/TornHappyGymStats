@@ -1,11 +1,12 @@
 using System.Globalization;
-using HappyGymStats.Export;
-using HappyGymStats.Reconstruction;
-using HappyGymStats.Storage;
-using HappyGymStats.Verification;
+using HappyGymStats.Core.Reconstruction;
+using HappyGymStats.Core.Storage;
+using HappyGymStats.Legacy.Cli.Export;
+using HappyGymStats.Legacy.Cli.Storage;
+using HappyGymStats.Legacy.Cli.Verification;
 using HappyGymStats.Visualizer;
 using Microsoft.FSharp.Collections;
-using static HappyGymStats.Reconstruction.HappyReconstructionModels;
+using static HappyGymStats.Core.Reconstruction.HappyReconstructionModels;
 using Xunit;
 
 namespace HappyGymStats.Tests;

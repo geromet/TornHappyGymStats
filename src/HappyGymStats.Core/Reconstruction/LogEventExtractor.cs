@@ -1,9 +1,7 @@
-using System;
-using System.Collections.Generic;
 using System.Text.Json;
-using static HappyGymStats.Reconstruction.HappyReconstructionModels;
+using static HappyGymStats.Core.Reconstruction.HappyReconstructionModels;
 
-namespace HappyGymStats.Reconstruction;
+namespace HappyGymStats.Core.Reconstruction;
 
 /// <summary>
 /// Best-effort extractor that converts raw Torn user log JSON into typed reconstruction events.

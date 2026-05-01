@@ -1,14 +1,13 @@
 using System.Text.Json;
-using HappyGymStats.Reconstruction;
+using HappyGymStats.Core.Reconstruction;
+using static HappyGymStats.Core.Reconstruction.HappyReconstructionModels;
 
-using static HappyGymStats.Reconstruction.HappyReconstructionModels;
-
-namespace HappyGymStats.Export;
+namespace HappyGymStats.Legacy.Cli.Export;
 
 /// <summary>
-/// Reads the derived gym-train sidecar JSONL into a dictionary keyed by <c>log_id</c>.
-/// Uses the same <c>SnakeCaseLower</c> JSON options as <see cref="DerivedGymTrainStore"/>
-/// so the serialized property names match.
+///     Reads the derived gym-train sidecar JSONL into a dictionary keyed by <c>log_id</c>.
+///     Uses the same <c>SnakeCaseLower</c> JSON options as <see cref="DerivedGymTrainStore" />
+///     so the serialized property names match.
 /// </summary>
 public static class DerivedGymTrainReader
 {
@@ -16,28 +15,17 @@ public static class DerivedGymTrainReader
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
-        WriteIndented = false,
+        WriteIndented = false
     };
 
-    public sealed class ReadResult
-    {
-        public Dictionary<string, DerivedGymTrain> Records { get; init; } = new();
-        public bool FileMissing { get; init; }
-        public int MalformedLines { get; init; }
-        public string? ErrorMessage { get; init; }
-    }
-
     /// <summary>
-    /// Load derived gym-train records from a JSONL file, keyed by <c>log_id</c>.
-    /// If the file does not exist, returns an empty dictionary with <see cref="ReadResult.FileMissing"/> = true.
-    /// Malformed lines are skipped and counted.
+    ///     Load derived gym-train records from a JSONL file, keyed by <c>log_id</c>.
+    ///     If the file does not exist, returns an empty dictionary with <see cref="ReadResult.FileMissing" /> = true.
+    ///     Malformed lines are skipped and counted.
     /// </summary>
     public static ReadResult Read(string derivedJsonlPath)
     {
-        if (!File.Exists(derivedJsonlPath))
-        {
-            return new ReadResult { FileMissing = true };
-        }
+        if (!File.Exists(derivedJsonlPath)) return new ReadResult { FileMissing = true };
 
         var records = new Dictionary<string, DerivedGymTrain>();
         var malformed = 0;
@@ -53,10 +41,7 @@ public static class DerivedGymTrainReader
                 try
                 {
                     var record = JsonSerializer.Deserialize<DerivedGymTrain>(line, JsonOptions);
-                    if (record is not null)
-                    {
-                        records[record.LogId] = record;
-                    }
+                    if (record is not null) records[record.LogId] = record;
                 }
                 catch (JsonException)
                 {
@@ -71,5 +56,13 @@ public static class DerivedGymTrainReader
         }
 
         return new ReadResult { Records = records, MalformedLines = malformed };
+    }
+
+    public sealed class ReadResult
+    {
+        public Dictionary<string, DerivedGymTrain> Records { get; init; } = new();
+        public bool FileMissing { get; init; }
+        public int MalformedLines { get; init; }
+        public string? ErrorMessage { get; init; }
     }
 }
