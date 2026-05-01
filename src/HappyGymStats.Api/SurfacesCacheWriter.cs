@@ -1,5 +1,6 @@
 using System.Text.Json;
 using HappyGymStats.Data;
+using HappyGymStats.Reconstruction;
 using Microsoft.EntityFrameworkCore;
 
 namespace HappyGymStats.Api;
@@ -20,16 +21,30 @@ public sealed class SurfacesCacheWriter
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<HappyGymStatsDbContext>();
 
-        var gymRows = await db.DerivedGymTrains.AsNoTracking()
+        var derivedRows = await db.DerivedGymTrains.AsNoTracking()
+            .Select(x => new SurfaceSeriesBuilder.DerivedGym(x.LogId, x.HappyBeforeTrain))
+            .ToListAsync(ct);
+
+        var derivedByLogId = derivedRows.ToDictionary(x => x.LogId, x => x);
+
+        var rawRows = await db.RawUserLogs.AsNoTracking()
+            .Where(x => derivedByLogId.Keys.Contains(x.LogId))
             .OrderBy(x => x.OccurredAtUtc)
-            .Select(x => new { x.HappyBeforeTrain, x.HappyUsed, x.RegenHappyGained, x.OccurredAtUtc })
+            .Select(x => new SurfaceSeriesBuilder.RawGymLog(x.LogId, x.OccurredAtUtc, x.RawJson))
             .ToListAsync(ct);
 
         var eventRows = await db.DerivedHappyEvents.AsNoTracking()
             .Where(x => x.Delta != null && x.HappyBeforeEvent != null && x.HappyAfterEvent != null)
             .OrderBy(x => x.OccurredAtUtc)
-            .Select(x => new { x.HappyBeforeEvent, x.Delta, x.HappyAfterEvent, x.EventType, x.OccurredAtUtc })
+            .Select(x => new SurfaceSeriesBuilder.DerivedHappyEvent(
+                x.OccurredAtUtc,
+                x.EventType,
+                x.HappyBeforeEvent!.Value,
+                x.Delta!.Value,
+                x.HappyAfterEvent!.Value))
             .ToListAsync(ct);
+
+        var surfaces = SurfaceSeriesBuilder.Build(rawRows, derivedByLogId, eventRows);
 
         var payload = new
         {
@@ -40,24 +55,24 @@ public sealed class SurfacesCacheWriter
             {
                 gymCloud = new
                 {
-                    x = gymRows.Select(x => x.HappyBeforeTrain).ToArray(),
-                    y = gymRows.Select(x => x.HappyUsed).ToArray(),
-                    z = gymRows.Select(x => x.RegenHappyGained).ToArray(),
-                    text = gymRows.Select(x => x.OccurredAtUtc.ToString("O")).ToArray()
+                    x = surfaces.GymX,
+                    y = surfaces.GymY,
+                    z = surfaces.GymZ,
+                    text = surfaces.GymText
                 },
                 eventsCloud = new
                 {
-                    x = eventRows.Select(x => x.HappyBeforeEvent!.Value).ToArray(),
-                    y = eventRows.Select(x => x.Delta!.Value).ToArray(),
-                    z = eventRows.Select(x => x.HappyAfterEvent!.Value).ToArray(),
-                    text = eventRows.Select(x => $"{x.EventType} {x.OccurredAtUtc:O}").ToArray()
+                    x = surfaces.EventX,
+                    y = surfaces.EventY,
+                    z = surfaces.EventZ,
+                    text = surfaces.EventText
                 }
             },
             meta = new
             {
-                gymPointCount = gymRows.Count,
-                eventPointCount = eventRows.Count,
-                recordCount = gymRows.Count + eventRows.Count
+                gymPointCount = surfaces.GymX.Length,
+                eventPointCount = surfaces.EventX.Length,
+                recordCount = surfaces.GymX.Length + surfaces.EventX.Length
             }
         };
 

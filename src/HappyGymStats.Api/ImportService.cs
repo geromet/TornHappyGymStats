@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using HappyGymStats.Fetch;
+using HappyGymStats.Reconstruction;
 using HappyGymStats.Storage;
 using HappyGymStats.Torn;
 using Microsoft.Extensions.Logging;
@@ -116,6 +117,23 @@ public sealed class ImportService : BackgroundService
                         PagesFetched = pagesRunning,
                     });
                 }).ConfigureAwait(false);
+
+            var reconstructionRunner = new ReconstructionRunner(paths);
+            var reconstruction = reconstructionRunner.Run(
+                currentHappy: 0,
+                anchorTimeUtc: DateTimeOffset.UtcNow,
+                ct: stoppingToken);
+
+            if (!reconstruction.Success)
+            {
+                throw new InvalidOperationException(reconstruction.ErrorMessage ?? "Reconstruction failed after import.");
+            }
+
+            _logger.LogInformation(
+                "Import job {JobId} reconstruction complete: gymTrains={GymTrains} warnings={Warnings}",
+                request.JobId,
+                reconstruction.DerivedGymTrains.Count,
+                reconstruction.Stats?.WarningCount ?? 0);
 
             var syncedAtUtc = DateTimeOffset.UtcNow;
             var version = $"{syncedAtUtc:O}-{request.JobId}";
