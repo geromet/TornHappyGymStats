@@ -71,20 +71,20 @@ function renderGymCloudFromSeries(series) {
     type: "scatter3d",
     mode: "markers",
     name: "Gym trains",
-    x: series.z,
-    y: series.x,
-    z: series.y,
+    x: series.x,
+    y: series.y,
+    z: series.z,
     marker: { size: 3, opacity: 0.75 },
     text: series.text,
-    hovertemplate: "Gain / energy: %{x}<br>Stat before: %{y}<br>Happy before: %{z}<br>%{text}<extra></extra>",
+    hovertemplate: "Stat before: %{x}<br>Happy before: %{y}<br>Gain / energy: %{z}<br>%{text}<extra></extra>",
   };
 
   const layout = {
     margin: { l: 0, r: 0, t: 20, b: 0 },
     scene: {
-      xaxis: { title: "Stat gained / energy" },
-      yaxis: { title: "Stat before train" },
-      zaxis: { title: "Happy before train" },
+      xaxis: { title: "Stat before train" },
+      yaxis: { title: "Happy before train" },
+      zaxis: { title: "Stat gained / energy" },
     },
   };
 
