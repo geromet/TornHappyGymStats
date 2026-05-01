@@ -1,12 +1,25 @@
 #!/usr/bin/env bash
-# verify-e2e.sh — Smoke-test: publish a single RID and clean up.
-# Exercises the same publish path as publish-all.sh but only for the host RID.
+# publish-smoke.sh — Smoke-test CLI publish path for linux-x64.
 set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-readonly ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-readonly PROJECT="${ROOT_DIR}/src/HappyGymStats/HappyGymStats.csproj"
+readonly ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+readonly PROJECT="${ROOT_DIR}/src/HappyGymStats.Cli/HappyGymStats.Cli.csproj"
 readonly SMOKE_DIR="/tmp/hgs-smoke"
+
+usage() {
+  cat <<EOF
+Usage: bash scripts/verify/publish-smoke.sh
+
+Runs unit/integration tests, then publishes CLI for linux-x64 to a temp dir,
+verifies output exists, and cleans it up.
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
 
 echo "==> Building and running unit tests"
 dotnet test --project "${PROJECT}"
@@ -21,9 +34,9 @@ dotnet publish "${PROJECT}" \
   -o "${SMOKE_DIR}"
 
 echo "    Published to ${SMOKE_DIR}"
-ls -lh "${SMOKE_DIR}/HappyGymStats"
+ls -lh "${SMOKE_DIR}"
 
 echo "==> Cleaning up smoke-test output"
 rm -rf "${SMOKE_DIR}"
 
-echo "==> E2E smoke test passed."
+echo "==> Publish smoke test passed."

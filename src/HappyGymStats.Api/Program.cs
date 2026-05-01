@@ -18,13 +18,20 @@ builder.Services.AddCors(options =>
         .WithMethods("GET", "POST")));
 
 var databasePath = ResolveDatabasePath(builder.Configuration, builder.Environment);
+var surfacesCacheDirectory = ResolveSurfacesCacheDirectory(builder.Configuration, builder.Environment);
 Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
+Directory.CreateDirectory(surfacesCacheDirectory);
 
 builder.Services.AddDbContext<HappyGymStatsDbContext>(options =>
     options.UseSqlite($"Data Source={databasePath}"));
 
 builder.Services.AddSingleton(sp =>
-    new ImportService(sp.GetRequiredService<IServiceScopeFactory>(), databasePath));
+    new SurfacesCacheWriter(sp.GetRequiredService<IServiceScopeFactory>(), surfacesCacheDirectory));
+builder.Services.AddSingleton(sp =>
+    new ImportService(
+        sp.GetRequiredService<IServiceScopeFactory>(),
+        databasePath,
+        sp.GetRequiredService<SurfacesCacheWriter>()));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ImportService>());
 
 var app = builder.Build();
@@ -42,6 +49,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("ReadApi");
+app.UseStaticFiles();
 
 // ---- Import endpoints -------------------------------------------------------
 
@@ -84,6 +92,30 @@ app.MapGet("/v1/health", async (HappyGymStatsDbContext db, CancellationToken ct)
         Api: "HappyGymStats.Api",
         DatabaseProvider: db.Database.ProviderName ?? "unknown")))
     .WithName("GetHealth")
+    .WithOpenApi();
+
+app.MapGet("/v1/surfaces/meta", async (HttpContext httpContext, CancellationToken ct) =>
+{
+    var path = Path.Combine(surfacesCacheDirectory, "meta.json");
+    if (!File.Exists(path))
+        return Error(httpContext, StatusCodes.Status404NotFound, "not_found", "No cached surfaces dataset found.", null);
+
+    var json = await File.ReadAllTextAsync(path, ct);
+    return Results.Text(json, "application/json");
+})
+    .WithName("GetSurfacesMeta")
+    .WithOpenApi();
+
+app.MapGet("/v1/surfaces/latest", async (HttpContext httpContext, CancellationToken ct) =>
+{
+    var path = Path.Combine(surfacesCacheDirectory, "latest.json");
+    if (!File.Exists(path))
+        return Error(httpContext, StatusCodes.Status404NotFound, "not_found", "No cached surfaces dataset found.", null);
+
+    var json = await File.ReadAllTextAsync(path, ct);
+    return Results.Text(json, "application/json");
+})
+    .WithName("GetSurfacesLatest")
     .WithOpenApi();
 
 app.MapGet("/v1/gym-trains", async (
@@ -284,6 +316,21 @@ static string ResolveDatabasePath(IConfiguration configuration, IWebHostEnvironm
 
     var fallbackDataDirectory = DataDirectory.ResolveBasePath("HappyGymStats");
     return SqlitePaths.ResolveDatabasePath(fallbackDataDirectory, configuredPath);
+}
+
+static string ResolveSurfacesCacheDirectory(IConfiguration configuration, IWebHostEnvironment environment)
+{
+    var configured = configuration["HAPPYGYMSTATS_SURFACES_CACHE_DIR"];
+    if (!string.IsNullOrWhiteSpace(configured))
+        return configured;
+
+    var repoRelativeCandidate = Path.GetFullPath(
+        Path.Combine(environment.ContentRootPath, "..", "..", "..", "web", "data", "surfaces"));
+
+    if (Directory.Exists(repoRelativeCandidate) || File.Exists(Path.Combine(repoRelativeCandidate, "meta.json")))
+        return repoRelativeCandidate;
+
+    return Path.GetFullPath(Path.Combine(environment.ContentRootPath, "data", "surfaces"));
 }
 
 // ---- Types ------------------------------------------------------------------

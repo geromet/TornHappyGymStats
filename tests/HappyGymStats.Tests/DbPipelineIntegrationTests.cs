@@ -156,7 +156,7 @@ public sealed class DbPipelineIntegrationTests
             if (dir is null)
                 throw new DirectoryNotFoundException("Unable to locate repository root from test output directory.");
 
-            var dataRoot = Path.Combine(dir.FullName, "src", "HappyGymStats", "bin", "Debug", "net8.0", "data");
+            var dataRoot = Path.Combine(dir.FullName, "src", "HappyGymStats.Cli", "bin", "Debug", "net8.0", "data");
             return new DatasetPaths(
                 RepoRoot: dir.FullName,
                 UserLogsJsonlPath: Path.Combine(dataRoot, "userlogs.jsonl"));

@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../src/HappyGymStats/HappyGymStats.csproj" />
+    <ProjectReference Include="../../src/HappyGymStats.Cli/HappyGymStats.Cli.csproj" />
     <ProjectReference Include="..\..\src\HappyGymStats.Core\HappyGymStats.Core.csproj" />
     <ProjectReference Include="..\..\src\HappyGymStats.Data\HappyGymStats.Data.csproj" />
     <ProjectReference Include="..\..\src\HappyGymStats.Api\HappyGymStats.Api.csproj" />
