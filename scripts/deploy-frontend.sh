@@ -1,53 +1,74 @@
 #!/usr/bin/env bash
-# deploy-frontend.sh — Frontend deployment helper.
+# deploy-frontend.sh — Deploy web/ to torn.geromet.com host over Cloudflare Access SSH.
 set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly WEB_DIR="${ROOT_DIR}/web"
 
-MODE="validate"
-
 usage() {
   cat <<EOF
-Usage: bash scripts/deploy-frontend.sh [--mode validate|trigger]
+Usage: bash scripts/deploy-frontend.sh
 
-Modes:
-  validate  Validate frontend files used by GitHub Pages (default)
-  trigger   Trigger Pages workflow via gh CLI (manual dispatch)
+Deploys local web/ assets to the remote host:
+  - uploads to timestamped release dir
+  - flips current symlink
+
+Configuration is read from env vars and optional .env.deploy.
+
+Frontend-related variables:
+  DEPLOY_FRONTEND_REMOTE_ROOT   (default: /var/www/torn-frontend)
+  DEPLOY_USE_SUDO               (default: 1)
+  DEPLOY_SUDO_NON_INTERACTIVE   (default: 0)
 EOF
 }
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --mode) MODE="$2"; shift 2 ;;
-    -h|--help) usage; exit 0 ;;
-    *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
-  esac
-done
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ -f "${ROOT_DIR}/.env.deploy" ]]; then
+  # shellcheck disable=SC1091
+  source "${ROOT_DIR}/.env.deploy"
+fi
+
+: "${DEPLOY_SSH_HOST:=ssh.geromet.com}"
+: "${DEPLOY_SSH_USER:=anon}"
+: "${DEPLOY_SSH_KEY:=$HOME/.ssh/id_token2_bio3_hetzner}"
+: "${DEPLOY_PROXY_COMMAND:=cloudflared access ssh --hostname ssh.geromet.com}"
+: "${DEPLOY_FRONTEND_REMOTE_ROOT:=/var/www/torn-frontend}"
+: "${DEPLOY_USE_SUDO:=1}"
+: "${DEPLOY_SUDO_NON_INTERACTIVE:=0}"
 
 if [[ ! -d "${WEB_DIR}" ]]; then
   echo "web/ directory not found at ${WEB_DIR}" >&2
   exit 1
 fi
 
-case "${MODE}" in
-  validate)
-    echo "==> Validating frontend deploy inputs"
-    test -f "${WEB_DIR}/index.html"
-    test -f "${WEB_DIR}/app.js"
-    test -f "${WEB_DIR}/styles.css"
-    echo "==> Frontend deploy inputs look valid"
-    echo "GitHub Pages deploy happens automatically on push to main."
-    ;;
-  trigger)
-    command -v gh >/dev/null 2>&1 || { echo "gh CLI is required for --mode trigger" >&2; exit 1; }
-    echo "==> Triggering GitHub Pages workflow"
-    gh workflow run pages.yml
-    echo "==> Triggered. Check status with: gh run list --workflow pages.yml"
-    ;;
-  *)
-    echo "Invalid mode: ${MODE}. Use validate|trigger." >&2
-    exit 1
-    ;;
-esac
+readonly REMOTE_RELEASES_DIR="${DEPLOY_FRONTEND_REMOTE_ROOT}/releases"
+readonly REMOTE_CURRENT_DIR="${DEPLOY_FRONTEND_REMOTE_ROOT}/current"
+readonly REMOTE_STAGING_DIR="/tmp/torn-frontend-staging-${DEPLOY_SSH_USER}"
+readonly REMOTE_TS="$(date -u +%Y%m%dT%H%M%SZ)"
+readonly REMOTE_RELEASE_DIR="${REMOTE_RELEASES_DIR}/${REMOTE_TS}"
+
+SSH_OPTS=(-i "${DEPLOY_SSH_KEY}" -o "ProxyCommand=${DEPLOY_PROXY_COMMAND}")
+ssh_cmd_tty() { ssh -tt "${SSH_OPTS[@]}" "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}" "$@"; }
+ssh_cmd_pipe() { ssh -T "${SSH_OPTS[@]}" "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}" "$@"; }
+
+if [[ "${DEPLOY_USE_SUDO}" == "1" ]]; then
+  [[ "${DEPLOY_SUDO_NON_INTERACTIVE}" == "1" ]] && SUDO_CMD="sudo -n" || SUDO_CMD="sudo"
+else
+  SUDO_CMD=""
+fi
+
+echo "==> Uploading frontend payload"
+tar -C "${WEB_DIR}" -cf - . | ssh_cmd_pipe "set -euo pipefail; mkdir -p '${REMOTE_STAGING_DIR}'; rm -rf '${REMOTE_STAGING_DIR}'/*; tar -xf - -C '${REMOTE_STAGING_DIR}'"
+
+echo "==> Activating frontend release"
+ssh_cmd_tty "set -euo pipefail; ${SUDO_CMD} mkdir -p '${REMOTE_RELEASES_DIR}' '${REMOTE_RELEASE_DIR}'; ${SUDO_CMD} rsync -a --delete '${REMOTE_STAGING_DIR}/' '${REMOTE_RELEASE_DIR}/'; ${SUDO_CMD} ln -sfn '${REMOTE_RELEASE_DIR}' '${REMOTE_CURRENT_DIR}'; rm -rf '${REMOTE_STAGING_DIR}'"
+
+echo "==> Frontend deployment complete"
+echo "    Host: ${DEPLOY_SSH_HOST}"
+echo "    Release: ${REMOTE_RELEASE_DIR}"
+echo "    Current symlink: ${REMOTE_CURRENT_DIR}"

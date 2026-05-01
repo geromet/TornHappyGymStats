@@ -1,4 +1,4 @@
-const API_BASE = "https://www.geromet.com";
+const API_BASE = "";
 const DATA_BASE = "./data/surfaces";
 
 const el = {
@@ -19,7 +19,7 @@ async function runImportAndRefresh() {
 
   try {
     setStatus("Starting import…");
-    await postJson("/v1/import", { apiKey, fresh: false });
+    await postJson("/api/v1/torn/import-jobs", { apiKey, fresh: false });
 
     setStatus("Import started. Waiting for cache refresh…");
     await delay(4000);
