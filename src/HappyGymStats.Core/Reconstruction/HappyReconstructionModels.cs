@@ -9,6 +9,27 @@ namespace HappyGymStats.Core.Reconstruction;
 /// </remarks>
 public static class HappyReconstructionModels
 {
+    public static class ModifierProvenanceScopes
+    {
+        public const string Personal = "personal";
+        public const string Faction = "faction";
+        public const string Company = "company";
+    }
+
+    public static class ModifierProvenanceStatuses
+    {
+        public const string Verified = "verified";
+        public const string Unresolved = "unresolved";
+        public const string Unavailable = "unavailable";
+    }
+
+    public static class ModifierProvenanceReasonCodes
+    {
+        public const string SourceLog = "source-log";
+        public const string MissingFactionRecord = "missing-faction-record";
+        public const string MissingCompanyRecord = "missing-company-record";
+        public const string CompanyPayloadMalformed = "company-payload-malformed";
+    }
     /// <summary>
     /// A typed event extracted from a raw user log record.
     /// </summary>
@@ -97,6 +118,22 @@ public static class HappyReconstructionModels
         int? HappyUsed,
         int? MaxHappyAtTimeUtc,
         bool ClampedToMax);
+
+    /// <summary>
+    /// Core-side reconstruction provenance output for one derived train row.
+    /// This shape is consumed by persistence and confidence scoring in downstream slices.
+    /// </summary>
+    public sealed record ModifierProvenanceRecord(
+        string DerivedGymTrainLogId,
+        string Scope,
+        string? SubjectId,
+        string? FactionId,
+        string? CompanyId,
+        DateTimeOffset ValidFromUtc,
+        DateTimeOffset? ValidToUtc,
+        string VerificationStatus,
+        string VerificationReasonCode,
+        string? VerificationDetails);
 
     /// <summary>
     /// High-level reconstruction stats suitable for a UI summary panel.

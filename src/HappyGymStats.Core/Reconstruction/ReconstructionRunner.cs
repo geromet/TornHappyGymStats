@@ -24,6 +24,7 @@ public sealed class ReconstructionRunner
         string? ErrorMessage,
         string DerivedOutputPath,
         IReadOnlyList<DerivedGymTrain> DerivedGymTrains,
+        IReadOnlyList<ModifierProvenanceRecord> ModifierProvenance,
         ReconstructionStats? Stats,
         DateTimeOffset AnchorTimeUtc);
 
@@ -79,6 +80,7 @@ public sealed class ReconstructionRunner
                     ErrorMessage: read.ErrorMessage,
                     DerivedOutputPath: _paths.DerivedGymTrainsJsonlPath,
                     DerivedGymTrains: Array.Empty<DerivedGymTrain>(),
+                    ModifierProvenance: Array.Empty<ModifierProvenanceRecord>(),
                     Stats: null,
                     AnchorTimeUtc: anchorTimeUtc);
             }
@@ -112,6 +114,7 @@ public sealed class ReconstructionRunner
                 ErrorMessage: writeTrains.ErrorMessage,
                 DerivedOutputPath: _paths.DerivedGymTrainsJsonlPath,
                 DerivedGymTrains: reconstructed.DerivedGymTrains,
+                ModifierProvenance: Array.Empty<ModifierProvenanceRecord>(),
                 Stats: null,
                 AnchorTimeUtc: anchorTimeUtc);
         }
@@ -124,6 +127,7 @@ public sealed class ReconstructionRunner
                 ErrorMessage: writeEvents.ErrorMessage,
                 DerivedOutputPath: _paths.DerivedGymTrainsJsonlPath,
                 DerivedGymTrains: reconstructed.DerivedGymTrains,
+                ModifierProvenance: Array.Empty<ModifierProvenanceRecord>(),
                 Stats: null,
                 AnchorTimeUtc: anchorTimeUtc);
         }
@@ -151,6 +155,7 @@ public sealed class ReconstructionRunner
             ErrorMessage: null,
             DerivedOutputPath: _paths.DerivedGymTrainsJsonlPath,
             DerivedGymTrains: reconstructed.DerivedGymTrains,
+            ModifierProvenance: Array.Empty<ModifierProvenanceRecord>(),
             Stats: stats,
             AnchorTimeUtc: anchorTimeUtc);
     }

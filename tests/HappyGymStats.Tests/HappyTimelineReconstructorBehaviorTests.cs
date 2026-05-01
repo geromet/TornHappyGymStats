@@ -57,6 +57,17 @@ public sealed class HappyTimelineReconstructorBehaviorTests
         Assert.Equal(1150, train.HappyAfterTrain);
     }
 
+    [Fact]
+    public void Provenance_reason_codes_for_unresolved_dependencies_are_deterministic()
+    {
+        Assert.Equal("missing-faction-record", ModifierProvenanceReasonCodes.MissingFactionRecord);
+        Assert.Equal("missing-company-record", ModifierProvenanceReasonCodes.MissingCompanyRecord);
+
+        Assert.NotEqual(
+            ModifierProvenanceReasonCodes.MissingFactionRecord,
+            ModifierProvenanceReasonCodes.MissingCompanyRecord);
+    }
+
     private static DateTimeOffset Utc(int year, int month, int day, int hour, int minute, int second)
         => new(year, month, day, hour, minute, second, TimeSpan.Zero);
 }
