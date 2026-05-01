@@ -31,7 +31,8 @@ builder.Services.AddSingleton(sp =>
     new ImportService(
         sp.GetRequiredService<IServiceScopeFactory>(),
         databasePath,
-        sp.GetRequiredService<SurfacesCacheWriter>()));
+        sp.GetRequiredService<SurfacesCacheWriter>(),
+        sp.GetRequiredService<ILogger<ImportService>>()));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ImportService>());
 
 var app = builder.Build();
