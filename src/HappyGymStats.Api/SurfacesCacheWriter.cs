@@ -42,7 +42,27 @@ public sealed class SurfacesCacheWriter
                 x.HappyAfterEvent ?? 0))
             .ToListAsync(ct);
 
-        var surfaces = SurfaceSeriesBuilder.Build(rawRows, derivedByLogId, eventRows);
+        var provenanceRows = await db.ModifierProvenance.AsNoTracking()
+            .Select(x => new
+            {
+                x.DerivedGymTrainLogId,
+                x.Scope,
+                x.VerificationStatus,
+                x.VerificationReasonCode
+            })
+            .ToListAsync(ct);
+
+        var provenanceByLogId = provenanceRows
+            .GroupBy(x => x.DerivedGymTrainLogId, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<SurfaceSeriesBuilder.ModifierProvenance>)g
+                    .OrderBy(x => x.Scope, StringComparer.Ordinal)
+                    .Select(x => new SurfaceSeriesBuilder.ModifierProvenance(x.Scope, x.VerificationStatus, x.VerificationReasonCode))
+                    .ToList(),
+                StringComparer.Ordinal);
+
+        var surfaces = SurfaceSeriesBuilder.Build(rawRows, derivedByLogId, eventRows, provenanceByLogId);
 
         var payload = new
         {
@@ -56,7 +76,9 @@ public sealed class SurfacesCacheWriter
                     x = surfaces.GymX,
                     y = surfaces.GymY,
                     z = surfaces.GymZ,
-                    text = surfaces.GymText
+                    text = surfaces.GymText,
+                    confidence = surfaces.GymConfidence,
+                    confidenceReasons = surfaces.GymConfidenceReasons
                 },
                 eventsCloud = new
                 {
