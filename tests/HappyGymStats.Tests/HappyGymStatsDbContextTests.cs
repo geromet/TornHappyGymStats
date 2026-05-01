@@ -32,6 +32,24 @@ public sealed class HappyGymStatsDbContextTests
         Assert.Contains("DerivedGymTrains", tableNames);
         Assert.Contains("DerivedHappyEvents", tableNames);
         Assert.Contains("ModifierProvenance", tableNames);
+
+        var provenanceColumns = await db.Database
+            .SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('ModifierProvenance') ORDER BY name")
+            .ToListAsync();
+
+        Assert.Contains("Scope", provenanceColumns);
+        Assert.Contains("VerificationStatus", provenanceColumns);
+        Assert.Contains("VerificationReasonCode", provenanceColumns);
+        Assert.Contains("ValidFromUtc", provenanceColumns);
+        Assert.Contains("ValidToUtc", provenanceColumns);
+
+        var provenanceIndexes = await db.Database
+            .SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'index' AND tbl_name = 'ModifierProvenance' ORDER BY name")
+            .ToListAsync();
+
+        Assert.Contains("IX_ModifierProvenance_DerivedGymTrainLogId_Scope", provenanceIndexes);
+        Assert.Contains("IX_ModifierProvenance_Scope_ValidFromUtc_ValidToUtc", provenanceIndexes);
+        Assert.Contains("IX_ModifierProvenance_VerificationStatus", provenanceIndexes);
     }
 
     [Fact]
