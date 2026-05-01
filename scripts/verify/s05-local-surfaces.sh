@@ -57,7 +57,7 @@ echo "==> Starting local API for S05 verification"
 ASPNETCORE_URLS="${API_URL}" \
 HAPPYGYMSTATS_SURFACES_CACHE_DIR="${SURFACES_DIR}" \
 DOTNET_ENVIRONMENT="Development" \
-dotnet run --project "${API_PROJECT}" >"${api_log}" 2>&1 &
+dotnet run --no-launch-profile --project "${API_PROJECT}" >"${api_log}" 2>&1 &
 api_pid=$!
 
 echo "==> Waiting for API health (${HEALTH_URL})"
@@ -123,8 +123,8 @@ with meta_path.open("r", encoding="utf-8") as f:
 with latest_path.open("r", encoding="utf-8") as f:
     latest = json.load(f)
 
-if "version" not in meta:
-    print("ERROR: meta.json missing required key: version", file=sys.stderr)
+if "version" not in meta and "currentVersion" not in meta:
+    print("ERROR: meta.json missing required key: version/currentVersion", file=sys.stderr)
     raise SystemExit(8)
 if "version" not in latest:
     print("ERROR: latest.json missing required key: version", file=sys.stderr)

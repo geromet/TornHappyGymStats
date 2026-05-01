@@ -247,6 +247,20 @@ public sealed class DbPipelineIntegrationTests
         Assert.Equal(new[] { "source-log" }, reasons[0]);
         Assert.Equal(new[] { "missing-faction-record" }, reasons[1]);
 
+        var warnings = gymCloud.GetProperty("provenanceWarnings").EnumerateArray().ToArray();
+        Assert.Single(warnings);
+        Assert.Equal("log-unresolved", warnings[0].GetProperty("LogId").GetString());
+        Assert.Equal("faction", warnings[0].GetProperty("Scope").GetString());
+        Assert.Equal("unresolved", warnings[0].GetProperty("VerificationStatus").GetString());
+        Assert.Equal("missing-faction-record", warnings[0].GetProperty("ReasonCode").GetString());
+        Assert.Equal("/factions/unknown-faction", warnings[0].GetProperty("LinkTarget").GetString());
+        Assert.Equal(1, warnings[0].GetProperty("RowCount").GetInt32());
+
+        var warningDiagnostics = json.RootElement.GetProperty("meta").GetProperty("provenanceWarningsDiagnostics");
+        Assert.Equal(1, warningDiagnostics.GetProperty("warningCount").GetInt32());
+        Assert.Equal(0, warningDiagnostics.GetProperty("skippedMalformedRowCount").GetInt32());
+        Assert.False(warningDiagnostics.GetProperty("queryFailed").GetBoolean());
+
         Assert.True(gymCloud.TryGetProperty("x", out _));
         Assert.True(gymCloud.TryGetProperty("y", out _));
         Assert.True(gymCloud.TryGetProperty("z", out _));
@@ -309,6 +323,84 @@ public sealed class DbPipelineIntegrationTests
             .ToArray();
 
         Assert.Equal(new[] { "missing-provenance-record" }, reasons);
+        Assert.Empty(gymCloud.GetProperty("provenanceWarnings").EnumerateArray());
+
+        var warningDiagnostics = json.RootElement.GetProperty("meta").GetProperty("provenanceWarningsDiagnostics");
+        Assert.Equal(0, warningDiagnostics.GetProperty("warningCount").GetInt32());
+        Assert.Equal(0, warningDiagnostics.GetProperty("skippedMalformedRowCount").GetInt32());
+    }
+
+    [Fact]
+    public async Task Surfaces_cache_payload_skips_malformed_provenance_rows_and_keeps_warning_order_deterministic()
+    {
+        var tempDir = CreateTempDirectory();
+        var dbPath = SqlitePaths.ResolveDatabasePath(tempDir);
+
+        var dbOptions = new DbContextOptionsBuilder<HappyGymStatsDbContext>()
+            .UseSqlite($"Data Source={dbPath}")
+            .Options;
+
+        await using (var db = new HappyGymStatsDbContext(dbOptions))
+        {
+            await db.Database.EnsureCreatedAsync();
+
+            db.RawUserLogs.Add(new RawUserLogEntity
+            {
+                LogId = "log-a",
+                OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
+                RawJson = """{"details":{"category":"Gym"},"data":{"energy_used":5,"strength_before":500,"strength_increased":5}}"""
+            });
+
+            db.DerivedGymTrains.Add(new DerivedGymTrainEntity
+            {
+                LogId = "log-a",
+                OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
+                HappyBeforeTrain = 2500
+            });
+
+            await db.SaveChangesAsync();
+
+            await db.Database.ExecuteSqlRawAsync("PRAGMA ignore_check_constraints = ON;");
+            await db.Database.ExecuteSqlRawAsync(
+                "INSERT INTO ModifierProvenance (DerivedGymTrainLogId, Scope, SubjectId, FactionId, CompanyId, ValidFromUtc, VerificationStatus, VerificationReasonCode) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7});",
+                "log-a", "faction", null, "f1", null, DateTimeOffset.Parse("2026-01-01T00:00:00Z"), "unresolved", "missing-faction-record");
+            await db.Database.ExecuteSqlRawAsync(
+                "INSERT INTO ModifierProvenance (DerivedGymTrainLogId, Scope, SubjectId, FactionId, CompanyId, ValidFromUtc, VerificationStatus, VerificationReasonCode) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7});",
+                "log-a", "invalid-scope", null, null, null, DateTimeOffset.Parse("2026-01-01T00:00:00Z"), "unresolved", "bad-scope");
+            await db.Database.ExecuteSqlRawAsync("PRAGMA ignore_check_constraints = OFF;");
+        }
+
+        var services = new ServiceCollection();
+        services.AddDbContext<HappyGymStatsDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
+        await using var provider = services.BuildServiceProvider();
+
+        var cacheDir = Path.Combine(tempDir, "surfaces");
+        var writer = new SurfacesCacheWriter(provider.GetRequiredService<IServiceScopeFactory>(), cacheDir);
+        await writer.WriteLatestAsync("test-v1", DateTimeOffset.UtcNow, CancellationToken.None);
+
+        var latestPath = Path.Combine(cacheDir, "latest.json");
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(latestPath));
+
+        var warnings = json.RootElement.GetProperty("series").GetProperty("gymCloud").GetProperty("provenanceWarnings")
+            .EnumerateArray()
+            .Select(w => new
+            {
+                LogId = w.GetProperty("LogId").GetString(),
+                Scope = w.GetProperty("Scope").GetString(),
+                Status = w.GetProperty("VerificationStatus").GetString(),
+                Reason = w.GetProperty("ReasonCode").GetString()
+            })
+            .ToArray();
+
+        Assert.Single(warnings);
+        Assert.Equal("log-a", warnings[0].LogId);
+        Assert.Equal("faction", warnings[0].Scope);
+        Assert.Equal("unresolved", warnings[0].Status);
+        Assert.Equal("missing-faction-record", warnings[0].Reason);
+
+        var warningDiagnostics = json.RootElement.GetProperty("meta").GetProperty("provenanceWarningsDiagnostics");
+        Assert.Equal(1, warningDiagnostics.GetProperty("warningCount").GetInt32());
+        Assert.Equal(1, warningDiagnostics.GetProperty("skippedMalformedRowCount").GetInt32());
     }
 
     private static string CreateTempDirectory()

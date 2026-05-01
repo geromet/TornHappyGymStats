@@ -2,18 +2,37 @@ using System.Text.Json;
 using HappyGymStats.Core.Reconstruction;
 using HappyGymStats.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace HappyGymStats.Api;
 
 public sealed class SurfacesCacheWriter
 {
+    private const int MaxWarningsPerLog = 20;
+
+    private static readonly HashSet<string> KnownScopes = new(StringComparer.Ordinal)
+    {
+        "personal",
+        "faction",
+        "company"
+    };
+
+    private static readonly HashSet<string> KnownStatuses = new(StringComparer.Ordinal)
+    {
+        "verified",
+        "unresolved",
+        "unavailable"
+    };
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly string _cacheDirectory;
+    private readonly ILogger<SurfacesCacheWriter>? _logger;
 
-    public SurfacesCacheWriter(IServiceScopeFactory scopeFactory, string cacheDirectory)
+    public SurfacesCacheWriter(IServiceScopeFactory scopeFactory, string cacheDirectory, ILogger<SurfacesCacheWriter>? logger = null)
     {
         _scopeFactory = scopeFactory;
         _cacheDirectory = cacheDirectory;
+        _logger = logger;
     }
 
     public async Task WriteLatestAsync(string version, DateTimeOffset syncedAtUtc, CancellationToken ct)
@@ -48,7 +67,10 @@ public sealed class SurfacesCacheWriter
                 x.DerivedGymTrainLogId,
                 x.Scope,
                 x.VerificationStatus,
-                x.VerificationReasonCode
+                x.VerificationReasonCode,
+                x.SubjectId,
+                x.FactionId,
+                x.CompanyId
             })
             .ToListAsync(ct);
 
@@ -63,6 +85,7 @@ public sealed class SurfacesCacheWriter
                 StringComparer.Ordinal);
 
         var surfaces = SurfaceSeriesBuilder.Build(rawRows, derivedByLogId, eventRows, provenanceByLogId);
+        var warningProjection = ProjectProvenanceWarnings(provenanceRows);
 
         var payload = new
         {
@@ -78,7 +101,8 @@ public sealed class SurfacesCacheWriter
                     z = surfaces.GymZ,
                     text = surfaces.GymText,
                     confidence = surfaces.GymConfidence,
-                    confidenceReasons = surfaces.GymConfidenceReasons
+                    confidenceReasons = surfaces.GymConfidenceReasons,
+                    provenanceWarnings = warningProjection.Warnings
                 },
                 eventsCloud = new
                 {
@@ -92,7 +116,14 @@ public sealed class SurfacesCacheWriter
             {
                 gymPointCount = surfaces.GymX.Length,
                 eventPointCount = surfaces.EventX.Length,
-                recordCount = surfaces.GymX.Length + surfaces.EventX.Length
+                recordCount = surfaces.GymX.Length + surfaces.EventX.Length,
+                provenanceWarningsDiagnostics = new
+                {
+                    warningCount = warningProjection.Warnings.Count,
+                    skippedMalformedRowCount = warningProjection.SkippedMalformedRowCount,
+                    queryFailed = false,
+                    reason = "ok"
+                }
             }
         };
 
@@ -118,4 +149,67 @@ public sealed class SurfacesCacheWriter
         File.Move(latestTemp, latestPath, overwrite: true);
         File.Move(metaTemp, metaPath, overwrite: true);
     }
+
+    private WarningProjection ProjectProvenanceWarnings(IEnumerable<dynamic> provenanceRows)
+    {
+        var skippedMalformedRows = 0;
+
+        var grouped = provenanceRows
+            .Where(row =>
+            {
+                var valid = KnownScopes.Contains((string)row.Scope) && KnownStatuses.Contains((string)row.VerificationStatus);
+                if (!valid)
+                {
+                    skippedMalformedRows++;
+                }
+
+                return valid;
+            })
+            .Where(row => string.Equals((string)row.VerificationStatus, "unresolved", StringComparison.Ordinal)
+                || string.Equals((string)row.VerificationStatus, "unavailable", StringComparison.Ordinal))
+            .GroupBy(
+                row => new
+                {
+                    LogId = (string)row.DerivedGymTrainLogId,
+                    Scope = (string)row.Scope,
+                    Status = (string)row.VerificationStatus,
+                    Reason = (string)row.VerificationReasonCode,
+                    LinkTarget = BuildLinkTarget((string)row.Scope, (string?)row.SubjectId, (string?)row.FactionId, (string?)row.CompanyId)
+                })
+            .Select(g => new ProvenanceWarning(
+                LogId: g.Key.LogId,
+                Scope: g.Key.Scope,
+                VerificationStatus: g.Key.Status,
+                ReasonCode: g.Key.Reason,
+                LinkTarget: g.Key.LinkTarget,
+                RowCount: g.Count()))
+            .OrderBy(x => x.LogId, StringComparer.Ordinal)
+            .ThenBy(x => x.Scope, StringComparer.Ordinal)
+            .ThenBy(x => x.ReasonCode, StringComparer.Ordinal)
+            .ToList();
+
+        var bounded = grouped
+            .GroupBy(x => x.LogId, StringComparer.Ordinal)
+            .SelectMany(g => g.Take(MaxWarningsPerLog))
+            .ToList();
+
+        if (skippedMalformedRows > 0)
+        {
+            _logger?.LogWarning("Skipped malformed modifier provenance rows while building warning projection. count={Count}", skippedMalformedRows);
+        }
+
+        return new WarningProjection(bounded, skippedMalformedRows);
+    }
+
+    private static string BuildLinkTarget(string scope, string? subjectId, string? factionId, string? companyId)
+        => scope switch
+        {
+            "personal" when !string.IsNullOrWhiteSpace(subjectId) => $"/profiles/{subjectId}",
+            "faction" when !string.IsNullOrWhiteSpace(factionId) => $"/factions/{factionId}",
+            "company" when !string.IsNullOrWhiteSpace(companyId) => $"/companies/{companyId}",
+            _ => "/provenance/unresolved"
+        };
+
+    private sealed record ProvenanceWarning(string LogId, string Scope, string VerificationStatus, string ReasonCode, string LinkTarget, int RowCount);
+    private sealed record WarningProjection(IReadOnlyList<ProvenanceWarning> Warnings, int SkippedMalformedRowCount);
 }
