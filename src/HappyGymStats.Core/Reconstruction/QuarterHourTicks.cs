@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace HappyGymStats.Reconstruction;
+namespace HappyGymStats.Core.Reconstruction;
 
 /// <summary>
 /// Helpers for counting Torn "happy regeneration" quarter-hour ticks.

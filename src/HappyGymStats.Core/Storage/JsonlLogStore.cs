@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Json;
 
-namespace HappyGymStats.Storage;
+namespace HappyGymStats.Core.Storage;
 
 public static class JsonlLogStore
 {
@@ -20,7 +20,6 @@ public static class JsonlLogStore
     {
         Directory.CreateDirectory(Path.GetDirectoryName(jsonlPath) ?? ".");
 
-        // Append-only.
         using var fs = new FileStream(jsonlPath, FileMode.Append, FileAccess.Write, FileShare.Read);
         using var writer = new StreamWriter(fs, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
@@ -79,7 +78,6 @@ public static class JsonlLogStore
 
                 ids.Add(id);
 
-                // Best-effort summary extraction.
                 lastId = id;
                 lastTs = TryExtractTimestamp(root);
                 lastTitle = TryExtractString(root, "title") ?? TryExtractNestedString(root, "details", "title");
@@ -99,8 +97,6 @@ public static class JsonlLogStore
                 {
                     QuarantineMalformedLineText(quarantineDir, jsonlPath, lineNumber, line, ex);
                 }
-
-                // Continue scanning.
             }
         }
 
@@ -146,14 +142,8 @@ public static class JsonlLogStore
         {
             if (ts.ValueKind == JsonValueKind.Number && ts.TryGetInt64(out var unixSeconds))
             {
-                try
-                {
-                    return DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
-                }
-                catch
-                {
-                    return null;
-                }
+                try { return DateTimeOffset.FromUnixTimeSeconds(unixSeconds); }
+                catch { return null; }
             }
 
             if (ts.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(ts.GetString(), out var dto))
@@ -200,9 +190,6 @@ public static class JsonlLogStore
         return false;
     }
 
-    private static string QuarantineFileBaseName(string jsonlPath)
-        => Path.GetFileName(jsonlPath);
-
     private static void QuarantineMalformedLineText(
         string quarantineDir,
         string jsonlPath,
@@ -210,7 +197,7 @@ public static class JsonlLogStore
         string rawLine,
         Exception ex)
     {
-        var baseName = QuarantineFileBaseName(jsonlPath);
+        var baseName = Path.GetFileName(jsonlPath);
         var quarantinePath = Path.Combine(quarantineDir, $"{baseName}.line-{lineNumber:00000000}.malformed.txt");
 
         var payload = new StringBuilder();
@@ -225,7 +212,7 @@ public static class JsonlLogStore
 
     private static void QuarantinePartialFinalLineBytes(string jsonlPath, string quarantineDir, int lineNumber, Exception ex)
     {
-        var baseName = QuarantineFileBaseName(jsonlPath);
+        var baseName = Path.GetFileName(jsonlPath);
         var quarantineBytesPath = Path.Combine(quarantineDir, $"{baseName}.line-{lineNumber:00000000}.partial-final.bin");
         var quarantineMetaPath = Path.Combine(quarantineDir, $"{baseName}.line-{lineNumber:00000000}.partial-final.txt");
 

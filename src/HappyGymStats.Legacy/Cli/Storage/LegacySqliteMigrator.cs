@@ -1,24 +1,15 @@
+using HappyGymStats.Core.Reconstruction;
+using HappyGymStats.Core.Storage;
+using HappyGymStats.Core.Storage.Models;
 using HappyGymStats.Data;
 using HappyGymStats.Data.Entities;
-using HappyGymStats.Export;
-using HappyGymStats.Reconstruction;
-using HappyGymStats.Storage.Models;
+using HappyGymStats.Legacy.Cli.Export;
 using Microsoft.EntityFrameworkCore;
-using static HappyGymStats.Reconstruction.HappyReconstructionModels;
 
-namespace HappyGymStats.Storage;
+namespace HappyGymStats.Legacy.Cli.Storage;
 
 public static class LegacySqliteMigrator
 {
-    public sealed record RunResult(
-        bool Success,
-        string? ErrorMessage,
-        string DatabasePath,
-        int RawLogsImported,
-        int DerivedGymTrainsImported,
-        int DerivedHappyEventsImported,
-        bool CheckpointImported);
-
     public static async Task<RunResult> RunAsync(
         AppPaths paths,
         string databasePath,
@@ -38,10 +29,7 @@ public static class LegacySqliteMigrator
             await db.Database.MigrateAsync(ct);
 
             var rawRead = JsonlLogReader.Read(paths.LogsJsonlPath);
-            if (!rawRead.Success)
-            {
-                return new RunResult(false, rawRead.ErrorMessage, databasePath, 0, 0, 0, false);
-            }
+            if (!rawRead.Success) return new RunResult(false, rawRead.ErrorMessage, databasePath, 0, 0, 0, false);
 
             var derivedTrainRead = DerivedGymTrainReader.Read(paths.DerivedGymTrainsJsonlPath);
             if (derivedTrainRead.ErrorMessage is not null)
@@ -68,7 +56,7 @@ public static class LegacySqliteMigrator
                     OccurredAtUtc = record.OccurredAtUtc,
                     Title = record.Title,
                     Category = record.Category,
-                    RawJson = record.RawJson,
+                    RawJson = record.RawJson
                 })
                 .ToList();
 
@@ -85,7 +73,7 @@ public static class LegacySqliteMigrator
                     RegenTicksApplied = record.RegenTicksApplied,
                     RegenHappyGained = record.RegenHappyGained,
                     MaxHappyAtTimeUtc = record.MaxHappyAtTimeUtc,
-                    ClampedToMax = record.ClampedToMax,
+                    ClampedToMax = record.ClampedToMax
                 })
                 .ToList();
 
@@ -105,28 +93,25 @@ public static class LegacySqliteMigrator
                     HappyUsed = record.HappyUsed,
                     MaxHappyAtTimeUtc = record.MaxHappyAtTimeUtc,
                     ClampedToMax = record.ClampedToMax,
-                    Note = null,
+                    Note = null
                 })
                 .ToList();
 
             db.DerivedHappyEvents.AddRange(derivedHappyRows);
 
-            if (checkpoint is not null)
-            {
-                db.ImportCheckpoints.Add(MapCheckpoint(checkpoint));
-            }
+            if (checkpoint is not null) db.ImportCheckpoints.Add(MapCheckpoint(checkpoint));
 
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
 
             return new RunResult(
-                Success: true,
-                ErrorMessage: null,
-                DatabasePath: databasePath,
-                RawLogsImported: rawRows.Count,
-                DerivedGymTrainsImported: derivedTrainRows.Count,
-                DerivedHappyEventsImported: derivedHappyRows.Count,
-                CheckpointImported: checkpoint is not null);
+                true,
+                null,
+                databasePath,
+                rawRows.Count,
+                derivedTrainRows.Count,
+                derivedHappyRows.Count,
+                checkpoint is not null);
         }
         catch (Exception ex)
         {
@@ -135,7 +120,8 @@ public static class LegacySqliteMigrator
     }
 
     private static ImportCheckpointEntity MapCheckpoint(Checkpoint checkpoint)
-        => new()
+    {
+        return new ImportCheckpointEntity
         {
             Name = "default",
             NextUrl = checkpoint.NextUrl,
@@ -149,6 +135,16 @@ public static class LegacySqliteMigrator
             LastRunCompletedAt = checkpoint.LastRunCompletedAt,
             LastRunOutcome = checkpoint.LastRunOutcome,
             LastErrorMessage = checkpoint.LastErrorMessage,
-            LastErrorAt = checkpoint.LastErrorAt,
+            LastErrorAt = checkpoint.LastErrorAt
         };
+    }
+
+    public sealed record RunResult(
+        bool Success,
+        string? ErrorMessage,
+        string DatabasePath,
+        int RawLogsImported,
+        int DerivedGymTrainsImported,
+        int DerivedHappyEventsImported,
+        bool CheckpointImported);
 }

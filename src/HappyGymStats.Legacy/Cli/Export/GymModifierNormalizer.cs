@@ -1,10 +1,42 @@
 using System.Globalization;
 using System.Text.Json;
 
-namespace HappyGymStats.Export;
+namespace HappyGymStats.Legacy.Cli.Export;
 
 internal static class GymModifierNormalizer
 {
+    public static void ApplyNormalization(Dictionary<string, string> flat, GymModifierTable? table)
+    {
+        if (table is null)
+            return;
+
+        if (!flat.TryGetValue("data.gym", out var gymText) ||
+            !int.TryParse(gymText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var gymId))
+            return;
+
+        NormalizeStat(flat, table, gymId, "strength");
+        NormalizeStat(flat, table, gymId, "defense");
+        NormalizeStat(flat, table, gymId, "speed");
+        NormalizeStat(flat, table, gymId, "dexterity");
+    }
+
+    private static void NormalizeStat(Dictionary<string, string> flat, GymModifierTable table, int gymId, string stat)
+    {
+        var rawKey = $"data.{stat}_increased";
+        if (!flat.TryGetValue(rawKey, out var rawText) || string.IsNullOrWhiteSpace(rawText))
+            return;
+
+        if (!double.TryParse(rawText, NumberStyles.Float, CultureInfo.InvariantCulture, out var raw))
+            return;
+
+        if (!table.TryGetMultiplier(gymId, stat, out var mult) || mult <= 0)
+            return;
+
+        var normalized = raw / mult;
+        var outKey = $"data.{stat}_increased_normalized";
+        flat[outKey] = normalized.ToString("0.###############", CultureInfo.InvariantCulture);
+    }
+
     internal sealed record GymModifiers(
         double Strength,
         double Defense,
@@ -30,7 +62,7 @@ internal static class GymModifierNormalizer
             var candidates = new[]
             {
                 Path.Combine(Directory.GetCurrentDirectory(), "gyms.json"),
-                Path.Combine(AppContext.BaseDirectory, "gyms.json"),
+                Path.Combine(AppContext.BaseDirectory, "gyms.json")
             };
 
             foreach (var path in candidates)
@@ -87,10 +119,10 @@ internal static class GymModifierNormalizer
                 }
 
                 map[gymId] = new GymModifiers(
-                    Strength: ReadFactor("strength"),
-                    Defense: ReadFactor("defense"),
-                    Speed: ReadFactor("speed"),
-                    Dexterity: ReadFactor("dexterity")
+                    ReadFactor("strength"),
+                    ReadFactor("defense"),
+                    ReadFactor("speed"),
+                    ReadFactor("dexterity")
                 );
             }
 
@@ -115,39 +147,5 @@ internal static class GymModifierNormalizer
 
             return multiplier > 0;
         }
-    }
-
-    public static void ApplyNormalization(Dictionary<string, string> flat, GymModifierTable? table)
-    {
-        if (table is null)
-            return;
-
-        if (!flat.TryGetValue("data.gym", out var gymText) ||
-            !int.TryParse(gymText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var gymId))
-        {
-            return;
-        }
-
-        NormalizeStat(flat, table, gymId, "strength");
-        NormalizeStat(flat, table, gymId, "defense");
-        NormalizeStat(flat, table, gymId, "speed");
-        NormalizeStat(flat, table, gymId, "dexterity");
-    }
-
-    private static void NormalizeStat(Dictionary<string, string> flat, GymModifierTable table, int gymId, string stat)
-    {
-        var rawKey = $"data.{stat}_increased";
-        if (!flat.TryGetValue(rawKey, out var rawText) || string.IsNullOrWhiteSpace(rawText))
-            return;
-
-        if (!double.TryParse(rawText, NumberStyles.Float, CultureInfo.InvariantCulture, out var raw))
-            return;
-
-        if (!table.TryGetMultiplier(gymId, stat, out var mult) || mult <= 0)
-            return;
-
-        var normalized = raw / mult;
-        var outKey = $"data.{stat}_increased_normalized";
-        flat[outKey] = normalized.ToString("0.###############", CultureInfo.InvariantCulture);
     }
 }

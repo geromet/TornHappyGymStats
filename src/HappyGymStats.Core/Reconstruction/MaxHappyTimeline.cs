@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using static HappyGymStats.Reconstruction.HappyReconstructionModels;
+using static HappyGymStats.Core.Reconstruction.HappyReconstructionModels;
 
-namespace HappyGymStats.Reconstruction;
+namespace HappyGymStats.Core.Reconstruction;
 
 /// <summary>
 /// Queryable max-happy timeline built from extracted <see cref="MaxHappyEvent"/> events.

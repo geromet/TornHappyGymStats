@@ -1,6 +1,6 @@
 using System.Text.Json;
+using HappyGymStats.Core.Reconstruction;
 using HappyGymStats.Data;
-using HappyGymStats.Reconstruction;
 using Microsoft.EntityFrameworkCore;
 
 namespace HappyGymStats.Api;
@@ -28,20 +28,18 @@ public sealed class SurfacesCacheWriter
         var derivedByLogId = derivedRows.ToDictionary(x => x.LogId, x => x);
 
         var rawRows = await db.RawUserLogs.AsNoTracking()
-            .Where(x => derivedByLogId.Keys.Contains(x.LogId))
             .OrderBy(x => x.OccurredAtUtc)
             .Select(x => new SurfaceSeriesBuilder.RawGymLog(x.LogId, x.OccurredAtUtc, x.RawJson))
             .ToListAsync(ct);
 
         var eventRows = await db.DerivedHappyEvents.AsNoTracking()
-            .Where(x => x.Delta != null && x.HappyBeforeEvent != null && x.HappyAfterEvent != null)
             .OrderBy(x => x.OccurredAtUtc)
             .Select(x => new SurfaceSeriesBuilder.DerivedHappyEvent(
                 x.OccurredAtUtc,
                 x.EventType,
-                x.HappyBeforeEvent!.Value,
-                x.Delta!.Value,
-                x.HappyAfterEvent!.Value))
+                x.HappyBeforeEvent ?? 0,
+                x.Delta ?? 0,
+                x.HappyAfterEvent ?? 0))
             .ToListAsync(ct);
 
         var surfaces = SurfaceSeriesBuilder.Build(rawRows, derivedByLogId, eventRows);

@@ -1,4 +1,4 @@
-namespace HappyGymStats.Reconstruction;
+namespace HappyGymStats.Core.Reconstruction;
 
 /// <summary>
 /// Shared record types used by happy reconstruction.

@@ -1,7 +1,7 @@
 using System.Text.Json;
-using HappyGymStats.Storage.Models;
+using HappyGymStats.Core.Storage.Models;
 
-namespace HappyGymStats.Storage;
+namespace HappyGymStats.Core.Storage;
 
 public static class CheckpointStore
 {
@@ -25,7 +25,6 @@ public static class CheckpointStore
         }
         catch
         {
-            // Status rendering should never crash the app.
             return null;
         }
     }
@@ -40,7 +39,6 @@ public static class CheckpointStore
 
         var json = JsonSerializer.Serialize(checkpoint, JsonOptions);
 
-        // Avoid partially overwriting checkpoint.json.
         var tmpPath = path + ".tmp";
         File.WriteAllText(tmpPath, json);
         File.Move(tmpPath, path, overwrite: true);

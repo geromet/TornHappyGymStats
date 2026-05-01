@@ -1,4 +1,4 @@
-namespace HappyGymStats.Torn.Models;
+namespace HappyGymStats.Core.Torn.Models;
 
 public sealed record UserLog(
     string Id,

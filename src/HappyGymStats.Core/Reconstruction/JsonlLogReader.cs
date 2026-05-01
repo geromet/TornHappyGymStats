@@ -1,15 +1,11 @@
 using System.Text;
 using System.Text.Json;
 
-namespace HappyGymStats.Reconstruction;
+namespace HappyGymStats.Core.Reconstruction;
 
 /// <summary>
 /// Streaming, read-only JSONL reader for Torn user logs.
 /// </summary>
-/// <remarks>
-/// This reader is tolerant and schema-flexible. It never truncates or repairs the input file.
-/// Malformed/blank lines are skipped and counted.
-/// </remarks>
 public static class JsonlLogReader
 {
     public sealed record LogRecord(
@@ -49,7 +45,6 @@ public static class JsonlLogReader
                 ErrorMessage: $"Log file not found: {jsonlPath}");
         }
 
-        // Fail fast on obvious file IO issues so callers can show a user-friendly error.
         try
         {
             using var _ = new FileStream(jsonlPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);

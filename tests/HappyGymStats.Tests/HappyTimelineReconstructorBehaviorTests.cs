@@ -1,6 +1,6 @@
-using HappyGymStats.Reconstruction;
+using HappyGymStats.Core.Reconstruction;
 using Xunit;
-using static HappyGymStats.Reconstruction.HappyReconstructionModels;
+using static HappyGymStats.Core.Reconstruction.HappyReconstructionModels;
 
 namespace HappyGymStats.Tests;
 

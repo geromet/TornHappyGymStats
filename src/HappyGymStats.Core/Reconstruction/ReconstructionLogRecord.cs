@@ -1,4 +1,4 @@
-namespace HappyGymStats.Reconstruction;
+namespace HappyGymStats.Core.Reconstruction;
 
 /// <summary>
 /// Storage-agnostic raw Torn log record consumed by reconstruction extraction.

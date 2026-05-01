@@ -1,10 +1,11 @@
 using System.Text.Json;
-namespace HappyGymStats.Reconstruction;
+
+namespace HappyGymStats.Core.Reconstruction;
 
 public static class SurfaceSeriesBuilder
 {
     public sealed record RawGymLog(string LogId, DateTimeOffset OccurredAtUtc, string RawJson);
-    public sealed record DerivedGym(string LogId, int HappyBeforeTrain);
+    public sealed record DerivedGym(string LogId, int? HappyBeforeTrain);
     public sealed record DerivedHappyEvent(DateTimeOffset OccurredAtUtc, string EventType, int HappyBeforeEvent, int Delta, int HappyAfterEvent);
 
     public sealed record SurfacePayload(
@@ -29,17 +30,16 @@ public static class SurfaceSeriesBuilder
 
         foreach (var row in raws)
         {
-            if (!derivedByLogId.TryGetValue(row.LogId, out var derived))
-                continue;
-
             if (!TryReadGymPoint(row.RawJson, out var statBefore, out var energyUsed, out var statIncreased, out var statType))
                 continue;
 
             if (energyUsed <= 0)
                 continue;
 
+            derivedByLogId.TryGetValue(row.LogId, out var derived);
+
             gymX.Add(statBefore);
-            gymY.Add(derived.HappyBeforeTrain);
+            gymY.Add(derived?.HappyBeforeTrain ?? 0);
             gymZ.Add(statIncreased / energyUsed);
             gymText.Add($"{statType} {row.OccurredAtUtc:O}");
         }

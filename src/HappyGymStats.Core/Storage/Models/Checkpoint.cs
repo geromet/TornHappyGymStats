@@ -1,4 +1,4 @@
-namespace HappyGymStats.Storage.Models;
+namespace HappyGymStats.Core.Storage.Models;
 
 /// <summary>
 /// Durable resume cursor for append-only log fetch.

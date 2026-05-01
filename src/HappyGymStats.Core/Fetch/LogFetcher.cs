@@ -1,13 +1,14 @@
 using System.Text.Json;
+using HappyGymStats.Core.Storage;
+using HappyGymStats.Core.Storage.Models;
+using HappyGymStats.Core.Torn;
+using HappyGymStats.Core.Torn.Models;
 using HappyGymStats.Data;
 using HappyGymStats.Data.Entities;
-using HappyGymStats.Storage;
-using HappyGymStats.Storage.Models;
-using HappyGymStats.Torn;
-using HappyGymStats.Torn.Models;
+using HappyGymStats.Data.Storage;
 using Microsoft.EntityFrameworkCore;
 
-namespace HappyGymStats.Fetch;
+namespace HappyGymStats.Core.Fetch;
 
 public enum FetchMode
 {
@@ -398,13 +399,7 @@ public sealed class LogFetcher
         if (unixSeconds <= 0)
             return null;
 
-        try
-        {
-            return DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
-        }
-        catch
-        {
-            return null;
-        }
+        try { return DateTimeOffset.FromUnixTimeSeconds(unixSeconds); }
+        catch { return null; }
     }
 }

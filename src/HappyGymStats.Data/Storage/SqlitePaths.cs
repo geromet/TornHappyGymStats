@@ -1,4 +1,4 @@
-namespace HappyGymStats.Storage;
+namespace HappyGymStats.Data.Storage;
 
 public static class SqlitePaths
 {

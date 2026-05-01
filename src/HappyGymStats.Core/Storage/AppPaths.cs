@@ -1,4 +1,4 @@
-namespace HappyGymStats.Storage;
+namespace HappyGymStats.Core.Storage;
 
 public sealed record AppPaths(
     string DataDirectory,
@@ -8,10 +8,8 @@ public sealed record AppPaths(
 {
     public string DerivedDirectory => Path.Combine(DataDirectory, "derived");
 
-    // Derived sidecar file for gym-train reconstruction output.
     public string DerivedGymTrainsJsonlPath => Path.Combine(DerivedDirectory, "derived-gymtrains.jsonl");
 
-    // Derived sidecar file containing per-event happy timeline (includes synthetic regen tick events).
     public string DerivedHappyEventsJsonlPath => Path.Combine(DerivedDirectory, "derived-happy-events.jsonl");
 
     public string ExportDirectory => Path.Combine(DataDirectory, "export");
@@ -24,7 +22,7 @@ public sealed record AppPaths(
 
     public static AppPaths Default(string appName = "HappyGymStats")
     {
-        var dataDir = HappyGymStats.Storage.DataDirectory.ResolveBasePath(appName);
+        var dataDir = Data.Storage.DataDirectory.ResolveBasePath(appName);
         var quarantineDir = Path.Combine(dataDir, "quarantine");
 
         return new AppPaths(
