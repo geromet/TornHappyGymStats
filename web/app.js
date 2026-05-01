@@ -19,7 +19,7 @@ async function runImportAndRefresh() {
 
   try {
     setStatus("Starting import…");
-    await postJson("/api/v1/torn/import-jobs", { apiKey, fresh: false });
+    await postJson("/api/v1/torn/import-jobs", { apiKey, fresh: true });
 
     setStatus("Import started. Waiting for cache refresh…");
     await delay(4000);
@@ -42,16 +42,31 @@ async function loadCachedSurfaces() {
     if (!dataRes.ok) throw new Error(`Failed to load latest.json (${dataRes.status}).`);
     const payload = await dataRes.json();
 
+    const gymCount = payload?.meta?.gymPointCount ?? payload?.series?.gymCloud?.x?.length ?? 0;
+    const eventCount = payload?.meta?.eventPointCount ?? payload?.series?.eventsCloud?.x?.length ?? 0;
+
     renderGymCloudFromSeries(payload.series.gymCloud);
     renderEventsCloudFromSeries(payload.series.eventsCloud);
 
-    setStatus(`Loaded cached dataset ${payload.version} (synced ${payload.syncedAtUtc}).`);
+    if (gymCount === 0 && eventCount === 0) {
+      setStatus(`Loaded dataset ${payload.version}, but no points were available yet. Import may still be running.`);
+    } else {
+      setStatus(`Loaded cached dataset ${payload.version} (synced ${payload.syncedAtUtc}) — gym: ${gymCount}, events: ${eventCount}.`);
+    }
   } catch (err) {
     setStatus(`Cache load failed: ${err instanceof Error ? err.message : String(err)}`, true);
   }
 }
 
 function renderGymCloudFromSeries(series) {
+  if (!series || !Array.isArray(series.x) || series.x.length === 0) {
+    Plotly.newPlot("gym-cloud", [], {
+      margin: { l: 0, r: 0, t: 20, b: 0 },
+      annotations: [{ text: "No gym points yet", showarrow: false, x: 0.5, y: 0.5, xref: "paper", yref: "paper" }],
+    }, { responsive: true });
+    return;
+  }
+
   const trace = {
     type: "scatter3d",
     mode: "markers",
@@ -77,6 +92,14 @@ function renderGymCloudFromSeries(series) {
 }
 
 function renderEventsCloudFromSeries(series) {
+  if (!series || !Array.isArray(series.x) || series.x.length === 0) {
+    Plotly.newPlot("events-cloud", [], {
+      margin: { l: 0, r: 0, t: 20, b: 0 },
+      annotations: [{ text: "No event points yet", showarrow: false, x: 0.5, y: 0.5, xref: "paper", yref: "paper" }],
+    }, { responsive: true });
+    return;
+  }
+
   const trace = {
     type: "scatter3d",
     mode: "markers",

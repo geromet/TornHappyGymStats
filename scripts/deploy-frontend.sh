@@ -13,13 +13,7 @@ Usage: bash scripts/deploy-frontend.sh
 Deploys local web/ assets to the remote host:
   - uploads to timestamped release dir
   - flips current symlink
-
-Configuration is read from env vars and optional .env.deploy.
-
-Frontend-related variables:
-  DEPLOY_FRONTEND_REMOTE_ROOT   (default: /var/www/torn-frontend)
-  DEPLOY_USE_SUDO               (default: 1)
-  DEPLOY_SUDO_NON_INTERACTIVE   (default: 0)
+  - enforces frontend permissions
 EOF
 }
 
@@ -38,6 +32,8 @@ fi
 : "${DEPLOY_SSH_KEY:=$HOME/.ssh/id_token2_bio3_hetzner}"
 : "${DEPLOY_PROXY_COMMAND:=cloudflared access ssh --hostname ssh.geromet.com}"
 : "${DEPLOY_FRONTEND_REMOTE_ROOT:=/var/www/torn-frontend}"
+: "${DEPLOY_FRONTEND_OWNER:=root}"
+: "${DEPLOY_FRONTEND_GROUP:=www-data}"
 : "${DEPLOY_USE_SUDO:=1}"
 : "${DEPLOY_SUDO_NON_INTERACTIVE:=0}"
 
@@ -66,7 +62,15 @@ echo "==> Uploading frontend payload"
 tar -C "${WEB_DIR}" -cf - . | ssh_cmd_pipe "set -euo pipefail; mkdir -p '${REMOTE_STAGING_DIR}'; rm -rf '${REMOTE_STAGING_DIR}'/*; tar -xf - -C '${REMOTE_STAGING_DIR}'"
 
 echo "==> Activating frontend release"
-ssh_cmd_tty "set -euo pipefail; ${SUDO_CMD} mkdir -p '${REMOTE_RELEASES_DIR}' '${REMOTE_RELEASE_DIR}'; ${SUDO_CMD} rsync -a --delete '${REMOTE_STAGING_DIR}/' '${REMOTE_RELEASE_DIR}/'; ${SUDO_CMD} ln -sfn '${REMOTE_RELEASE_DIR}' '${REMOTE_CURRENT_DIR}'; rm -rf '${REMOTE_STAGING_DIR}'"
+ssh_cmd_tty "set -euo pipefail; \
+  ${SUDO_CMD} mkdir -p '${REMOTE_RELEASES_DIR}' '${REMOTE_RELEASE_DIR}'; \
+  ${SUDO_CMD} rsync -a --delete '${REMOTE_STAGING_DIR}/' '${REMOTE_RELEASE_DIR}/'; \
+  if [[ -d '${REMOTE_CURRENT_DIR}' && ! -L '${REMOTE_CURRENT_DIR}' ]]; then ${SUDO_CMD} rm -rf '${REMOTE_CURRENT_DIR}'; fi; \
+  ${SUDO_CMD} ln -sfn '${REMOTE_RELEASE_DIR}' '${REMOTE_CURRENT_DIR}'; \
+  ${SUDO_CMD} chown -R '${DEPLOY_FRONTEND_OWNER}:${DEPLOY_FRONTEND_GROUP}' '${DEPLOY_FRONTEND_REMOTE_ROOT}'; \
+  ${SUDO_CMD} find '${REMOTE_RELEASE_DIR}' -type d -exec chmod 755 {} \\;; \
+  ${SUDO_CMD} find '${REMOTE_RELEASE_DIR}' -type f -exec chmod 644 {} \\;; \
+  rm -rf '${REMOTE_STAGING_DIR}'"
 
 echo "==> Frontend deployment complete"
 echo "    Host: ${DEPLOY_SSH_HOST}"
