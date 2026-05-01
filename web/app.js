@@ -22,7 +22,7 @@ initialize();
 function initialize() {
   const defaultBase = params.get("api")
     ?? window.localStorage.getItem(storageKey)
-    ?? "http://localhost:5047";
+    ?? "https://www.geromet.com";
 
   elements.apiBaseInput.value = defaultBase;
 
