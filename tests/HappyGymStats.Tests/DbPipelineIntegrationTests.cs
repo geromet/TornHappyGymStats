@@ -1,13 +1,17 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
+using HappyGymStats.Api;
 using HappyGymStats.Core.Fetch;
 using HappyGymStats.Core.Reconstruction;
 using HappyGymStats.Core.Storage;
 using HappyGymStats.Core.Torn;
 using HappyGymStats.Data;
+using HappyGymStats.Data.Entities;
 using HappyGymStats.Data.Storage;
 using HappyGymStats.Legacy.Cli.Storage;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace HappyGymStats.Tests;
@@ -161,6 +165,150 @@ public sealed class DbPipelineIntegrationTests
                 Assert.Equal(HappyReconstructionModels.ModifierProvenanceReasonCodes.MissingCompanyRecord, row.VerificationReasonCode);
                 Assert.False(string.IsNullOrWhiteSpace(row.CompanyId));
             });
+    }
+
+    [Fact]
+    public async Task Surfaces_cache_payload_includes_confidence_and_stable_reason_codes_for_verified_and_unresolved_rows()
+    {
+        var tempDir = CreateTempDirectory();
+        var dbPath = SqlitePaths.ResolveDatabasePath(tempDir);
+
+        var dbOptions = new DbContextOptionsBuilder<HappyGymStatsDbContext>()
+            .UseSqlite($"Data Source={dbPath}")
+            .Options;
+
+        await using (var db = new HappyGymStatsDbContext(dbOptions))
+        {
+            await db.Database.EnsureCreatedAsync();
+
+            db.RawUserLogs.AddRange(
+                new RawUserLogEntity
+                {
+                    LogId = "log-verified",
+                    OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
+                    RawJson = """{"details":{"category":"Gym"},"data":{"energy_used":10,"strength_before":1000,"strength_increased":12.5}}"""
+                },
+                new RawUserLogEntity
+                {
+                    LogId = "log-unresolved",
+                    OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:05:00Z"),
+                    RawJson = """{"details":{"category":"Gym"},"data":{"energy_used":10,"speed_before":900,"speed_increased":8.0}}"""
+                });
+
+            db.DerivedGymTrains.AddRange(
+                new DerivedGymTrainEntity { LogId = "log-verified", OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"), HappyBeforeTrain = 4200 },
+                new DerivedGymTrainEntity { LogId = "log-unresolved", OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:05:00Z"), HappyBeforeTrain = 3900 });
+
+            db.ModifierProvenance.AddRange(
+                new ModifierProvenanceEntity
+                {
+                    DerivedGymTrainLogId = "log-verified",
+                    Scope = "personal",
+                    SubjectId = "user-1",
+                    VerificationStatus = "verified",
+                    VerificationReasonCode = "source-log",
+                    ValidFromUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z")
+                },
+                new ModifierProvenanceEntity
+                {
+                    DerivedGymTrainLogId = "log-unresolved",
+                    Scope = "faction",
+                    FactionId = "unknown-faction",
+                    VerificationStatus = "unresolved",
+                    VerificationReasonCode = "missing-faction-record",
+                    ValidFromUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z")
+                });
+
+            await db.SaveChangesAsync();
+        }
+
+        var services = new ServiceCollection();
+        services.AddDbContext<HappyGymStatsDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
+        await using var provider = services.BuildServiceProvider();
+
+        var cacheDir = Path.Combine(tempDir, "surfaces");
+        var writer = new SurfacesCacheWriter(provider.GetRequiredService<IServiceScopeFactory>(), cacheDir);
+        await writer.WriteLatestAsync("test-v1", DateTimeOffset.Parse("2026-01-01T01:00:00Z"), CancellationToken.None);
+
+        var latestPath = Path.Combine(cacheDir, "latest.json");
+        Assert.True(File.Exists(latestPath));
+
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(latestPath));
+        var gymCloud = json.RootElement.GetProperty("series").GetProperty("gymCloud");
+
+        var confidence = gymCloud.GetProperty("confidence").EnumerateArray().Select(x => x.GetDouble()).ToArray();
+        Assert.Equal(new[] { 1.0, 0.75 }, confidence);
+
+        var reasons = gymCloud.GetProperty("confidenceReasons")
+            .EnumerateArray()
+            .Select(arr => arr.EnumerateArray().Select(x => x.GetString()).Where(x => x is not null).Cast<string>().ToArray())
+            .ToArray();
+
+        Assert.Equal(new[] { "source-log" }, reasons[0]);
+        Assert.Equal(new[] { "missing-faction-record" }, reasons[1]);
+
+        Assert.True(gymCloud.TryGetProperty("x", out _));
+        Assert.True(gymCloud.TryGetProperty("y", out _));
+        Assert.True(gymCloud.TryGetProperty("z", out _));
+        Assert.True(gymCloud.TryGetProperty("text", out _));
+    }
+
+    [Fact]
+    public async Task Surfaces_cache_payload_uses_missing_provenance_fallback_reason_when_join_rows_are_absent()
+    {
+        var tempDir = CreateTempDirectory();
+        var dbPath = SqlitePaths.ResolveDatabasePath(tempDir);
+
+        var dbOptions = new DbContextOptionsBuilder<HappyGymStatsDbContext>()
+            .UseSqlite($"Data Source={dbPath}")
+            .Options;
+
+        await using (var db = new HappyGymStatsDbContext(dbOptions))
+        {
+            await db.Database.EnsureCreatedAsync();
+
+            db.RawUserLogs.Add(new RawUserLogEntity
+            {
+                LogId = "log-no-provenance",
+                OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
+                RawJson = """{"details":{"category":"Gym"},"data":{"energy_used":5,"dexterity_before":500,"dexterity_increased":5}}"""
+            });
+
+            db.DerivedGymTrains.Add(new DerivedGymTrainEntity
+            {
+                LogId = "log-no-provenance",
+                OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
+                HappyBeforeTrain = 2500
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        var services = new ServiceCollection();
+        services.AddDbContext<HappyGymStatsDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
+        await using var provider = services.BuildServiceProvider();
+
+        var cacheDir = Path.Combine(tempDir, "surfaces");
+        var writer = new SurfacesCacheWriter(provider.GetRequiredService<IServiceScopeFactory>(), cacheDir);
+        await writer.WriteLatestAsync("test-v1", DateTimeOffset.UtcNow, CancellationToken.None);
+
+        var latestPath = Path.Combine(cacheDir, "latest.json");
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(latestPath));
+        var gymCloud = json.RootElement.GetProperty("series").GetProperty("gymCloud");
+
+        var confidence = gymCloud.GetProperty("confidence").EnumerateArray().Select(x => x.GetDouble()).Single();
+        Assert.Equal(0.2, confidence);
+
+        var reasons = gymCloud.GetProperty("confidenceReasons")
+            .EnumerateArray()
+            .Single()
+            .EnumerateArray()
+            .Select(x => x.GetString())
+            .Where(x => x is not null)
+            .Cast<string>()
+            .ToArray();
+
+        Assert.Equal(new[] { "missing-provenance-record" }, reasons);
     }
 
     private static string CreateTempDirectory()
