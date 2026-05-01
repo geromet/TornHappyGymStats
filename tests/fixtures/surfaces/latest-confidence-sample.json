@@ -1,0 +1,32 @@
+{
+  "version": "fixture-confidence-v1",
+  "syncedAtUtc": "2026-05-01T00:00:00Z",
+  "meta": {
+    "gymPointCount": 3,
+    "eventPointCount": 0
+  },
+  "series": {
+    "gymCloud": {
+      "x": [100, 90, 80],
+      "y": [5000, 4500, 4000],
+      "z": [2.1, 1.4, 0.7],
+      "text": [
+        "Gym: Alpha",
+        "Gym: Beta",
+        "Gym: Gamma"
+      ],
+      "confidence": [1, 0.5, 0],
+      "confidenceReasons": [
+        ["source:api", "source:history"],
+        ["source:api"],
+        []
+      ]
+    },
+    "eventsCloud": {
+      "x": [],
+      "y": [],
+      "z": [],
+      "text": []
+    }
+  }
+}

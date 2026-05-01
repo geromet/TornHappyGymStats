@@ -24,6 +24,7 @@ public sealed class ReconstructionRunner
         string? ErrorMessage,
         string DerivedOutputPath,
         IReadOnlyList<DerivedGymTrain> DerivedGymTrains,
+        IReadOnlyList<ModifierProvenanceRecord> ModifierProvenance,
         ReconstructionStats? Stats,
         DateTimeOffset AnchorTimeUtc);
 
@@ -79,6 +80,7 @@ public sealed class ReconstructionRunner
                     ErrorMessage: read.ErrorMessage,
                     DerivedOutputPath: _paths.DerivedGymTrainsJsonlPath,
                     DerivedGymTrains: Array.Empty<DerivedGymTrain>(),
+                    ModifierProvenance: Array.Empty<ModifierProvenanceRecord>(),
                     Stats: null,
                     AnchorTimeUtc: anchorTimeUtc);
             }
@@ -112,6 +114,7 @@ public sealed class ReconstructionRunner
                 ErrorMessage: writeTrains.ErrorMessage,
                 DerivedOutputPath: _paths.DerivedGymTrainsJsonlPath,
                 DerivedGymTrains: reconstructed.DerivedGymTrains,
+                ModifierProvenance: Array.Empty<ModifierProvenanceRecord>(),
                 Stats: null,
                 AnchorTimeUtc: anchorTimeUtc);
         }
@@ -124,17 +127,26 @@ public sealed class ReconstructionRunner
                 ErrorMessage: writeEvents.ErrorMessage,
                 DerivedOutputPath: _paths.DerivedGymTrainsJsonlPath,
                 DerivedGymTrains: reconstructed.DerivedGymTrains,
+                ModifierProvenance: Array.Empty<ModifierProvenanceRecord>(),
                 Stats: null,
                 AnchorTimeUtc: anchorTimeUtc);
         }
 
+        var modifierProvenance = BuildModifierProvenance(reconstructed.DerivedGymTrains);
+
+        using var tx = db.Database.BeginTransaction();
+
+        db.ModifierProvenance.RemoveRange(db.ModifierProvenance);
         db.DerivedGymTrains.RemoveRange(db.DerivedGymTrains);
         db.DerivedHappyEvents.RemoveRange(db.DerivedHappyEvents);
         db.SaveChanges();
 
         db.DerivedGymTrains.AddRange(reconstructed.DerivedGymTrains.Select(MapDerivedGymTrain));
         db.DerivedHappyEvents.AddRange(reconstructed.DerivedHappyEvents.Select((ev, index) => MapDerivedHappyEvent(ev, index)));
+        db.ModifierProvenance.AddRange(modifierProvenance.Select(MapModifierProvenance));
         db.SaveChanges();
+
+        tx.Commit();
 
         var stats = new ReconstructionStats(
             LinesRead: readerStats?.LinesRead ?? records.Count,
@@ -151,6 +163,7 @@ public sealed class ReconstructionRunner
             ErrorMessage: null,
             DerivedOutputPath: _paths.DerivedGymTrainsJsonlPath,
             DerivedGymTrains: reconstructed.DerivedGymTrains,
+            ModifierProvenance: modifierProvenance,
             Stats: stats,
             AnchorTimeUtc: anchorTimeUtc);
     }
@@ -184,5 +197,65 @@ public sealed class ReconstructionRunner
             MaxHappyAtTimeUtc = row.MaxHappyAtTimeUtc,
             ClampedToMax = row.ClampedToMax,
             Note = null,
+        };
+
+    private static IReadOnlyList<ModifierProvenanceRecord> BuildModifierProvenance(IReadOnlyList<DerivedGymTrain> derivedGymTrains)
+    {
+        var provenance = new List<ModifierProvenanceRecord>(derivedGymTrains.Count * 3);
+        foreach (var train in derivedGymTrains)
+        {
+            provenance.Add(new ModifierProvenanceRecord(
+                DerivedGymTrainLogId: train.LogId,
+                Scope: ModifierProvenanceScopes.Personal,
+                SubjectId: "self",
+                FactionId: null,
+                CompanyId: null,
+                ValidFromUtc: train.OccurredAtUtc,
+                ValidToUtc: null,
+                VerificationStatus: ModifierProvenanceStatuses.Verified,
+                VerificationReasonCode: ModifierProvenanceReasonCodes.SourceLog,
+                VerificationDetails: null));
+
+            provenance.Add(new ModifierProvenanceRecord(
+                DerivedGymTrainLogId: train.LogId,
+                Scope: ModifierProvenanceScopes.Faction,
+                SubjectId: null,
+                FactionId: "unknown-faction",
+                CompanyId: null,
+                ValidFromUtc: train.OccurredAtUtc,
+                ValidToUtc: null,
+                VerificationStatus: ModifierProvenanceStatuses.Unresolved,
+                VerificationReasonCode: ModifierProvenanceReasonCodes.MissingFactionRecord,
+                VerificationDetails: null));
+
+            provenance.Add(new ModifierProvenanceRecord(
+                DerivedGymTrainLogId: train.LogId,
+                Scope: ModifierProvenanceScopes.Company,
+                SubjectId: null,
+                FactionId: null,
+                CompanyId: "unknown-company",
+                ValidFromUtc: train.OccurredAtUtc,
+                ValidToUtc: null,
+                VerificationStatus: ModifierProvenanceStatuses.Unresolved,
+                VerificationReasonCode: ModifierProvenanceReasonCodes.MissingCompanyRecord,
+                VerificationDetails: null));
+        }
+
+        return provenance;
+    }
+
+    private static ModifierProvenanceEntity MapModifierProvenance(ModifierProvenanceRecord row)
+        => new()
+        {
+            DerivedGymTrainLogId = row.DerivedGymTrainLogId,
+            Scope = row.Scope,
+            SubjectId = row.SubjectId,
+            FactionId = row.FactionId,
+            CompanyId = row.CompanyId,
+            ValidFromUtc = row.ValidFromUtc,
+            ValidToUtc = row.ValidToUtc,
+            VerificationStatus = row.VerificationStatus,
+            VerificationReasonCode = row.VerificationReasonCode,
+            VerificationDetails = row.VerificationDetails,
         };
 }

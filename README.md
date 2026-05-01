@@ -9,6 +9,14 @@ HappyGymStats ingests Torn log data, builds derived gym/happy timelines, stores 
 - Deployment: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 - Torn API key ToS disclosure: [docs/TORN-API-TOS.md](docs/TORN-API-TOS.md)
 
+## S05 pre-frontend verification
+
+Before running frontend confidence visualization checks, run:
+
+- `bash scripts/verify/s05-local-surfaces.sh`
+
+This generates and validates local surfaces artifacts in `web/data/surfaces/` (`meta.json`, `latest.json`) so UI checks fail fast on data-readiness issues.
+
 ## Repo layout
 
 - `src/HappyGymStats.Cli` — CLI workflows
