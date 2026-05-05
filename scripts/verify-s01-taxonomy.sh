@@ -3,6 +3,7 @@ set -euo pipefail
 
 TAXONOMY_FILE=".gsd/milestones/M002/slices/S01/research/modifier-provenance-taxonomy.md"
 API_FILE="src/HappyGymStats.Api/Program.cs"
+GYM_TRAINS_CONTROLLER="src/HappyGymStats.Api/Controllers/GymTrainsController.cs"
 EXTRACTOR_FILE="src/HappyGymStats.Core/Reconstruction/LogEventExtractor.cs"
 
 fail() {
@@ -36,6 +37,7 @@ check_markdown_heading() {
 
 check_file_exists "$TAXONOMY_FILE"
 check_file_exists "$API_FILE"
+check_file_exists "$GYM_TRAINS_CONTROLLER"
 check_file_exists "$EXTRACTOR_FILE"
 
 # Taxonomy completeness guardrails (required sections from S01/T02 artifact)
@@ -49,8 +51,7 @@ check_markdown_heading "Layering Boundary Guardrail"
 
 # Taxonomy -> API anchor integrity
 check_contains "$TAXONOMY_FILE" "src/HappyGymStats.Api/Program.cs" "Taxonomy references Program.cs anchor"
-check_contains "$API_FILE" "app.MapGet(\"/api/v1/torn/gym-trains\"" "API contains /api/v1/torn/gym-trains endpoint"
-check_contains "$API_FILE" "app.MapGet(\"/api/v1/torn/happy-events\"" "API contains /api/v1/torn/happy-events endpoint"
+check_contains "$GYM_TRAINS_CONTROLLER" "api/v1/torn/gym-trains" "GymTrainsController defines /api/v1/torn/gym-trains route"
 
 # Taxonomy -> extractor token integrity (field candidates listed in matrix)
 check_contains "$TAXONOMY_FILE" "data.happy_used" "Taxonomy includes data.happy_used candidate"

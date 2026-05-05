@@ -12,6 +12,9 @@ TestResults/
 
 ## Runtime data (user-specific, never commit)
 data/
+*.db
+*.db-shm
+*.db-wal
 
 ## IDE
 .vs/

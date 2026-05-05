@@ -15,7 +15,40 @@ namespace HappyGymStats.Data.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "8.0.26");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.0");
+
+            modelBuilder.Entity("HappyGymStats.Data.Entities.AffiliationEventEntity", b =>
+                {
+                    b.Property<int>("PlayerId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SourceLogEntryId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("AffiliationId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("LogTypeId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("PositionAfter")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("PositionBefore")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SenderId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("PlayerId", "SourceLogEntryId");
+
+                    b.HasIndex("PlayerId", "Scope", "AffiliationId");
+
+                    b.ToTable("AffiliationEvents");
+                });
 
             modelBuilder.Entity("HappyGymStats.Data.Entities.DerivedGymTrainEntity", b =>
                 {
@@ -50,7 +83,10 @@ namespace HappyGymStats.Data.Migrations
 
                     b.HasIndex("OccurredAtUtc");
 
-                    b.ToTable("DerivedGymTrains");
+                    b.ToTable("DerivedGymTrains", t =>
+                        {
+                            t.ExcludeFromMigrations();
+                        });
                 });
 
             modelBuilder.Entity("HappyGymStats.Data.Entities.DerivedHappyEventEntity", b =>
@@ -102,7 +138,10 @@ namespace HappyGymStats.Data.Migrations
 
                     b.HasIndex("SourceLogId");
 
-                    b.ToTable("DerivedHappyEvents");
+                    b.ToTable("DerivedHappyEvents", t =>
+                        {
+                            t.ExcludeFromMigrations();
+                        });
                 });
 
             modelBuilder.Entity("HappyGymStats.Data.Entities.ImportCheckpointEntity", b =>
@@ -156,7 +195,10 @@ namespace HappyGymStats.Data.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("ImportCheckpoints");
+                    b.ToTable("ImportCheckpoints", t =>
+                        {
+                            t.ExcludeFromMigrations();
+                        });
                 });
 
             modelBuilder.Entity("HappyGymStats.Data.Entities.ImportRunEntity", b =>
@@ -177,11 +219,17 @@ namespace HappyGymStats.Data.Migrations
                     b.Property<long>("LogsFetched")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("NextUrl")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Outcome")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<int>("PagesFetched")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("PlayerId")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("StartedAtUtc")
@@ -191,72 +239,53 @@ namespace HappyGymStats.Data.Migrations
 
                     b.HasIndex("Outcome");
 
-                    b.HasIndex("StartedAtUtc");
+                    b.HasIndex("PlayerId", "StartedAtUtc");
 
                     b.ToTable("ImportRuns");
                 });
 
-            modelBuilder.Entity("HappyGymStats.Data.Entities.ModifierProvenanceEntity", b =>
+            modelBuilder.Entity("HappyGymStats.Data.Entities.LogTypeEntity", b =>
                 {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
+                    b.Property<int>("LogTypeId")
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("CompanyId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("DerivedGymTrainLogId")
+                    b.Property<string>("LogTypeTitle")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("FactionId")
+                    b.HasKey("LogTypeId");
+
+                    b.ToTable("LogTypes");
+                });
+
+            modelBuilder.Entity("HappyGymStats.Data.Entities.ModifierProvenanceEntity", b =>
+                {
+                    b.Property<int>("PlayerId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LogEntryId")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Scope")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
+                    b.Property<int>("Scope")
+                        .HasColumnType("INTEGER");
 
-                    b.Property<string>("SubjectId")
-                        .HasColumnType("TEXT");
+                    b.Property<int?>("CompanyId")
+                        .HasColumnType("INTEGER");
 
-                    b.Property<DateTime>("ValidFromUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<int?>("FactionId")
+                        .HasColumnType("INTEGER");
 
-                    b.Property<DateTime?>("ValidToUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<int?>("SubjectId")
+                        .HasColumnType("INTEGER");
 
-                    b.Property<string>("VerificationDetails")
-                        .HasColumnType("TEXT");
+                    b.Property<int>("VerificationStatus")
+                        .HasColumnType("INTEGER");
 
-                    b.Property<string>("VerificationReasonCode")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
+                    b.HasKey("PlayerId", "LogEntryId", "Scope");
 
-                    b.Property<string>("VerificationStatus")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
+                    b.HasIndex("PlayerId", "VerificationStatus");
 
-                    b.HasKey("Id");
-
-                    b.HasIndex("VerificationStatus");
-
-                    b.HasIndex("DerivedGymTrainLogId", "Scope")
-                        .IsUnique();
-
-                    b.HasIndex("Scope", "ValidFromUtc", "ValidToUtc");
-
-                    b.ToTable("ModifierProvenance", t =>
-                        {
-                            t.HasCheckConstraint("CK_ModifierProvenance_CompanyRequired", "Scope <> 'company' OR (CompanyId IS NOT NULL AND length(trim(CompanyId)) > 0)");
-
-                            t.HasCheckConstraint("CK_ModifierProvenance_FactionRequired", "Scope <> 'faction' OR (FactionId IS NOT NULL AND length(trim(FactionId)) > 0)");
-
-                            t.HasCheckConstraint("CK_ModifierProvenance_Scope", "Scope IN ('personal', 'faction', 'company')");
-
-                            t.HasCheckConstraint("CK_ModifierProvenance_SubjectRequired", "Scope <> 'personal' OR (SubjectId IS NOT NULL AND length(trim(SubjectId)) > 0)");
-
-                            t.HasCheckConstraint("CK_ModifierProvenance_VerificationStatus", "VerificationStatus IN ('verified', 'unresolved', 'unavailable')");
-                        });
+                    b.ToTable("ModifierProvenance");
                 });
 
             modelBuilder.Entity("HappyGymStats.Data.Entities.RawUserLogEntity", b =>
@@ -289,18 +318,84 @@ namespace HappyGymStats.Data.Migrations
 
                     b.HasIndex("OccurredAtUtc");
 
-                    b.ToTable("RawUserLogs");
+                    b.ToTable("RawUserLogs", t =>
+                        {
+                            t.ExcludeFromMigrations();
+                        });
                 });
 
-            modelBuilder.Entity("HappyGymStats.Data.Entities.ModifierProvenanceEntity", b =>
+            modelBuilder.Entity("HappyGymStats.Data.Entities.UserLogEntryEntity", b =>
                 {
-                    b.HasOne("HappyGymStats.Data.Entities.DerivedGymTrainEntity", "DerivedGymTrain")
-                        .WithMany()
-                        .HasForeignKey("DerivedGymTrainLogId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                    b.Property<int>("PlayerId")
+                        .HasColumnType("INTEGER");
 
-                    b.Navigation("DerivedGymTrain");
+                    b.Property<string>("LogEntryId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("DefenseBefore")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("DefenseIncreased")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("DexterityBefore")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("DexterityIncreased")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("EnergyUsed")
+                        .HasColumnType("REAL");
+
+                    b.Property<int?>("HappyBeforeApi")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("HappyBeforeDelta")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("HappyBeforeTrain")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("HappyDecreased")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("HappyIncreased")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("HappyUsed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("LogTypeId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("MaxHappyAfter")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("MaxHappyBefore")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("SpeedBefore")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("SpeedIncreased")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("StrengthBefore")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("StrengthIncreased")
+                        .HasColumnType("REAL");
+
+                    b.HasKey("PlayerId", "LogEntryId");
+
+                    b.HasIndex("PlayerId", "LogTypeId");
+
+                    b.HasIndex("PlayerId", "OccurredAtUtc");
+
+                    b.ToTable("UserLogEntries");
                 });
 #pragma warning restore 612, 618
         }

@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# publish-smoke.sh — Smoke-test CLI publish path for linux-x64.
+# publish-smoke.sh — Smoke-test API publish path for linux-x64.
 set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-readonly PROJECT="${ROOT_DIR}/src/HappyGymStats.Cli/HappyGymStats.Cli.csproj"
+readonly PROJECT="${ROOT_DIR}/src/HappyGymStats.Api/HappyGymStats.Api.csproj"
 readonly SMOKE_DIR="/tmp/hgs-smoke"
 
 usage() {
   cat <<EOF
 Usage: bash scripts/verify/publish-smoke.sh
 
-Runs unit/integration tests, then publishes CLI for linux-x64 to a temp dir,
-verifies output exists, and cleans it up.
+Builds and tests the solution, then publishes HappyGymStats.Api for linux-x64
+to a temp dir, verifies the binary exists, and cleans up.
 EOF
 }
 
@@ -21,8 +21,8 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   exit 0
 fi
 
-echo "==> Building and running unit tests"
-dotnet test --project "${PROJECT}"
+echo "==> Building and running tests"
+dotnet test "${ROOT_DIR}/HappyGymStats.sln"
 
 echo "==> Smoke-test publish (linux-x64, self-contained single-file)"
 rm -rf "${SMOKE_DIR}"

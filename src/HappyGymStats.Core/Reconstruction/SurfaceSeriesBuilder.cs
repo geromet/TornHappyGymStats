@@ -1,12 +1,7 @@
-using System.Text.Json;
-
 namespace HappyGymStats.Core.Reconstruction;
 
 public static class SurfaceSeriesBuilder
 {
-    public sealed record RawGymLog(string LogId, DateTimeOffset OccurredAtUtc, string RawJson);
-    public sealed record DerivedGym(string LogId, int? HappyBeforeTrain);
-    public sealed record DerivedHappyEvent(DateTimeOffset OccurredAtUtc, string EventType, int HappyBeforeEvent, int Delta, int HappyAfterEvent);
     public sealed record ModifierProvenance(string Scope, string VerificationStatus, string VerificationReasonCode);
 
     public sealed record SurfacePayload(
@@ -21,10 +16,16 @@ public static class SurfaceSeriesBuilder
         int[] EventZ,
         string[] EventText);
 
+    private static readonly (string Type, Func<GymLogEntry, double?> Before, Func<GymLogEntry, double?> Increased)[] KnownStatTypes =
+    [
+        ("strength", e => e.StrengthBefore, e => e.StrengthIncreased),
+        ("defense", e => e.DefenseBefore, e => e.DefenseIncreased),
+        ("speed", e => e.SpeedBefore, e => e.SpeedIncreased),
+        ("dexterity", e => e.DexterityBefore, e => e.DexterityIncreased),
+    ];
+
     public static SurfacePayload Build(
-        IReadOnlyList<RawGymLog> raws,
-        IReadOnlyDictionary<string, DerivedGym> derivedByLogId,
-        IReadOnlyList<DerivedHappyEvent> events,
+        IReadOnlyList<GymLogEntry> gymLogs,
         IReadOnlyDictionary<string, IReadOnlyList<ModifierProvenance>> provenanceByLogId)
     {
         var gymX = new List<double>();
@@ -34,19 +35,18 @@ public static class SurfaceSeriesBuilder
         var gymConfidence = new List<double>();
         var gymConfidenceReasons = new List<string[]>();
 
-        foreach (var row in raws)
+        foreach (var row in gymLogs)
         {
-            if (!TryReadGymPoint(row.RawJson, out var statBefore, out var energyUsed, out var statIncreased, out var statType, out var happyBeforeFromRaw))
+            if (!TryReadGymPoint(row, out var statBefore, out var energyUsed, out var statIncreased, out var statType))
                 continue;
 
             if (energyUsed <= 0)
                 continue;
 
-            derivedByLogId.TryGetValue(row.LogId, out var derived);
             provenanceByLogId.TryGetValue(row.LogId, out var provenanceRows);
 
             gymX.Add(statBefore);
-            gymY.Add(derived?.HappyBeforeTrain ?? happyBeforeFromRaw ?? 0);
+            gymY.Add(row.HappyBeforeTrain ?? 0);
             gymZ.Add(statIncreased / energyUsed);
             gymText.Add($"{statType} {row.OccurredAtUtc:O}");
 
@@ -62,10 +62,10 @@ public static class SurfaceSeriesBuilder
             GymText: gymText.ToArray(),
             GymConfidence: gymConfidence.ToArray(),
             GymConfidenceReasons: gymConfidenceReasons.ToArray(),
-            EventX: events.Select(x => x.HappyBeforeEvent).ToArray(),
-            EventY: events.Select(x => x.Delta).ToArray(),
-            EventZ: events.Select(x => x.HappyAfterEvent).ToArray(),
-            EventText: events.Select(x => $"{x.EventType} {x.OccurredAtUtc:O}").ToArray());
+            EventX: Array.Empty<int>(),
+            EventY: Array.Empty<int>(),
+            EventZ: Array.Empty<int>(),
+            EventText: Array.Empty<string>());
     }
 
     private static double ComputeConfidence(IReadOnlyList<ModifierProvenance> rows, out string[] reasons)
@@ -81,7 +81,9 @@ public static class SurfaceSeriesBuilder
 
         foreach (var row in rows)
         {
-            reasonSet.Add(row.VerificationReasonCode);
+            var scopeStr = row.Scope;
+            var statusStr = row.VerificationStatus;
+            reasonSet.Add($"{scopeStr}-{statusStr}");
 
             score *= row.VerificationStatus switch
             {
@@ -96,80 +98,31 @@ public static class SurfaceSeriesBuilder
         return Math.Round(Math.Clamp(score, 0.0, 1.0), 4);
     }
 
-    private static readonly (string Type, string Key)[] KnownStatTypes =
-    {
-        ("strength", "strength"),
-        ("defense", "defense"),
-        ("speed", "speed"),
-        ("dexterity", "dexterity"),
-    };
-
-    private static bool TryReadGymPoint(string rawJson, out double statBefore, out double energyUsed, out double statIncreased, out string statType, out int? happyBeforeTrain)
+    private static bool TryReadGymPoint(GymLogEntry row, out double statBefore, out double energyUsed, out double statIncreased, out string statType)
     {
         statBefore = 0;
         energyUsed = 0;
         statIncreased = 0;
         statType = string.Empty;
-        happyBeforeTrain = null;
 
-        using var doc = JsonDocument.Parse(rawJson);
-        if (!TryGetPropertyIgnoreCase(doc.RootElement, "data", out var dataEl) || dataEl.ValueKind != JsonValueKind.Object)
+        if (row.EnergyUsed is null)
             return false;
 
-        if (!TryGetDouble(dataEl, "energy_used", out energyUsed))
-            return false;
+        energyUsed = row.EnergyUsed.Value;
 
-        if (TryGetDouble(dataEl, "happy_before", out var happyBeforeRaw))
+        foreach (var (type, getBefore, getIncreased) in KnownStatTypes)
         {
-            happyBeforeTrain = (int)Math.Round(happyBeforeRaw);
-        }
-
-        foreach (var (type, key) in KnownStatTypes)
-        {
-            if (TryGetDouble(dataEl, $"{key}_before", out var before) && TryGetDouble(dataEl, $"{key}_increased", out var inc))
+            var before = getBefore(row);
+            var increased = getIncreased(row);
+            if (before != null && increased != null)
             {
                 statType = type;
-                statBefore = before;
-                statIncreased = inc;
+                statBefore = before.Value;
+                statIncreased = increased.Value;
                 return true;
             }
         }
 
-        return false;
-    }
-
-    private static bool TryGetDouble(JsonElement obj, string name, out double value)
-    {
-        value = 0;
-        if (!TryGetPropertyIgnoreCase(obj, name, out var el))
-            return false;
-
-        return el.ValueKind switch
-        {
-            JsonValueKind.Number => el.TryGetDouble(out value),
-            JsonValueKind.String => double.TryParse(el.GetString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out value),
-            _ => false,
-        };
-    }
-
-    private static bool TryGetPropertyIgnoreCase(JsonElement obj, string name, out JsonElement value)
-    {
-        if (obj.ValueKind == JsonValueKind.Object)
-        {
-            if (obj.TryGetProperty(name, out value))
-                return true;
-
-            foreach (var prop in obj.EnumerateObject())
-            {
-                if (string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase))
-                {
-                    value = prop.Value;
-                    return true;
-                }
-            }
-        }
-
-        value = default;
         return false;
     }
 }

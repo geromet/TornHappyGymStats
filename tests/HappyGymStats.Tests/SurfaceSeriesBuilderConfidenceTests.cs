@@ -8,18 +8,17 @@ public sealed class SurfaceSeriesBuilderConfidenceTests
     [Fact]
     public void Build_projects_confidence_and_sorted_reason_codes_from_provenance()
     {
-        var raws = new[]
+        var gymLogs = new[]
         {
-            new SurfaceSeriesBuilder.RawGymLog("log-1", DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
-                "{\"data\":{\"energy_used\":10,\"strength_before\":100,\"strength_increased\":5}}")
+            new GymLogEntry(
+                "log-1", DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
+                HappyBeforeTrain: 4500,
+                EnergyUsed: 10,
+                StrengthBefore: 100, StrengthIncreased: 5,
+                DefenseBefore: null, DefenseIncreased: null,
+                SpeedBefore: null, SpeedIncreased: null,
+                DexterityBefore: null, DexterityIncreased: null)
         };
-
-        var derived = new Dictionary<string, SurfaceSeriesBuilder.DerivedGym>
-        {
-            ["log-1"] = new("log-1", 4500)
-        };
-
-        var events = Array.Empty<SurfaceSeriesBuilder.DerivedHappyEvent>();
 
         var provenance = new Dictionary<string, IReadOnlyList<SurfaceSeriesBuilder.ModifierProvenance>>
         {
@@ -31,33 +30,32 @@ public sealed class SurfaceSeriesBuilderConfidenceTests
             }
         };
 
-        var payload = SurfaceSeriesBuilder.Build(raws, derived, events, provenance);
+        var payload = SurfaceSeriesBuilder.Build(gymLogs, provenance);
 
         Assert.Single(payload.GymConfidence);
         Assert.Equal(0.5625, payload.GymConfidence[0], 4);
         Assert.Equal(
-            ["missing-company-record", "missing-faction-record", "source-log"],
+            ["company-unresolved", "faction-unresolved", "personal-verified"],
             payload.GymConfidenceReasons[0]);
     }
 
     [Fact]
     public void Build_uses_fallback_reason_when_provenance_missing()
     {
-        var raws = new[]
+        var gymLogs = new[]
         {
-            new SurfaceSeriesBuilder.RawGymLog("log-2", DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
-                "{\"data\":{\"energy_used\":10,\"defense_before\":200,\"defense_increased\":8}}")
-        };
-
-        var derived = new Dictionary<string, SurfaceSeriesBuilder.DerivedGym>
-        {
-            ["log-2"] = new("log-2", 5200)
+            new GymLogEntry(
+                "log-2", DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
+                HappyBeforeTrain: 5200,
+                EnergyUsed: 10,
+                StrengthBefore: null, StrengthIncreased: null,
+                DefenseBefore: 200, DefenseIncreased: 8,
+                SpeedBefore: null, SpeedIncreased: null,
+                DexterityBefore: null, DexterityIncreased: null)
         };
 
         var payload = SurfaceSeriesBuilder.Build(
-            raws,
-            derived,
-            Array.Empty<SurfaceSeriesBuilder.DerivedHappyEvent>(),
+            gymLogs,
             new Dictionary<string, IReadOnlyList<SurfaceSeriesBuilder.ModifierProvenance>>());
 
         Assert.Single(payload.GymConfidence);

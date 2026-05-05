@@ -1,103 +1,68 @@
-using HappyGymStats.Core.Storage;
-using HappyGymStats.Data;
+using HappyGymStats.Core.Repositories;
+using HappyGymStats.Core.Models;
 using HappyGymStats.Data.Entities;
-using HappyGymStats.Data.Storage;
-using Microsoft.EntityFrameworkCore;
 using static HappyGymStats.Core.Reconstruction.HappyReconstructionModels;
 
 namespace HappyGymStats.Core.Reconstruction;
 
 /// <summary>
-/// End-to-end orchestration: read raw logs → extract events → reconstruct happy values → write derived output.
+/// End-to-end orchestration: read typed logs from DB → extract events → reconstruct happy values → write derived output.
 /// </summary>
 public sealed class ReconstructionRunner
 {
-    private readonly AppPaths _paths;
+    private readonly IUserLogEntryRepository _userLogRepo;
+    private readonly IImportRunRepository _importRunRepo;
+    private readonly IModifierProvenanceRepository _provenanceRepo;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public ReconstructionRunner(AppPaths paths)
+    public ReconstructionRunner(
+        IUserLogEntryRepository userLogRepo,
+        IImportRunRepository importRunRepo,
+        IModifierProvenanceRepository provenanceRepo,
+        IUnitOfWork unitOfWork)
     {
-        _paths = paths ?? throw new ArgumentNullException(nameof(paths));
+        _userLogRepo = userLogRepo;
+        _importRunRepo = importRunRepo;
+        _provenanceRepo = provenanceRepo;
+        _unitOfWork = unitOfWork;
     }
 
     public sealed record RunResult(
         bool Success,
         string? ErrorMessage,
-        string DerivedOutputPath,
         IReadOnlyList<DerivedGymTrain> DerivedGymTrains,
-        IReadOnlyList<ModifierProvenanceRecord> ModifierProvenance,
         ReconstructionStats? Stats,
         DateTimeOffset AnchorTimeUtc);
 
-    public RunResult Run(
+    public async Task<RunResult> RunAsync(
+        int playerId,
         int currentHappy,
         DateTimeOffset anchorTimeUtc,
         CancellationToken ct = default)
     {
+        // Keep validation from original Run method unchanged:
         if (currentHappy < 0)
             throw new ArgumentOutOfRangeException(nameof(currentHappy), currentHappy, "currentHappy must be >= 0.");
-
         if (anchorTimeUtc.Offset != TimeSpan.Zero)
             throw new ArgumentException("anchorTimeUtc must be in UTC (offset +00:00).", nameof(anchorTimeUtc));
 
-        Directory.CreateDirectory(_paths.DataDirectory);
-        Directory.CreateDirectory(_paths.DerivedDirectory);
+        // Resolve playerId if not provided
+        if (playerId == 0)
+            playerId = await _importRunRepo.ResolvePlayerIdAsync(ct);
 
-        var databasePath = SqlitePaths.ResolveDatabasePath(_paths.DataDirectory);
-        var dbOptions = new DbContextOptionsBuilder<HappyGymStatsDbContext>()
-            .UseSqlite($"Data Source={databasePath}")
-            .Options;
+        if (playerId == 0)
+            return new RunResult(
+                Success: false,
+                ErrorMessage: "Could not resolve playerId: no import runs found in the database.",
+                DerivedGymTrains: Array.Empty<DerivedGymTrain>(),
+                Stats: null,
+                AnchorTimeUtc: anchorTimeUtc);
 
-        using var db = new HappyGymStatsDbContext(dbOptions);
-        db.Database.Migrate();
+        var records = await _userLogRepo.GetReconstructionRecordsAsync(playerId, ct);
 
-        var preferDatabase = SqlitePaths.ShouldPreferDatabase(databasePath, _paths.LogsJsonlPath);
-
-        IReadOnlyList<ReconstructionLogRecord> records;
-        JsonlLogReader.ReadStats? readerStats = null;
-
-        if (preferDatabase)
-        {
-            records = db.RawUserLogs
-                .AsNoTracking()
-                .OrderBy(row => row.Id)
-                .Select(row => new ReconstructionLogRecord(
-                    row.LogId,
-                    row.OccurredAtUtc,
-                    row.Title,
-                    row.Category,
-                    row.RawJson))
-                .ToList();
-
-            readerStats = new JsonlLogReader.ReadStats();
-        }
-        else
-        {
-            var read = JsonlLogReader.Read(_paths.LogsJsonlPath);
-            if (!read.Success)
-            {
-                return new RunResult(
-                    Success: false,
-                    ErrorMessage: read.ErrorMessage,
-                    DerivedOutputPath: _paths.DerivedGymTrainsJsonlPath,
-                    DerivedGymTrains: Array.Empty<DerivedGymTrain>(),
-                    ModifierProvenance: Array.Empty<ModifierProvenanceRecord>(),
-                    Stats: null,
-                    AnchorTimeUtc: anchorTimeUtc);
-            }
-
-            readerStats = read.Stats;
-            records = read.Records.Select(record => new ReconstructionLogRecord(
-                    LogId: record.LogId,
-                    OccurredAtUtc: record.OccurredAtUtc,
-                    Title: record.Title,
-                    Category: record.Category,
-                    RawJson: record.RawJson))
-                .ToList();
-        }
-
+        // Keep existing extraction and reconstruction logic unchanged:
         var extract = LogEventExtractor.Extract(records);
         var events = new List<ReconstructionEvent>();
-
         foreach (var ev in extract.Events)
         {
             ct.ThrowIfCancellationRequested();
@@ -106,51 +71,20 @@ public sealed class ReconstructionRunner
 
         var reconstructed = HappyTimelineReconstructor.RunForward(events);
 
-        var writeTrains = DerivedGymTrainStore.WriteAllAtomic(_paths.DerivedGymTrainsJsonlPath, reconstructed.DerivedGymTrains);
-        if (!writeTrains.Success)
-        {
-            return new RunResult(
-                Success: false,
-                ErrorMessage: writeTrains.ErrorMessage,
-                DerivedOutputPath: _paths.DerivedGymTrainsJsonlPath,
-                DerivedGymTrains: reconstructed.DerivedGymTrains,
-                ModifierProvenance: Array.Empty<ModifierProvenanceRecord>(),
-                Stats: null,
-                AnchorTimeUtc: anchorTimeUtc);
-        }
+        // Stage happy-before-train updates (batch load + mutate; committed below)
+        var happyUpdates = reconstructed.DerivedGymTrains
+            .Select(t => new HappyBeforeTrainUpdate(t.LogId, t.HappyBeforeTrain))
+            .ToList();
+        await _userLogRepo.StageHappyBeforeTrainBatchAsync(playerId, happyUpdates, ct);
 
-        var writeEvents = DerivedHappyEventStore.WriteAllAtomic(_paths.DerivedHappyEventsJsonlPath, reconstructed.DerivedHappyEvents);
-        if (!writeEvents.Success)
-        {
-            return new RunResult(
-                Success: false,
-                ErrorMessage: writeEvents.ErrorMessage,
-                DerivedOutputPath: _paths.DerivedGymTrainsJsonlPath,
-                DerivedGymTrains: reconstructed.DerivedGymTrains,
-                ModifierProvenance: Array.Empty<ModifierProvenanceRecord>(),
-                Stats: null,
-                AnchorTimeUtc: anchorTimeUtc);
-        }
+        // Stage provenance replacement (delete old + insert new; committed below)
+        var provenanceEntities = BuildModifierProvenanceEntities(playerId, reconstructed.DerivedGymTrains);
+        await _provenanceRepo.StageReplacementForPlayerAsync(playerId, provenanceEntities, ct);
 
-        var modifierProvenance = BuildModifierProvenance(reconstructed.DerivedGymTrains);
-
-        using var tx = db.Database.BeginTransaction();
-
-        db.ModifierProvenance.RemoveRange(db.ModifierProvenance);
-        db.DerivedGymTrains.RemoveRange(db.DerivedGymTrains);
-        db.DerivedHappyEvents.RemoveRange(db.DerivedHappyEvents);
-        db.SaveChanges();
-
-        db.DerivedGymTrains.AddRange(reconstructed.DerivedGymTrains.Select(MapDerivedGymTrain));
-        db.DerivedHappyEvents.AddRange(reconstructed.DerivedHappyEvents.Select((ev, index) => MapDerivedHappyEvent(ev, index)));
-        db.ModifierProvenance.AddRange(modifierProvenance.Select(MapModifierProvenance));
-        db.SaveChanges();
-
-        tx.Commit();
+        // Single atomic commit — replaces the explicit BeginTransaction/Commit
+        await _unitOfWork.SaveChangesAsync(ct);
 
         var stats = new ReconstructionStats(
-            LinesRead: readerStats?.LinesRead ?? records.Count,
-            MalformedLines: readerStats?.MalformedLines ?? 0,
             GymTrainEventsExtracted: extract.Stats.GymTrainEventsExtracted,
             MaxHappyEventsExtracted: extract.Stats.MaxHappyEventsExtracted,
             HappyDeltaEventsExtracted: extract.Stats.HappyDeltaEventsExtracted,
@@ -161,101 +95,55 @@ public sealed class ReconstructionRunner
         return new RunResult(
             Success: true,
             ErrorMessage: null,
-            DerivedOutputPath: _paths.DerivedGymTrainsJsonlPath,
             DerivedGymTrains: reconstructed.DerivedGymTrains,
-            ModifierProvenance: modifierProvenance,
             Stats: stats,
             AnchorTimeUtc: anchorTimeUtc);
     }
 
-    private static DerivedGymTrainEntity MapDerivedGymTrain(DerivedGymTrain row)
-        => new()
-        {
-            LogId = row.LogId,
-            OccurredAtUtc = row.OccurredAtUtc,
-            HappyBeforeTrain = row.HappyBeforeTrain,
-            HappyAfterTrain = row.HappyAfterTrain,
-            HappyUsed = row.HappyUsed,
-            RegenTicksApplied = row.RegenTicksApplied,
-            RegenHappyGained = row.RegenHappyGained,
-            MaxHappyAtTimeUtc = row.MaxHappyAtTimeUtc,
-            ClampedToMax = row.ClampedToMax,
-        };
-
-    private static DerivedHappyEventEntity MapDerivedHappyEvent(DerivedHappyEvent row, int sortOrder)
-        => new()
-        {
-            EventId = row.EventId,
-            EventType = row.EventType,
-            OccurredAtUtc = row.OccurredAtUtc,
-            SourceLogId = row.SourceLogId,
-            SortOrder = sortOrder,
-            HappyBeforeEvent = row.HappyBeforeEvent,
-            HappyAfterEvent = row.HappyAfterEvent,
-            Delta = row.Delta,
-            HappyUsed = row.HappyUsed,
-            MaxHappyAtTimeUtc = row.MaxHappyAtTimeUtc,
-            ClampedToMax = row.ClampedToMax,
-            Note = null,
-        };
-
-    private static IReadOnlyList<ModifierProvenanceRecord> BuildModifierProvenance(IReadOnlyList<DerivedGymTrain> derivedGymTrains)
+    // Keep BuildModifierProvenanceEntities unchanged — it's pure logic
+    private static List<ModifierProvenanceEntity> BuildModifierProvenanceEntities(int playerId, IReadOnlyList<DerivedGymTrain> derivedGymTrains)
     {
-        var provenance = new List<ModifierProvenanceRecord>(derivedGymTrains.Count * 3);
+        var entities = new List<ModifierProvenanceEntity>(derivedGymTrains.Count * 3);
+
         foreach (var train in derivedGymTrains)
         {
-            provenance.Add(new ModifierProvenanceRecord(
-                DerivedGymTrainLogId: train.LogId,
-                Scope: ModifierProvenanceScopes.Personal,
-                SubjectId: "self",
-                FactionId: null,
-                CompanyId: null,
-                ValidFromUtc: train.OccurredAtUtc,
-                ValidToUtc: null,
-                VerificationStatus: ModifierProvenanceStatuses.Verified,
-                VerificationReasonCode: ModifierProvenanceReasonCodes.SourceLog,
-                VerificationDetails: null));
+            // Personal: scope=1 (ModifierScope.Personal), SubjectId=playerId, verified
+            entities.Add(new ModifierProvenanceEntity
+            {
+                PlayerId = playerId,
+                LogEntryId = train.LogId,
+                Scope = (int)Data.Entities.ModifierScope.Personal,
+                SubjectId = playerId,
+                FactionId = null,
+                CompanyId = null,
+                VerificationStatus = (int)Data.Entities.VerificationStatus.Verified,
+            });
 
-            provenance.Add(new ModifierProvenanceRecord(
-                DerivedGymTrainLogId: train.LogId,
-                Scope: ModifierProvenanceScopes.Faction,
-                SubjectId: null,
-                FactionId: "unknown-faction",
-                CompanyId: null,
-                ValidFromUtc: train.OccurredAtUtc,
-                ValidToUtc: null,
-                VerificationStatus: ModifierProvenanceStatuses.Unresolved,
-                VerificationReasonCode: ModifierProvenanceReasonCodes.MissingFactionRecord,
-                VerificationDetails: null));
+            // Faction: scope=2 (ModifierScope.Faction), unresolved
+            entities.Add(new ModifierProvenanceEntity
+            {
+                PlayerId = playerId,
+                LogEntryId = train.LogId,
+                Scope = (int)Data.Entities.ModifierScope.Faction,
+                SubjectId = null,
+                FactionId = null,
+                CompanyId = null,
+                VerificationStatus = (int)Data.Entities.VerificationStatus.Unresolved,
+            });
 
-            provenance.Add(new ModifierProvenanceRecord(
-                DerivedGymTrainLogId: train.LogId,
-                Scope: ModifierProvenanceScopes.Company,
-                SubjectId: null,
-                FactionId: null,
-                CompanyId: "unknown-company",
-                ValidFromUtc: train.OccurredAtUtc,
-                ValidToUtc: null,
-                VerificationStatus: ModifierProvenanceStatuses.Unresolved,
-                VerificationReasonCode: ModifierProvenanceReasonCodes.MissingCompanyRecord,
-                VerificationDetails: null));
+            // Company: scope=4 (ModifierScope.Company), unresolved
+            entities.Add(new ModifierProvenanceEntity
+            {
+                PlayerId = playerId,
+                LogEntryId = train.LogId,
+                Scope = (int)Data.Entities.ModifierScope.Company,
+                SubjectId = null,
+                FactionId = null,
+                CompanyId = null,
+                VerificationStatus = (int)Data.Entities.VerificationStatus.Unresolved,
+            });
         }
 
-        return provenance;
+        return entities;
     }
-
-    private static ModifierProvenanceEntity MapModifierProvenance(ModifierProvenanceRecord row)
-        => new()
-        {
-            DerivedGymTrainLogId = row.DerivedGymTrainLogId,
-            Scope = row.Scope,
-            SubjectId = row.SubjectId,
-            FactionId = row.FactionId,
-            CompanyId = row.CompanyId,
-            ValidFromUtc = row.ValidFromUtc,
-            ValidToUtc = row.ValidToUtc,
-            VerificationStatus = row.VerificationStatus,
-            VerificationReasonCode = row.VerificationReasonCode,
-            VerificationDetails = row.VerificationDetails,
-        };
 }

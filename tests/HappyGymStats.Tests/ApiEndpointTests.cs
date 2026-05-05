@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using HappyGymStats.Api;
+using HappyGymStats.Core.Models;
 using HappyGymStats.Data;
 using HappyGymStats.Data.Entities;
 using Microsoft.AspNetCore.Hosting;
@@ -60,42 +61,33 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
     [Fact]
     public async Task Gym_trains_endpoint_uses_cursor_pagination()
     {
-        await _factory.SeedGymTrainsAsync(
-            new DerivedGymTrainEntity
+        await _factory.SeedUserLogEntriesAsync(
+            new UserLogEntryEntity
             {
-                LogId = "train-c",
+                PlayerId = 0,
+                LogEntryId = "train-c",
                 OccurredAtUtc = new DateTimeOffset(2026, 04, 30, 12, 00, 00, TimeSpan.Zero),
+                LogTypeId = 1,
                 HappyBeforeTrain = 300,
-                HappyAfterTrain = 250,
                 HappyUsed = 50,
-                RegenTicksApplied = 0,
-                RegenHappyGained = 0,
-                MaxHappyAtTimeUtc = 500,
-                ClampedToMax = false,
             },
-            new DerivedGymTrainEntity
+            new UserLogEntryEntity
             {
-                LogId = "train-b",
+                PlayerId = 0,
+                LogEntryId = "train-b",
                 OccurredAtUtc = new DateTimeOffset(2026, 04, 30, 12, 00, 00, TimeSpan.Zero),
+                LogTypeId = 1,
                 HappyBeforeTrain = 280,
-                HappyAfterTrain = 240,
                 HappyUsed = 40,
-                RegenTicksApplied = 0,
-                RegenHappyGained = 0,
-                MaxHappyAtTimeUtc = 500,
-                ClampedToMax = false,
             },
-            new DerivedGymTrainEntity
+            new UserLogEntryEntity
             {
-                LogId = "train-a",
+                PlayerId = 0,
+                LogEntryId = "train-a",
                 OccurredAtUtc = new DateTimeOffset(2026, 04, 30, 11, 45, 00, TimeSpan.Zero),
+                LogTypeId = 1,
                 HappyBeforeTrain = 260,
-                HappyAfterTrain = 220,
                 HappyUsed = 40,
-                RegenTicksApplied = 1,
-                RegenHappyGained = 5,
-                MaxHappyAtTimeUtc = 500,
-                ClampedToMax = false,
             });
 
         using var client = _factory.CreateClient();
@@ -110,59 +102,6 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
 
         Assert.NotNull(secondPage);
         Assert.Equal(new[] { "train-a" }, secondPage.Items.Select(x => x.LogId).ToArray());
-        Assert.Null(secondPage.NextCursor);
-    }
-
-    [Fact]
-    public async Task Happy_events_endpoint_uses_cursor_pagination()
-    {
-        await _factory.SeedHappyEventsAsync(
-            new DerivedHappyEventEntity
-            {
-                EventId = "event-c",
-                EventType = "gym_train",
-                OccurredAtUtc = new DateTimeOffset(2026, 04, 30, 12, 00, 00, TimeSpan.Zero),
-                SourceLogId = "train-c",
-                HappyBeforeEvent = 300,
-                HappyAfterEvent = 250,
-                Delta = -50,
-                Note = null,
-            },
-            new DerivedHappyEventEntity
-            {
-                EventId = "event-b",
-                EventType = "gym_train",
-                OccurredAtUtc = new DateTimeOffset(2026, 04, 30, 12, 00, 00, TimeSpan.Zero),
-                SourceLogId = "train-b",
-                HappyBeforeEvent = 280,
-                HappyAfterEvent = 240,
-                Delta = -40,
-                Note = null,
-            },
-            new DerivedHappyEventEntity
-            {
-                EventId = "event-a",
-                EventType = "regen",
-                OccurredAtUtc = new DateTimeOffset(2026, 04, 30, 11, 45, 00, TimeSpan.Zero),
-                SourceLogId = null,
-                HappyBeforeEvent = 255,
-                HappyAfterEvent = 260,
-                Delta = 5,
-                Note = "quarter-hour tick",
-            });
-
-        using var client = _factory.CreateClient();
-
-        var firstPage = await client.GetFromJsonAsync<CursorPage<HappyEventDto>>("/api/v1/torn/happy-events?limit=2", JsonOptions);
-
-        Assert.NotNull(firstPage);
-        Assert.Equal(new[] { "event-c", "event-b" }, firstPage.Items.Select(x => x.EventId).ToArray());
-        Assert.False(string.IsNullOrWhiteSpace(firstPage.NextCursor));
-
-        var secondPage = await client.GetFromJsonAsync<CursorPage<HappyEventDto>>($"/api/v1/torn/happy-events?limit=2&cursor={Uri.EscapeDataString(firstPage.NextCursor!)}", JsonOptions);
-
-        Assert.NotNull(secondPage);
-        Assert.Equal(new[] { "event-a" }, secondPage.Items.Select(x => x.EventId).ToArray());
         Assert.Null(secondPage.NextCursor);
     }
 
@@ -188,7 +127,7 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
     {
         using var client = _factory.CreateClient();
 
-        var response = await client.GetAsync("/api/v1/torn/happy-events?cursor=not-base64");
+        var response = await client.GetAsync("/api/v1/torn/gym-trains?cursor=not-base64");
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         var payload = await response.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
@@ -284,27 +223,16 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
         {
             using var scope = Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<HappyGymStatsDbContext>();
-            db.DerivedGymTrains.RemoveRange(db.DerivedGymTrains);
-            db.DerivedHappyEvents.RemoveRange(db.DerivedHappyEvents);
-            db.ImportCheckpoints.RemoveRange(db.ImportCheckpoints);
+            db.UserLogEntries.RemoveRange(db.UserLogEntries);
             db.ImportRuns.RemoveRange(db.ImportRuns);
-            db.RawUserLogs.RemoveRange(db.RawUserLogs);
             db.SaveChanges();
         }
 
-        public async Task SeedGymTrainsAsync(params DerivedGymTrainEntity[] rows)
+        public async Task SeedUserLogEntriesAsync(params UserLogEntryEntity[] rows)
         {
             using var scope = Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<HappyGymStatsDbContext>();
-            db.DerivedGymTrains.AddRange(rows);
-            await db.SaveChangesAsync();
-        }
-
-        public async Task SeedHappyEventsAsync(params DerivedHappyEventEntity[] rows)
-        {
-            using var scope = Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<HappyGymStatsDbContext>();
-            db.DerivedHappyEvents.AddRange(rows);
+            db.UserLogEntries.AddRange(rows);
             await db.SaveChangesAsync();
         }
 
