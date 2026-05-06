@@ -90,10 +90,13 @@ public sealed class TornApiClient
             if (!response.IsSuccessStatusCode)
                 throw new TornApiException($"Torn API returned HTTP {(int)response.StatusCode} ({response.StatusCode}).", isRetryable: IsRetryableStatusCode(response.StatusCode), statusCode: response.StatusCode, tornErrorCode: null);
 
-            if (doc.RootElement.TryGetProperty("player_id", out var playerIdEl) && playerIdEl.TryGetInt32(out var playerId))
+            // Torn API v2: /v2/user/basic wraps data under "profile", user id is "id"
+            if (doc.RootElement.TryGetProperty("profile", out var profileEl) &&
+                profileEl.TryGetProperty("id", out var playerIdEl) &&
+                playerIdEl.TryGetInt32(out var playerId))
                 return playerId;
 
-            throw new TornApiException("Torn API /v2/user/basic response missing 'player_id'.", isRetryable: false, statusCode: response.StatusCode, tornErrorCode: null);
+            throw new TornApiException("Torn API /v2/user/basic response missing 'profile.id'.", isRetryable: false, statusCode: response.StatusCode, tornErrorCode: null);
         }
     }
 

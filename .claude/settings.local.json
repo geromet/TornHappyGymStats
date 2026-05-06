@@ -28,7 +28,12 @@
       "Bash(echo \"exit:$?\")",
       "Bash(bash scripts/verify/build-and-test.sh)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(xargs ls *)",
+      "WebFetch(domain:auth.geromet.com)",
+      "Bash(dotnet add *)",
+      "Bash(dotnet tool *)",
+      "Bash(git commit *)"
     ]
   }
 }

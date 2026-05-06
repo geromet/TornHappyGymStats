@@ -37,10 +37,6 @@ public static class PerkLogTypes
         // Stock
         new(5511, "Stock sell", ScopePersonal),
         new(5545, "Stock special passive active", ScopePersonal),
-        // Merits (2058 already covered under Book)
-        new(4955, "Points merit reset use", ScopePersonal),
-        new(5100, "Merit assign", ScopePersonal),
-        new(5615, "Seasonal gift merit reset", ScopePersonal),
         // Company
         new(6210, "Job join", ScopeCompany),
         new(6215, "Job promote", ScopeCompany),

@@ -31,9 +31,39 @@ public static class LogEventExtractor
 
         IEnumerable<ReconstructionEvent> Iterator()
         {
+            int? currentPropertyId = null;
+
             foreach (var record in records)
             {
                 stats.RecordsSeen++;
+
+                // Property move (5910): user moved into a new property — always updates max happy and current residence.
+                if (record.LogTypeId == 5910 && record.MaxHappyAfter is not null && record.PropertyId is not null)
+                {
+                    currentPropertyId = record.PropertyId;
+                    stats.MaxHappyEventsExtracted++;
+                    yield return new MaxHappyEvent(
+                        LogId: record.LogId,
+                        OccurredAtUtc: record.OccurredAtUtc,
+                        MaxHappyBefore: record.MaxHappyBefore ?? record.MaxHappyAfter.Value,
+                        MaxHappyAfter: record.MaxHappyAfter.Value);
+                    continue;
+                }
+
+                // Property upgrade (5900) / staff change (5905): updates max happy only if user lives there.
+                if (record.LogTypeId is 5900 or 5905
+                    && record.MaxHappyAfter is not null
+                    && record.PropertyId is not null
+                    && record.PropertyId == currentPropertyId)
+                {
+                    stats.MaxHappyEventsExtracted++;
+                    yield return new MaxHappyEvent(
+                        LogId: record.LogId,
+                        OccurredAtUtc: record.OccurredAtUtc,
+                        MaxHappyBefore: record.MaxHappyBefore ?? record.MaxHappyAfter.Value,
+                        MaxHappyAfter: record.MaxHappyAfter.Value);
+                    continue;
+                }
 
                 // Gym train detection: HappyUsed is the primary signal.
                 if (record.HappyUsed != null)
