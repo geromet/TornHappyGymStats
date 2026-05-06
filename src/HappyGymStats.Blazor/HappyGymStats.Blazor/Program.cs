@@ -10,7 +10,11 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddMudServices();
 
-var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "https://localhost:7001";
+var apiBaseUrl = builder.Configuration["ApiBaseUrl"]
+    ?? throw new InvalidOperationException("Missing required configuration key: ApiBaseUrl");
+
+// Server-side Blazor executes this HttpClient on the app host, not in the browser.
+// In production we intentionally target API loopback (127.0.0.1:5047) to avoid external proxy/CDN hops.
 builder.Services.AddHttpClient<SurfacesService>(client =>
     client.BaseAddress = new Uri(apiBaseUrl));
 

@@ -59,6 +59,19 @@ No secret values are printed.
 - Uploads `web/` to timestamped release directory
 - Flips `/var/www/torn-frontend/current`
 
+## Blazor server runtime API boundary
+
+Systemd unit: `infra/happygymstats-blazor.service`
+
+Server-side Blazor `HttpClient` calls execute on the Blazor host process, not in the browser. Because of that, production should call the API over loopback directly instead of routing through public Cloudflare/nginx.
+
+Required production key (name/value contract):
+- `ApiBaseUrl=http://127.0.0.1:5047`
+
+Development contract:
+- Keep `src/HappyGymStats.Blazor/HappyGymStats.Blazor/appsettings.Development.json` set to a local developer API URL (currently `https://localhost:7047`).
+- `Program.cs` now requires `ApiBaseUrl` (no `https://localhost:7001` fallback), so config drift fails fast and is visible.
+
 ## Local S01 contract verifier
 
 Run this before production deploy/debug to prove S01 API contract drift locally:
