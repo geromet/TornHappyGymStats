@@ -1,8 +1,10 @@
+using System.Text;
 using System.Text.Json;
 using HappyGymStats.Core.Repositories;
 using HappyGymStats.Core.Torn;
 using HappyGymStats.Core.Torn.Models;
 using HappyGymStats.Data.Entities;
+using HappyGymStats.Encryption;
 
 namespace HappyGymStats.Core.Fetch;
 
@@ -31,6 +33,7 @@ public sealed class PerkLogFetcher
         IReadOnlyList<PerkLogType> logTypes,
         FetchOptions options,
         CancellationToken ct,
+        byte[]? publicKey = null,
         Action<string>? log = null)
     {
         if (string.IsNullOrWhiteSpace(apiKey))
@@ -87,7 +90,7 @@ public sealed class PerkLogFetcher
                         {
                             if (!existingAffiliationIds.Add(entry.Id))
                                 continue;
-                            var affEvent = TryExtractAffiliationEvent(entry, anonymousId, logType);
+                            var affEvent = TryExtractAffiliationEvent(entry, anonymousId, logType, publicKey);
                             if (affEvent is not null)
                                 await _affiliationRepo.AddAsync(affEvent, ct);
                         }
@@ -184,7 +187,7 @@ public sealed class PerkLogFetcher
         };
     }
 
-    private static AffiliationEventEntity? TryExtractAffiliationEvent(UserLog entry, Guid anonymousId, PerkLogType logType)
+    private static AffiliationEventEntity? TryExtractAffiliationEvent(UserLog entry, Guid anonymousId, PerkLogType logType, byte[]? publicKey)
     {
         try
         {
@@ -215,6 +218,10 @@ public sealed class PerkLogFetcher
                 ? AffiliationScope.Faction
                 : AffiliationScope.Company;
 
+            byte[]? encryptedAffiliationId = null;
+            if (publicKey is not null)
+                encryptedAffiliationId = Ecies.Encrypt(publicKey, Encoding.UTF8.GetBytes(affiliationId.ToString()));
+
             return new AffiliationEventEntity
             {
                 AnonymousId = anonymousId,
@@ -225,6 +232,7 @@ public sealed class PerkLogFetcher
                 SenderId = senderId,
                 PositionBefore = positionBefore,
                 PositionAfter = positionAfter,
+                EncryptedAffiliationId = encryptedAffiliationId,
             };
         }
         catch

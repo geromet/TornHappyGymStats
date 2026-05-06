@@ -30,4 +30,11 @@ public sealed class IdentityMapRepository(HappyGymStatsDbContext db) : IIdentity
         entry.ExpiresAtUtc = null;
         return true;
     }
+
+    public async Task StoreEncryptedTornPlayerIdAsync(Guid anonymousId, byte[] encryptedTornPlayerId, CancellationToken ct)
+    {
+        var entry = await db.IdentityMap.FirstOrDefaultAsync(e => e.AnonymousId == anonymousId, ct);
+        if (entry is not null)
+            entry.EncryptedTornPlayerId = encryptedTornPlayerId;
+    }
 }

@@ -10,4 +10,8 @@ public sealed class AffiliationEventEntity
     public int? SenderId { get; set; }
     public int? PositionBefore { get; set; }
     public int? PositionAfter { get; set; }
+
+    // ECIES ciphertext of AffiliationId (UTF-8 decimal string bytes).
+    // Null when the user has not submitted a public key.
+    public byte[]? EncryptedAffiliationId { get; set; }
 }

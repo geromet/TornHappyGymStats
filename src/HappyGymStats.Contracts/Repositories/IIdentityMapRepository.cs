@@ -15,4 +15,8 @@ public interface IIdentityMapRepository
     // Returns false if the entry does not exist or is already claimed.
     // Caller commits via IUnitOfWork.
     Task<bool> ClaimProvisionalAsync(Guid anonymousId, string keycloakSub, CancellationToken ct);
+
+    // Stores the ECIES ciphertext of the user's Torn player ID.
+    // Caller commits via IUnitOfWork.
+    Task StoreEncryptedTornPlayerIdAsync(Guid anonymousId, byte[] encryptedTornPlayerId, CancellationToken ct);
 }

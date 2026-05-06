@@ -59,7 +59,17 @@ public sealed class ImportController : ApiControllerBase
         if (string.IsNullOrWhiteSpace(apiKey))
             return ValidationError("apiKey is required.", new { field = "apiKey" });
 
-        var status = _importService.Enqueue(apiKey, fresh: true);
+        byte[]? publicKey = null;
+        if (!string.IsNullOrEmpty(request?.PublicKey))
+        {
+            try { publicKey = Convert.FromBase64String(request.PublicKey); }
+            catch (FormatException)
+            {
+                return ValidationError("publicKey must be a valid base64 string.", new { field = "publicKey" });
+            }
+        }
+
+        var status = _importService.Enqueue(apiKey, fresh: true, publicKey);
 
         await _identityMapRepo.CreateAsync(new IdentityMapEntity
         {
@@ -67,6 +77,7 @@ public sealed class ImportController : ApiControllerBase
             IsProvisional = true,
             CreatedAtUtc = status.StartedAtUtc,
             ExpiresAtUtc = status.StartedAtUtc.AddHours(24),
+            PublicKey = publicKey,
         }, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 

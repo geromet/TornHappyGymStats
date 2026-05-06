@@ -42,6 +42,8 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
                 .HasFilter("\"KeycloakSub\" IS NOT NULL");
             entity.Property(e => e.CreatedAtUtc).HasConversion(UtcDateTimeOffsetConverter);
             entity.Property(e => e.ExpiresAtUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
+            entity.Property(e => e.PublicKey).HasColumnType("bytea");
+            entity.Property(e => e.EncryptedTornPlayerId).HasColumnType("bytea");
         });
 
         modelBuilder.Entity<ImportRunEntity>(entity =>
@@ -66,6 +68,7 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
             entity.HasIndex(e => new { e.AnonymousId, e.Scope, e.AffiliationId });
             entity.Property(e => e.SourceLogEntryId).IsRequired();
             entity.Property(e => e.Scope).HasConversion<int>();
+            entity.Property(e => e.EncryptedAffiliationId).HasColumnType("bytea");
         });
 
         modelBuilder.Entity<UserLogEntryEntity>(entity =>

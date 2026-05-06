@@ -23,6 +23,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HappyGymStats.Contracts", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HappyGymStats.Identity", "src\HappyGymStats.Identity\HappyGymStats.Identity.csproj", "{DFDF15AF-47C3-4D3A-9318-3C1EFBA1375D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HappyGymStats.Encryption", "src\HappyGymStats.Encryption\HappyGymStats.Encryption.csproj", "{2F285847-D891-443F-917F-405F83F905EE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -129,6 +131,18 @@ Global
 		{DFDF15AF-47C3-4D3A-9318-3C1EFBA1375D}.Release|x64.Build.0 = Release|Any CPU
 		{DFDF15AF-47C3-4D3A-9318-3C1EFBA1375D}.Release|x86.ActiveCfg = Release|Any CPU
 		{DFDF15AF-47C3-4D3A-9318-3C1EFBA1375D}.Release|x86.Build.0 = Release|Any CPU
+		{2F285847-D891-443F-917F-405F83F905EE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2F285847-D891-443F-917F-405F83F905EE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2F285847-D891-443F-917F-405F83F905EE}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{2F285847-D891-443F-917F-405F83F905EE}.Debug|x64.Build.0 = Debug|Any CPU
+		{2F285847-D891-443F-917F-405F83F905EE}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{2F285847-D891-443F-917F-405F83F905EE}.Debug|x86.Build.0 = Debug|Any CPU
+		{2F285847-D891-443F-917F-405F83F905EE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2F285847-D891-443F-917F-405F83F905EE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2F285847-D891-443F-917F-405F83F905EE}.Release|x64.ActiveCfg = Release|Any CPU
+		{2F285847-D891-443F-917F-405F83F905EE}.Release|x64.Build.0 = Release|Any CPU
+		{2F285847-D891-443F-917F-405F83F905EE}.Release|x86.ActiveCfg = Release|Any CPU
+		{2F285847-D891-443F-917F-405F83F905EE}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -142,5 +156,6 @@ Global
 		{BFFF4D45-6FBC-4EAD-BAF2-2EE4507C5ADC} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{5E69002E-637D-440F-B5F7-EC134D65C044} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{DFDF15AF-47C3-4D3A-9318-3C1EFBA1375D} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{2F285847-D891-443F-917F-405F83F905EE} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

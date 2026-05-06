@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
+using System.Text;
 using HappyGymStats.Core.Fetch;
 using HappyGymStats.Core.Reconstruction;
 using HappyGymStats.Core.Repositories;
 using HappyGymStats.Core.Surfaces;
 using HappyGymStats.Core.Torn;
+using HappyGymStats.Encryption;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -40,7 +42,7 @@ public sealed class ImportOrchestrator : BackgroundService
     /// Enqueue an import if none is already running.
     /// Returns the status of the enqueued (or already-running) job.
     /// </summary>
-    public ImportJobStatus Enqueue(string apiKey, bool fresh)
+    public ImportJobStatus Enqueue(string apiKey, bool fresh, byte[]? publicKey = null)
     {
         if (_latest is { IsTerminal: false })
             return _latest;
@@ -62,7 +64,7 @@ public sealed class ImportOrchestrator : BackgroundService
             ErrorMessage: null);
 
         _latest = status;
-        _queue.Enqueue(new ImportJobRequest(apiKey, fresh, status.Id, anonymousId));
+        _queue.Enqueue(new ImportJobRequest(apiKey, fresh, status.Id, anonymousId, publicKey));
         return status;
     }
 
@@ -101,9 +103,9 @@ public sealed class ImportOrchestrator : BackgroundService
             var perkFetcher = scope.ServiceProvider.GetRequiredService<PerkLogFetcher>();
             var reconstructionRunner = scope.ServiceProvider.GetRequiredService<ReconstructionRunner>();
             var importRunRepo = scope.ServiceProvider.GetRequiredService<IImportRunRepository>();
+            var identityMapRepo = scope.ServiceProvider.GetRequiredService<IIdentityMapRepository>();
+            var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
-            // Validate the API key and log the Torn player ID, but do not store it — TornPlayerId is PII
-            // that will be encrypted into IdentityMap in Phase 2.
             var tornPlayerId = await tornClient.GetPlayerIdAsync(request.ApiKey, stoppingToken).ConfigureAwait(false);
             _logger.LogInformation("Import job {JobId} API key validated for Torn player {TornPlayerId}", request.JobId, tornPlayerId);
 
@@ -114,6 +116,15 @@ public sealed class ImportOrchestrator : BackgroundService
                 : await importRunRepo.ResolveAnonymousIdAsync(stoppingToken).ConfigureAwait(false) ?? Guid.NewGuid();
 
             _logger.LogInformation("Import job {JobId} using AnonymousId {AnonymousId}", request.JobId, anonymousId);
+
+            if (request.PublicKey is not null)
+            {
+                var plaintext = Encoding.UTF8.GetBytes(tornPlayerId.ToString());
+                var encrypted = Ecies.Encrypt(request.PublicKey, plaintext);
+                await identityMapRepo.StoreEncryptedTornPlayerIdAsync(anonymousId, encrypted, stoppingToken).ConfigureAwait(false);
+                await unitOfWork.SaveChangesAsync(stoppingToken).ConfigureAwait(false);
+                _logger.LogInformation("Import job {JobId} encrypted TornPlayerId stored.", request.JobId);
+            }
 
             var options = FetchOptions.Default(
                 new Uri("https://api.torn.com/v2/user/log?cat=25"),
@@ -148,6 +159,7 @@ public sealed class ImportOrchestrator : BackgroundService
                 anonymousId: anonymousId,
                 logTypes: PerkLogTypes.All,
                 options: perkOptions,
+                publicKey: request.PublicKey,
                 ct: stoppingToken,
                 log: msg => _logger.LogInformation("Import job {JobId} [perks]: {Message}", request.JobId, msg)
             ).ConfigureAwait(false);
@@ -221,7 +233,7 @@ public sealed class ImportOrchestrator : BackgroundService
             _latest = mutate(_latest);
     }
 
-    private sealed record ImportJobRequest(string ApiKey, bool Fresh, string JobId, Guid AnonymousId);
+    private sealed record ImportJobRequest(string ApiKey, bool Fresh, string JobId, Guid AnonymousId, byte[]? PublicKey);
 }
 
 public sealed record ImportJobStatus(
