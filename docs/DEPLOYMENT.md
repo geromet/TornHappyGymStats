@@ -59,6 +59,16 @@ No secret values are printed.
 - Uploads `web/` to timestamped release directory
 - Flips `/var/www/torn-frontend/current`
 
+## Local S01 contract verifier
+
+Run this before production deploy/debug to prove S01 API contract drift locally:
+
+```bash
+bash scripts/verify/s01-api-production-contract.sh
+```
+
+The verifier is local-only by default (no remote network calls). It statically checks deploy precheck/health gate markers, runs `ApiEndpointTests`, and validates the launch-profile gotcha: when pinning `ASPNETCORE_URLS` in `dotnet run` verification scripts, include `--no-launch-profile` so launch settings do not override the URL.
+
 ## Environment / override knobs
 See script headers and `--help` output for:
 - SSH host/user/key/proxy

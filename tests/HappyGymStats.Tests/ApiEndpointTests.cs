@@ -9,7 +9,9 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
 
 namespace HappyGymStats.Tests;
@@ -226,24 +228,26 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseContentRoot(ResolveApiContentRoot());
-            builder.UseEnvironment("Development");
+            builder.UseEnvironment("Testing");
             builder.ConfigureServices(services =>
             {
                 _connection?.Dispose();
                 _connection = new SqliteConnection("Data Source=:memory:");
                 _connection.Open();
 
-                var dbContextDescriptor = services.SingleOrDefault(descriptor =>
-                    descriptor.ServiceType == typeof(DbContextOptions<HappyGymStatsDbContext>));
+                services.RemoveAll(typeof(DbContextOptions<HappyGymStatsDbContext>));
+                services.RemoveAll(typeof(HappyGymStatsDbContext));
 
-                if (dbContextDescriptor is not null)
-                    services.Remove(dbContextDescriptor);
+                var efContextOptionConfigs = services
+                    .Where(descriptor => descriptor.ServiceType.IsGenericType
+                        && descriptor.ServiceType.GetGenericTypeDefinition() == typeof(IDbContextOptionsConfiguration<>)
+                        && descriptor.ServiceType.GetGenericArguments()[0] == typeof(HappyGymStatsDbContext))
+                    .ToList();
 
-                var connectionDescriptor = services.SingleOrDefault(descriptor =>
-                    descriptor.ServiceType == typeof(SqliteConnection));
+                foreach (var descriptor in efContextOptionConfigs)
+                    services.Remove(descriptor);
 
-                if (connectionDescriptor is not null)
-                    services.Remove(connectionDescriptor);
+                services.RemoveAll(typeof(SqliteConnection));
 
                 services.AddSingleton(_connection);
                 services.AddDbContext<HappyGymStatsDbContext>(options => options.UseSqlite(_connection));
