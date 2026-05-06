@@ -1,0 +1,18 @@
+[Unit]
+Description=HappyGymStats Blazor frontend
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/happygymstats-blazor/current
+ExecStart=/var/www/happygymstats-blazor/current/HappyGymStats.Blazor
+Restart=on-failure
+RestartSec=5
+
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5182
+
+[Install]
+WantedBy=multi-user.target

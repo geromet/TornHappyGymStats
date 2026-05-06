@@ -3,7 +3,7 @@ namespace HappyGymStats.Data.Entities;
 public sealed class ImportRunEntity
 {
     public long Id { get; set; }
-    public int? PlayerId { get; set; }
+    public Guid? AnonymousId { get; set; }
     public DateTimeOffset StartedAtUtc { get; set; }
     public DateTimeOffset? CompletedAtUtc { get; set; }
     public string Outcome { get; set; } = "running";

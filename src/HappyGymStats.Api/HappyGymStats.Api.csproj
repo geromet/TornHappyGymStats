@@ -12,11 +12,13 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\HappyGymStats.Core\HappyGymStats.Core.csproj" />
     <ProjectReference Include="..\HappyGymStats.Data\HappyGymStats.Data.csproj" />
+    <ProjectReference Include="..\HappyGymStats.Identity\HappyGymStats.Identity.csproj" />
   </ItemGroup>
 
 </Project>

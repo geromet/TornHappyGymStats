@@ -7,12 +7,12 @@ public sealed class HappyGymStatsDbContextFactory : IDesignTimeDbContextFactory<
 {
     public HappyGymStatsDbContext CreateDbContext(string[] args)
     {
-        var databasePath = args.Length > 0 && !string.IsNullOrWhiteSpace(args[0])
+        var connectionString = args.Length > 0 && !string.IsNullOrWhiteSpace(args[0])
             ? args[0]
-            : Path.Combine(AppContext.BaseDirectory, "happygymstats.db");
+            : "Host=localhost;Database=happygymstats;Username=happygymstats;Password=changeme";
 
         var options = new DbContextOptionsBuilder<HappyGymStatsDbContext>()
-            .UseSqlite($"Data Source={databasePath}")
+            .UseNpgsql(connectionString)
             .Options;
 
         return new HappyGymStatsDbContext(options);

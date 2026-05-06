@@ -1,3 +1,4 @@
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -19,6 +20,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HappyGymStats.Blazor.Client", "src\HappyGymStats.Blazor\HappyGymStats.Blazor.Client\HappyGymStats.Blazor.Client.csproj", "{BFFF4D45-6FBC-4EAD-BAF2-2EE4507C5ADC}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HappyGymStats.Contracts", "src\HappyGymStats.Contracts\HappyGymStats.Contracts.csproj", "{5E69002E-637D-440F-B5F7-EC134D65C044}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HappyGymStats.Identity", "src\HappyGymStats.Identity\HappyGymStats.Identity.csproj", "{DFDF15AF-47C3-4D3A-9318-3C1EFBA1375D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -114,6 +117,18 @@ Global
 		{5E69002E-637D-440F-B5F7-EC134D65C044}.Release|x64.Build.0 = Release|Any CPU
 		{5E69002E-637D-440F-B5F7-EC134D65C044}.Release|x86.ActiveCfg = Release|Any CPU
 		{5E69002E-637D-440F-B5F7-EC134D65C044}.Release|x86.Build.0 = Release|Any CPU
+		{DFDF15AF-47C3-4D3A-9318-3C1EFBA1375D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DFDF15AF-47C3-4D3A-9318-3C1EFBA1375D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DFDF15AF-47C3-4D3A-9318-3C1EFBA1375D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{DFDF15AF-47C3-4D3A-9318-3C1EFBA1375D}.Debug|x64.Build.0 = Debug|Any CPU
+		{DFDF15AF-47C3-4D3A-9318-3C1EFBA1375D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{DFDF15AF-47C3-4D3A-9318-3C1EFBA1375D}.Debug|x86.Build.0 = Debug|Any CPU
+		{DFDF15AF-47C3-4D3A-9318-3C1EFBA1375D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DFDF15AF-47C3-4D3A-9318-3C1EFBA1375D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DFDF15AF-47C3-4D3A-9318-3C1EFBA1375D}.Release|x64.ActiveCfg = Release|Any CPU
+		{DFDF15AF-47C3-4D3A-9318-3C1EFBA1375D}.Release|x64.Build.0 = Release|Any CPU
+		{DFDF15AF-47C3-4D3A-9318-3C1EFBA1375D}.Release|x86.ActiveCfg = Release|Any CPU
+		{DFDF15AF-47C3-4D3A-9318-3C1EFBA1375D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -126,5 +141,6 @@ Global
 		{CAC86336-7223-4B68-B32E-A4D95B5B7479} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{BFFF4D45-6FBC-4EAD-BAF2-2EE4507C5ADC} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{5E69002E-637D-440F-B5F7-EC134D65C044} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{DFDF15AF-47C3-4D3A-9318-3C1EFBA1375D} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

@@ -13,17 +13,20 @@ public sealed class ReconstructionRunner
     private readonly IUserLogEntryRepository _userLogRepo;
     private readonly IImportRunRepository _importRunRepo;
     private readonly IModifierProvenanceRepository _provenanceRepo;
+    private readonly IAffiliationEventRepository _affiliationRepo;
     private readonly IUnitOfWork _unitOfWork;
 
     public ReconstructionRunner(
         IUserLogEntryRepository userLogRepo,
         IImportRunRepository importRunRepo,
         IModifierProvenanceRepository provenanceRepo,
+        IAffiliationEventRepository affiliationRepo,
         IUnitOfWork unitOfWork)
     {
         _userLogRepo = userLogRepo;
         _importRunRepo = importRunRepo;
         _provenanceRepo = provenanceRepo;
+        _affiliationRepo = affiliationRepo;
         _unitOfWork = unitOfWork;
     }
 
@@ -35,30 +38,28 @@ public sealed class ReconstructionRunner
         DateTimeOffset AnchorTimeUtc);
 
     public async Task<RunResult> RunAsync(
-        int playerId,
+        Guid anonymousId,
         int currentHappy,
         DateTimeOffset anchorTimeUtc,
         CancellationToken ct = default)
     {
-        // Keep validation from original Run method unchanged:
         if (currentHappy < 0)
             throw new ArgumentOutOfRangeException(nameof(currentHappy), currentHappy, "currentHappy must be >= 0.");
         if (anchorTimeUtc.Offset != TimeSpan.Zero)
             throw new ArgumentException("anchorTimeUtc must be in UTC (offset +00:00).", nameof(anchorTimeUtc));
 
-        // Resolve playerId if not provided
-        if (playerId == 0)
-            playerId = await _importRunRepo.ResolvePlayerIdAsync(ct);
+        if (anonymousId == Guid.Empty)
+            anonymousId = await _importRunRepo.ResolveAnonymousIdAsync(ct) ?? Guid.Empty;
 
-        if (playerId == 0)
+        if (anonymousId == Guid.Empty)
             return new RunResult(
                 Success: false,
-                ErrorMessage: "Could not resolve playerId: no import runs found in the database.",
+                ErrorMessage: "Could not resolve anonymousId: no import runs found in the database.",
                 DerivedGymTrains: Array.Empty<DerivedGymTrain>(),
                 Stats: null,
                 AnchorTimeUtc: anchorTimeUtc);
 
-        var records = await _userLogRepo.GetReconstructionRecordsAsync(playerId, ct);
+        var records = await _userLogRepo.GetReconstructionRecordsAsync(anonymousId, ct);
 
         // Keep existing extraction and reconstruction logic unchanged:
         var extract = LogEventExtractor.Extract(records);
@@ -75,11 +76,12 @@ public sealed class ReconstructionRunner
         var happyUpdates = reconstructed.DerivedGymTrains
             .Select(t => new HappyBeforeTrainUpdate(t.LogId, t.HappyBeforeTrain))
             .ToList();
-        await _userLogRepo.StageHappyBeforeTrainBatchAsync(playerId, happyUpdates, ct);
+        await _userLogRepo.StageHappyBeforeTrainBatchAsync(anonymousId, happyUpdates, ct);
 
         // Stage provenance replacement (delete old + insert new; committed below)
-        var provenanceEntities = BuildModifierProvenanceEntities(playerId, reconstructed.DerivedGymTrains);
-        await _provenanceRepo.StageReplacementForPlayerAsync(playerId, provenanceEntities, ct);
+        var affiliationEvents = await _affiliationRepo.GetForPlayerOrderedAsync(anonymousId, ct);
+        var provenanceEntities = BuildModifierProvenanceEntities(anonymousId, reconstructed.DerivedGymTrains, affiliationEvents);
+        await _provenanceRepo.StageReplacementForPlayerAsync(anonymousId, provenanceEntities, ct);
 
         // Single atomic commit — replaces the explicit BeginTransaction/Commit
         await _unitOfWork.SaveChangesAsync(ct);
@@ -100,47 +102,62 @@ public sealed class ReconstructionRunner
             AnchorTimeUtc: anchorTimeUtc);
     }
 
-    // Keep BuildModifierProvenanceEntities unchanged — it's pure logic
-    private static List<ModifierProvenanceEntity> BuildModifierProvenanceEntities(int playerId, IReadOnlyList<DerivedGymTrain> derivedGymTrains)
+    private static readonly HashSet<int> CompanyLeaveLogTypes = new() { 6260, 6261, 6262 };
+
+    private static List<ModifierProvenanceEntity> BuildModifierProvenanceEntities(
+        Guid anonymousId,
+        IReadOnlyList<DerivedGymTrain> derivedGymTrains,
+        IReadOnlyList<AffiliationEventRecord> affiliationEvents)
     {
+        var factionEvents = affiliationEvents.Where(e => e.Scope == Data.Entities.AffiliationScope.Faction).ToList();
+        var companyEvents = affiliationEvents.Where(e => e.Scope == Data.Entities.AffiliationScope.Company).ToList();
+
         var entities = new List<ModifierProvenanceEntity>(derivedGymTrains.Count * 3);
 
         foreach (var train in derivedGymTrains)
         {
-            // Personal: scope=1 (ModifierScope.Personal), SubjectId=playerId, verified
+            var trainTime = train.OccurredAtUtc;
+
             entities.Add(new ModifierProvenanceEntity
             {
-                PlayerId = playerId,
+                AnonymousId = anonymousId,
                 LogEntryId = train.LogId,
                 Scope = (int)Data.Entities.ModifierScope.Personal,
-                SubjectId = playerId,
+                SubjectId = null, // Phase 4: will be EncryptedTornPlayerId in IdentityMap
                 FactionId = null,
                 CompanyId = null,
                 VerificationStatus = (int)Data.Entities.VerificationStatus.Verified,
             });
 
-            // Faction: scope=2 (ModifierScope.Faction), unresolved
+            var latestFaction = factionEvents.LastOrDefault(e => e.OccurredAtUtc <= trainTime);
             entities.Add(new ModifierProvenanceEntity
             {
-                PlayerId = playerId,
+                AnonymousId = anonymousId,
                 LogEntryId = train.LogId,
                 Scope = (int)Data.Entities.ModifierScope.Faction,
-                SubjectId = null,
-                FactionId = null,
+                SubjectId = latestFaction?.SenderId,
+                FactionId = latestFaction?.AffiliationId,
                 CompanyId = null,
-                VerificationStatus = (int)Data.Entities.VerificationStatus.Unresolved,
+                VerificationStatus = latestFaction is not null
+                    ? (int)Data.Entities.VerificationStatus.Verified
+                    : (int)Data.Entities.VerificationStatus.Unresolved,
             });
 
-            // Company: scope=4 (ModifierScope.Company), unresolved
+            var latestCompany = companyEvents.LastOrDefault(e => e.OccurredAtUtc <= trainTime);
+            var activeCompanyId = latestCompany is not null && !CompanyLeaveLogTypes.Contains(latestCompany.LogTypeId)
+                ? latestCompany.AffiliationId
+                : (int?)null;
             entities.Add(new ModifierProvenanceEntity
             {
-                PlayerId = playerId,
+                AnonymousId = anonymousId,
                 LogEntryId = train.LogId,
                 Scope = (int)Data.Entities.ModifierScope.Company,
-                SubjectId = null,
+                SubjectId = activeCompanyId.HasValue ? latestCompany?.SenderId : null,
                 FactionId = null,
-                CompanyId = null,
-                VerificationStatus = (int)Data.Entities.VerificationStatus.Unresolved,
+                CompanyId = activeCompanyId,
+                VerificationStatus = activeCompanyId.HasValue
+                    ? (int)Data.Entities.VerificationStatus.Verified
+                    : (int)Data.Entities.VerificationStatus.Unresolved,
             });
         }
 

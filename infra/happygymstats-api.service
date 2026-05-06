@@ -1,0 +1,19 @@
+[Unit]
+Description=HappyGymStats API backend
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/happygymstats/current
+ExecStart=/var/www/happygymstats/current/HappyGymStats.Api
+Restart=on-failure
+RestartSec=5
+
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5047
+Environment=HAPPYGYMSTATS_DATABASE=/var/www/happygymstats/data/happygymstats.db
+
+[Install]
+WantedBy=multi-user.target

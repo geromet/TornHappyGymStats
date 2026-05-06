@@ -1,5 +1,6 @@
 using HappyGymStats.Api.Infrastructure;
 using HappyGymStats.Core.Fetch;
+using HappyGymStats.Identity.Authentication;
 using HappyGymStats.Core.Import;
 using HappyGymStats.Core.Reconstruction;
 using HappyGymStats.Core.Repositories;
@@ -13,6 +14,8 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
+builder.Services.AddKeycloakAuthentication("https://auth.geromet.com/realms/torn");
+
 builder.Services.AddCors(options =>
     options.AddPolicy("ReadApi", policy => policy
         .AllowAnyOrigin()
@@ -21,14 +24,13 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddControllers();
 
-var databasePath = AppConfiguration.ResolveDatabasePath(builder.Configuration, builder.Environment);
+var connectionString = AppConfiguration.ResolveConnectionString(builder.Configuration);
 var surfacesCacheDirectory = AppConfiguration.ResolveSurfacesCacheDirectory(builder.Configuration, builder.Environment);
 
-Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
 Directory.CreateDirectory(surfacesCacheDirectory);
 
 builder.Services.AddDbContext<HappyGymStatsDbContext>(options =>
-    options.UseSqlite($"Data Source={databasePath}"));
+    options.UseNpgsql(connectionString));
 
 builder.Services.AddHttpClient<TornApiClient>(client =>
 {
@@ -70,6 +72,8 @@ using (var scope = app.Services.CreateScope())
 
 app.MapOpenApi();
 app.UseCors("ReadApi");
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseStaticFiles();
 app.MapControllers();
 

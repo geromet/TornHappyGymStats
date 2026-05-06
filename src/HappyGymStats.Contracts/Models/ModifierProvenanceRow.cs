@@ -6,4 +6,4 @@ public sealed record ModifierProvenanceRow(
     int? SubjectId,
     int? FactionId,
     int? CompanyId,
-    int PlayerId);
+    Guid AnonymousId);

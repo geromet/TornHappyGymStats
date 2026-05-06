@@ -35,7 +35,7 @@ public sealed class LogFetcher
 
     public async Task<FetchRunResult> RunAsync(
         string apiKey,
-        int playerId,
+        Guid anonymousId,
         FetchMode mode,
         FetchOptions options,
         CancellationToken ct,
@@ -48,7 +48,7 @@ public sealed class LogFetcher
             throw new ArgumentNullException(nameof(options));
 
         // Build a dedup set from existing entries for this player.
-        var existingIds = await _userLogRepo.GetExistingLogIdsAsync(playerId, ct);
+        var existingIds = await _userLogRepo.GetExistingLogIdsAsync(anonymousId, ct);
 
         Uri? nextUrl;
         ImportRunEntity importRun;
@@ -59,7 +59,7 @@ public sealed class LogFetcher
             nextUrl = options.FreshStartUrl;
             importRun = new ImportRunEntity
             {
-                PlayerId = playerId,
+                AnonymousId = anonymousId,
                 StartedAtUtc = now,
                 Outcome = "running",
                 NextUrl = nextUrl.ToString(),
@@ -70,7 +70,7 @@ public sealed class LogFetcher
         else
         {
             // Resume: find latest incomplete run for this player that has a NextUrl.
-            var priorRun = await _importRunRepo.GetLatestIncompleteAsync(playerId, ct);
+            var priorRun = await _importRunRepo.GetLatestIncompleteAsync(ct);
 
             if (priorRun is null || string.IsNullOrWhiteSpace(priorRun.NextUrl))
             {
@@ -87,7 +87,7 @@ public sealed class LogFetcher
 
             importRun = new ImportRunEntity
             {
-                PlayerId = playerId,
+                AnonymousId = anonymousId,
                 StartedAtUtc = now,
                 Outcome = "running",
                 NextUrl = priorRun.NextUrl,
@@ -130,7 +130,7 @@ public sealed class LogFetcher
                     if (!existingIds.Add(entry.Id))
                         continue;
 
-                    newEntries.Add(MapUserLogEntry(entry, playerId));
+                    newEntries.Add(MapUserLogEntry(entry, anonymousId));
                 }
 
                 if (newEntries.Count > 0)
@@ -237,7 +237,7 @@ public sealed class LogFetcher
         }
     }
 
-    private static UserLogEntryEntity MapUserLogEntry(UserLog entry, int playerId)
+    private static UserLogEntryEntity MapUserLogEntry(UserLog entry, Guid anonymousId)
     {
         var raw = entry.Raw;
         JsonElement data = default;
@@ -245,7 +245,7 @@ public sealed class LogFetcher
 
         return new UserLogEntryEntity
         {
-            PlayerId = playerId,
+            AnonymousId = anonymousId,
             LogEntryId = entry.Id,
             OccurredAtUtc = SafeUnixSeconds(entry.Timestamp) ?? DateTimeOffset.UnixEpoch,
             LogTypeId = entry.LogTypeId ?? 0,

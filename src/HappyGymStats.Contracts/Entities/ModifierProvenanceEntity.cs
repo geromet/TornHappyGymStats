@@ -2,7 +2,7 @@ namespace HappyGymStats.Data.Entities;
 
 public sealed class ModifierProvenanceEntity
 {
-    public int PlayerId { get; set; }
+    public Guid AnonymousId { get; set; }
     public string LogEntryId { get; set; } = string.Empty;
     public int Scope { get; set; }  // ModifierScope bitmask: 1=personal, 2=faction, 4=company
     public int? SubjectId { get; set; }

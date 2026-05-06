@@ -35,7 +35,7 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
         modelBuilder.Entity<ImportRunEntity>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.HasIndex(e => new { e.PlayerId, e.StartedAtUtc });
+            entity.HasIndex(e => new { e.AnonymousId, e.StartedAtUtc });
             entity.HasIndex(e => e.Outcome);
             entity.Property(e => e.StartedAtUtc).HasConversion(UtcDateTimeOffsetConverter);
             entity.Property(e => e.CompletedAtUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
@@ -43,24 +43,24 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
 
         modelBuilder.Entity<ModifierProvenanceEntity>(entity =>
         {
-            entity.HasKey(e => new { e.PlayerId, e.LogEntryId, e.Scope });
-            entity.HasIndex(e => new { e.PlayerId, e.VerificationStatus });
+            entity.HasKey(e => new { e.AnonymousId, e.LogEntryId, e.Scope });
+            entity.HasIndex(e => new { e.AnonymousId, e.VerificationStatus });
             entity.Property(e => e.LogEntryId).IsRequired();
         });
 
         modelBuilder.Entity<AffiliationEventEntity>(entity =>
         {
-            entity.HasKey(e => new { e.PlayerId, e.SourceLogEntryId });
-            entity.HasIndex(e => new { e.PlayerId, e.Scope, e.AffiliationId });
+            entity.HasKey(e => new { e.AnonymousId, e.SourceLogEntryId });
+            entity.HasIndex(e => new { e.AnonymousId, e.Scope, e.AffiliationId });
             entity.Property(e => e.SourceLogEntryId).IsRequired();
             entity.Property(e => e.Scope).HasConversion<int>();
         });
 
         modelBuilder.Entity<UserLogEntryEntity>(entity =>
         {
-            entity.HasKey(e => new { e.PlayerId, e.LogEntryId });
-            entity.HasIndex(e => new { e.PlayerId, e.OccurredAtUtc });
-            entity.HasIndex(e => new { e.PlayerId, e.LogTypeId });
+            entity.HasKey(e => new { e.AnonymousId, e.LogEntryId });
+            entity.HasIndex(e => new { e.AnonymousId, e.OccurredAtUtc });
+            entity.HasIndex(e => new { e.AnonymousId, e.LogTypeId });
             entity.Property(e => e.LogEntryId).IsRequired();
             entity.Property(e => e.OccurredAtUtc).HasConversion(UtcDateTimeOffsetConverter);
         });

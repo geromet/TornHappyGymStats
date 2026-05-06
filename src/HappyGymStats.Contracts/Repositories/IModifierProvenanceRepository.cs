@@ -8,5 +8,5 @@ public interface IModifierProvenanceRepository
     Task<IReadOnlyList<ModifierProvenanceRow>> GetAllAsync(CancellationToken ct);
 
     // Removes all existing rows for playerId, adds new ones. No SaveChanges — caller commits via IUnitOfWork.
-    Task StageReplacementForPlayerAsync(int playerId, IEnumerable<ModifierProvenanceEntity> entities, CancellationToken ct);
+    Task StageReplacementForPlayerAsync(Guid anonymousId, IEnumerable<ModifierProvenanceEntity> entities, CancellationToken ct);
 }

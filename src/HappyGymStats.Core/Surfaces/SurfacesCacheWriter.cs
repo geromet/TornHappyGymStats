@@ -58,7 +58,7 @@ public sealed class SurfacesCacheWriter
                 x.SubjectId,
                 x.FactionId,
                 x.CompanyId,
-                x.PlayerId
+                x.AnonymousId
             })
             .ToList();
 

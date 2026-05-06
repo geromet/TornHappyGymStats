@@ -2,7 +2,7 @@ namespace HappyGymStats.Data.Entities;
 
 public sealed class UserLogEntryEntity
 {
-    public int PlayerId { get; set; }
+    public Guid AnonymousId { get; set; }
     public string LogEntryId { get; set; } = string.Empty;
     public DateTimeOffset OccurredAtUtc { get; set; }
     public int LogTypeId { get; set; }
@@ -23,4 +23,5 @@ public sealed class UserLogEntryEntity
     public double? DexterityIncreased { get; set; }
     public int? MaxHappyBefore { get; set; }
     public int? MaxHappyAfter { get; set; }
+    public int? PropertyId { get; set; }
 }

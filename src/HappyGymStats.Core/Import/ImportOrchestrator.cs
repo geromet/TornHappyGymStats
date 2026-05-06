@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using HappyGymStats.Core.Fetch;
 using HappyGymStats.Core.Reconstruction;
+using HappyGymStats.Core.Repositories;
 using HappyGymStats.Core.Surfaces;
 using HappyGymStats.Core.Torn;
 using Microsoft.Extensions.DependencyInjection;
@@ -93,11 +94,21 @@ public sealed class ImportOrchestrator : BackgroundService
             var logFetcher = scope.ServiceProvider.GetRequiredService<LogFetcher>();
             var perkFetcher = scope.ServiceProvider.GetRequiredService<PerkLogFetcher>();
             var reconstructionRunner = scope.ServiceProvider.GetRequiredService<ReconstructionRunner>();
+            var importRunRepo = scope.ServiceProvider.GetRequiredService<IImportRunRepository>();
 
-            var playerId = await tornClient.GetPlayerIdAsync(request.ApiKey, stoppingToken).ConfigureAwait(false);
-            _logger.LogInformation("Import job {JobId} resolved player ID: {PlayerId}", request.JobId, playerId);
+            // Validate the API key and log the Torn player ID, but do not store it — TornPlayerId is PII
+            // that will be encrypted into IdentityMap in Phase 2.
+            var tornPlayerId = await tornClient.GetPlayerIdAsync(request.ApiKey, stoppingToken).ConfigureAwait(false);
+            _logger.LogInformation("Import job {JobId} API key validated for Torn player {TornPlayerId}", request.JobId, tornPlayerId);
 
             var mode = request.Fresh ? FetchMode.Fresh : FetchMode.Resume;
+
+            Guid anonymousId = request.Fresh
+                ? Guid.NewGuid()
+                : await importRunRepo.ResolveAnonymousIdAsync(stoppingToken).ConfigureAwait(false) ?? Guid.NewGuid();
+
+            _logger.LogInformation("Import job {JobId} using AnonymousId {AnonymousId}", request.JobId, anonymousId);
+
             var options = FetchOptions.Default(
                 new Uri("https://api.torn.com/v2/user/log?cat=25"),
                 TimeSpan.FromMilliseconds(1100));
@@ -106,7 +117,7 @@ public sealed class ImportOrchestrator : BackgroundService
 
             var result = await logFetcher.RunAsync(
                 apiKey: request.ApiKey,
-                playerId: playerId,
+                anonymousId: anonymousId,
                 mode: mode,
                 options: options,
                 ct: stoppingToken,
@@ -128,7 +139,7 @@ public sealed class ImportOrchestrator : BackgroundService
 
             var perkResult = await perkFetcher.RunAsync(
                 apiKey: request.ApiKey,
-                playerId: playerId,
+                anonymousId: anonymousId,
                 logTypes: PerkLogTypes.All,
                 options: perkOptions,
                 ct: stoppingToken,
@@ -142,7 +153,7 @@ public sealed class ImportOrchestrator : BackgroundService
                 perkResult.TotalLogsAppended);
 
             var reconstruction = await reconstructionRunner.RunAsync(
-                playerId: playerId,
+                anonymousId: anonymousId,
                 currentHappy: 0,
                 anchorTimeUtc: DateTimeOffset.UtcNow,
                 ct: stoppingToken);

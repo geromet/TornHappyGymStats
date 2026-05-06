@@ -8,10 +8,10 @@ namespace HappyGymStats.Data.Repositories;
 
 public sealed class UserLogEntryRepository(HappyGymStatsDbContext db) : IUserLogEntryRepository
 {
-    public Task<HashSet<string>> GetExistingLogIdsAsync(int playerId, CancellationToken ct)
+    public Task<HashSet<string>> GetExistingLogIdsAsync(Guid anonymousId, CancellationToken ct)
         => db.UserLogEntries
             .AsNoTracking()
-            .Where(r => r.PlayerId == playerId)
+            .Where(r => r.AnonymousId == anonymousId)
             .Select(r => r.LogEntryId)
             .ToHashSetAsync(ct);
 
@@ -21,12 +21,12 @@ public sealed class UserLogEntryRepository(HappyGymStatsDbContext db) : IUserLog
         return Task.CompletedTask;
     }
 
-    public async Task StageHappyBeforeTrainBatchAsync(int playerId, IReadOnlyList<HappyBeforeTrainUpdate> updates, CancellationToken ct)
+    public async Task StageHappyBeforeTrainBatchAsync(Guid anonymousId, IReadOnlyList<HappyBeforeTrainUpdate> updates, CancellationToken ct)
     {
         if (updates.Count == 0) return;
         var logIds = updates.Select(u => u.LogId).ToHashSet(StringComparer.Ordinal);
         var entries = await db.UserLogEntries
-            .Where(e => e.PlayerId == playerId && logIds.Contains(e.LogEntryId))
+            .Where(e => e.AnonymousId == anonymousId && logIds.Contains(e.LogEntryId))
             .ToListAsync(ct);
         var byLogId = updates.ToDictionary(u => u.LogId, StringComparer.Ordinal);
         foreach (var entry in entries)
@@ -40,20 +40,22 @@ public sealed class UserLogEntryRepository(HappyGymStatsDbContext db) : IUserLog
         // No save — caller commits via IUnitOfWork
     }
 
-    public Task<IReadOnlyList<ReconstructionLogRecord>> GetReconstructionRecordsAsync(int playerId, CancellationToken ct)
+    public Task<IReadOnlyList<ReconstructionLogRecord>> GetReconstructionRecordsAsync(Guid anonymousId, CancellationToken ct)
         => db.UserLogEntries
             .AsNoTracking()
-            .Where(row => row.PlayerId == playerId)
+            .Where(row => row.AnonymousId == anonymousId)
             .OrderBy(row => row.OccurredAtUtc)
             .Select(row => new ReconstructionLogRecord(
                 row.LogEntryId,
                 row.OccurredAtUtc,
                 null,
+                row.LogTypeId,
                 row.HappyUsed,
                 row.HappyIncreased,
                 row.HappyDecreased,
                 row.MaxHappyBefore,
-                row.MaxHappyAfter))
+                row.MaxHappyAfter,
+                row.PropertyId))
             .ToListAsync(ct)
             .ContinueWith(t => (IReadOnlyList<ReconstructionLogRecord>)t.Result, TaskContinuationOptions.ExecuteSynchronously);
 

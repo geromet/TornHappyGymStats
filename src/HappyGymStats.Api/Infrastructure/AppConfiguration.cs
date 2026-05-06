@@ -1,17 +1,13 @@
-using HappyGymStats.Core.Storage;
-using HappyGymStats.Data.Storage;
-
 namespace HappyGymStats.Api.Infrastructure;
 
 internal static class AppConfiguration
 {
-    public static string ResolveDatabasePath(IConfiguration configuration, IWebHostEnvironment environment)
+    public static string ResolveConnectionString(IConfiguration configuration)
     {
-        var configuredPath = configuration.GetConnectionString("HappyGymStats")
-                             ?? configuration["HAPPYGYMSTATS_DATABASE"];
-
-        var fallbackDataDirectory = DataDirectory.ResolveBasePath("HappyGymStats");
-        return SqlitePaths.ResolveDatabasePath(fallbackDataDirectory, configuredPath);
+        return configuration.GetConnectionString("HappyGymStats")
+               ?? configuration["HAPPYGYMSTATS_CONNECTION_STRING"]
+               ?? throw new InvalidOperationException(
+                   "No Postgres connection string found. Set ConnectionStrings:HappyGymStats or HAPPYGYMSTATS_CONNECTION_STRING.");
     }
 
     public static string ResolveSurfacesCacheDirectory(IConfiguration configuration, IWebHostEnvironment environment)

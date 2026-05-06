@@ -20,20 +20,19 @@ public sealed class ImportRunRepository(HappyGymStatsDbContext db) : IImportRunR
         return Task.CompletedTask;
     }
 
-    public Task<ImportRunEntity?> GetLatestIncompleteAsync(int playerId, CancellationToken ct)
+    public Task<ImportRunEntity?> GetLatestIncompleteAsync(CancellationToken ct)
         => db.ImportRuns
-            .Where(r => r.PlayerId == playerId && r.CompletedAtUtc == null && r.NextUrl != null)
+            .Where(r => r.CompletedAtUtc == null && r.NextUrl != null)
             .OrderByDescending(r => r.StartedAtUtc)
             .FirstOrDefaultAsync(ct);
 
-    public async Task<int> ResolvePlayerIdAsync(CancellationToken ct)
+    public async Task<Guid?> ResolveAnonymousIdAsync(CancellationToken ct)
     {
-        var result = await db.ImportRuns
+        return await db.ImportRuns
             .AsNoTracking()
-            .Where(r => r.PlayerId != null)
+            .Where(r => r.AnonymousId != null)
             .OrderByDescending(r => r.StartedAtUtc)
-            .Select(r => r.PlayerId!.Value)
+            .Select(r => r.AnonymousId)
             .FirstOrDefaultAsync(ct);
-        return result;
     }
 }

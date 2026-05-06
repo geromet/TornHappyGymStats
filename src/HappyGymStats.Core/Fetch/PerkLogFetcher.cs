@@ -27,7 +27,7 @@ public sealed class PerkLogFetcher
 
     public async Task<PerkFetchResult> RunAsync(
         string apiKey,
-        int playerId,
+        Guid anonymousId,
         IReadOnlyList<PerkLogType> logTypes,
         FetchOptions options,
         CancellationToken ct,
@@ -41,8 +41,8 @@ public sealed class PerkLogFetcher
             ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
-        var existingLogIds = await _userLogRepo.GetExistingLogIdsAsync(playerId, ct);
-        var existingAffiliationIds = await _affiliationRepo.GetExistingSourceLogIdsAsync(playerId, ct);
+        var existingLogIds = await _userLogRepo.GetExistingLogIdsAsync(anonymousId, ct);
+        var existingAffiliationIds = await _affiliationRepo.GetExistingSourceLogIdsAsync(anonymousId, ct);
 
         int typesCompleted = 0;
         long totalAppended = 0;
@@ -79,7 +79,7 @@ public sealed class PerkLogFetcher
 
                 if (newLogs.Count > 0)
                 {
-                    await _userLogRepo.AddRangeAsync(newLogs.Select(e => MapUserLogEntry(e, playerId, logType.Id)).ToList(), ct);
+                    await _userLogRepo.AddRangeAsync(newLogs.Select(e => MapUserLogEntry(e, anonymousId, logType.Id)).ToList(), ct);
 
                     if (logType.Scope is PerkLogTypes.ScopeFaction or PerkLogTypes.ScopeCompany)
                     {
@@ -87,7 +87,7 @@ public sealed class PerkLogFetcher
                         {
                             if (!existingAffiliationIds.Add(entry.Id))
                                 continue;
-                            var affEvent = TryExtractAffiliationEvent(entry, playerId, logType);
+                            var affEvent = TryExtractAffiliationEvent(entry, anonymousId, logType);
                             if (affEvent is not null)
                                 await _affiliationRepo.AddAsync(affEvent, ct);
                         }
@@ -144,29 +144,47 @@ public sealed class PerkLogFetcher
         }
     }
 
-    private static UserLogEntryEntity MapUserLogEntry(UserLog entry, int playerId, int logTypeId)
+    private static UserLogEntryEntity MapUserLogEntry(UserLog entry, Guid anonymousId, int logTypeId)
     {
         int? happyBeforeApi = null;
+        int? maxHappyAfter = null;
+        int? propertyId = null;
 
         if (entry.Raw.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
         {
             if (data.TryGetProperty("happy_before", out var hb) && hb.TryGetInt32(out var hbVal))
                 happyBeforeApi = hbVal;
+
+            // Property logs: 5900 (upgrade), 5905 (staff), 5910 (move)
+            // data.happy = resulting max happy; data.property_id = which property
+            // 5900/5905 only apply when user is living in that property (resolved in LogEventExtractor)
+            if (logTypeId is 5900 or 5905 or 5910)
+            {
+                if (data.TryGetProperty("happy", out var h) && h.TryGetInt32(out var hVal))
+                    maxHappyAfter = hVal;
+                if (data.TryGetProperty("property_id", out var pid) && pid.TryGetInt32(out var pidVal))
+                    propertyId = pidVal;
+            }
+
+            // 5963 Education complete: working_stats_received is a "int,int,int" string (manual/intel/endurance).
+            // TODO: check for data.battle_stats_received once logs with battle stats are available.
         }
 
         return new UserLogEntryEntity
         {
-            PlayerId = playerId,
+            AnonymousId = anonymousId,
             LogEntryId = entry.Id,
             OccurredAtUtc = entry.Timestamp > 0
                 ? DateTimeOffset.FromUnixTimeSeconds(entry.Timestamp)
                 : DateTimeOffset.UnixEpoch,
             LogTypeId = logTypeId,
             HappyBeforeApi = happyBeforeApi,
+            MaxHappyAfter = maxHappyAfter,
+            PropertyId = propertyId,
         };
     }
 
-    private static AffiliationEventEntity? TryExtractAffiliationEvent(UserLog entry, int playerId, PerkLogType logType)
+    private static AffiliationEventEntity? TryExtractAffiliationEvent(UserLog entry, Guid anonymousId, PerkLogType logType)
     {
         try
         {
@@ -199,7 +217,7 @@ public sealed class PerkLogFetcher
 
             return new AffiliationEventEntity
             {
-                PlayerId = playerId,
+                AnonymousId = anonymousId,
                 SourceLogEntryId = entry.Id,
                 LogTypeId = logType.Id,
                 Scope = scope,

@@ -12,14 +12,14 @@ public sealed class ModifierProvenanceRepository(HappyGymStatsDbContext db) : IM
             .AsNoTracking()
             .Select(x => new ModifierProvenanceRow(
                 x.LogEntryId, x.Scope, x.VerificationStatus,
-                x.SubjectId, x.FactionId, x.CompanyId, x.PlayerId))
+                x.SubjectId, x.FactionId, x.CompanyId, x.AnonymousId))
             .ToListAsync(ct)
             .ContinueWith(t => (IReadOnlyList<ModifierProvenanceRow>)t.Result, TaskContinuationOptions.ExecuteSynchronously);
 
-    public async Task StageReplacementForPlayerAsync(int playerId, IEnumerable<ModifierProvenanceEntity> entities, CancellationToken ct)
+    public async Task StageReplacementForPlayerAsync(Guid anonymousId, IEnumerable<ModifierProvenanceEntity> entities, CancellationToken ct)
     {
         var existing = await db.ModifierProvenance
-            .Where(p => p.PlayerId == playerId)
+            .Where(p => p.AnonymousId == anonymousId)
             .ToListAsync(ct);
         db.ModifierProvenance.RemoveRange(existing);
         db.ModifierProvenance.AddRange(entities);
