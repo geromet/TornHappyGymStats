@@ -23,4 +23,8 @@ public interface IUserLogEntryRepository
     Task<CursorPage<GymTrainDto>> GetGymTrainsPageAsync(int take, PageCursor? cursor, CancellationToken ct);
 
     Task<CursorPage<GymTrainDto>> GetGymTrainsPageAsync(Guid anonymousId, int take, PageCursor? cursor, CancellationToken ct);
+
+    // Returns per-user gym train summary (count + latest date) for a set of AnonymousIds.
+    // Keys are only present when the user has at least one gym train.
+    Task<IReadOnlyDictionary<Guid, GymTrainSummary>> GetGymTrainSummariesAsync(IReadOnlyList<Guid> anonymousIds, CancellationToken ct);
 }

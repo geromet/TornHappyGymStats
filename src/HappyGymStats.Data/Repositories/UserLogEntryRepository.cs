@@ -116,6 +116,23 @@ WHERE HappyUsed IS NOT NULL
         return new CursorPage<GymTrainDto>(items, nextCursor);
     }
 
+    public async Task<IReadOnlyDictionary<Guid, GymTrainSummary>> GetGymTrainSummariesAsync(IReadOnlyList<Guid> anonymousIds, CancellationToken ct)
+    {
+        if (anonymousIds.Count == 0)
+            return new Dictionary<Guid, GymTrainSummary>();
+
+        var rows = await db.UserLogEntries
+            .AsNoTracking()
+            .Where(e => anonymousIds.Contains(e.AnonymousId) && e.HappyUsed != null)
+            .GroupBy(e => e.AnonymousId)
+            .Select(g => new { AnonymousId = g.Key, TrainCount = g.Count(), LastTrainAtUtc = g.Max(e => e.OccurredAtUtc) })
+            .ToListAsync(ct);
+
+        return rows.ToDictionary(
+            x => x.AnonymousId,
+            x => new GymTrainSummary(x.TrainCount, x.LastTrainAtUtc));
+    }
+
     public async Task<CursorPage<GymTrainDto>> GetGymTrainsPageAsync(Guid anonymousId, int take, PageCursor? cursor, CancellationToken ct)
     {
         var baseQuery = cursor is null

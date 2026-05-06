@@ -16,14 +16,25 @@ public sealed class PerkLogFetcher
     private readonly IAffiliationEventRepository _affiliationRepo;
     private readonly ILogTypeRepository _logTypeRepo;
     private readonly IUserLogEntryRepository _userLogRepo;
+    private readonly IFactionIdMapRepository _factionIdMapRepo;
+    private readonly IFactionMembershipRepository _factionMembershipRepo;
     private readonly IUnitOfWork _unitOfWork;
 
-    public PerkLogFetcher(TornApiClient client, IAffiliationEventRepository affiliationRepo, ILogTypeRepository logTypeRepo, IUserLogEntryRepository userLogRepo, IUnitOfWork unitOfWork)
+    public PerkLogFetcher(
+        TornApiClient client,
+        IAffiliationEventRepository affiliationRepo,
+        ILogTypeRepository logTypeRepo,
+        IUserLogEntryRepository userLogRepo,
+        IFactionIdMapRepository factionIdMapRepo,
+        IFactionMembershipRepository factionMembershipRepo,
+        IUnitOfWork unitOfWork)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
         _affiliationRepo = affiliationRepo ?? throw new ArgumentNullException(nameof(affiliationRepo));
         _logTypeRepo = logTypeRepo ?? throw new ArgumentNullException(nameof(logTypeRepo));
         _userLogRepo = userLogRepo ?? throw new ArgumentNullException(nameof(userLogRepo));
+        _factionIdMapRepo = factionIdMapRepo ?? throw new ArgumentNullException(nameof(factionIdMapRepo));
+        _factionMembershipRepo = factionMembershipRepo ?? throw new ArgumentNullException(nameof(factionMembershipRepo));
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
     }
 
@@ -91,8 +102,17 @@ public sealed class PerkLogFetcher
                             if (!existingAffiliationIds.Add(entry.Id))
                                 continue;
                             var affEvent = TryExtractAffiliationEvent(entry, anonymousId, logType, publicKey);
-                            if (affEvent is not null)
-                                await _affiliationRepo.AddAsync(affEvent, ct);
+                            if (affEvent is null)
+                                continue;
+
+                            await _affiliationRepo.AddAsync(affEvent, ct);
+
+                            var factionAnonymousId = await _factionIdMapRepo
+                                .GetOrCreateFactionAnonymousIdAsync(affEvent.AffiliationId, affEvent.Scope, ct)
+                                .ConfigureAwait(false);
+                            await _factionMembershipRepo
+                                .AddOrIgnoreAsync(factionAnonymousId, anonymousId, ct)
+                                .ConfigureAwait(false);
                         }
                     }
 

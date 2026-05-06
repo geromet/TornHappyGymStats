@@ -28,6 +28,10 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
 
     public DbSet<AffiliationEventEntity> AffiliationEvents => Set<AffiliationEventEntity>();
 
+    public DbSet<FactionIdMapEntity> FactionIdMap => Set<FactionIdMapEntity>();
+
+    public DbSet<FactionMembershipEntity> FactionMembership => Set<FactionMembershipEntity>();
+
     public DbSet<UserLogEntryEntity> UserLogEntries => Set<UserLogEntryEntity>();
 
     public DbSet<LogTypeEntity> LogTypes => Set<LogTypeEntity>();
@@ -69,6 +73,20 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
             entity.Property(e => e.SourceLogEntryId).IsRequired();
             entity.Property(e => e.Scope).HasConversion<int>();
             entity.Property(e => e.EncryptedAffiliationId).HasColumnType("bytea");
+        });
+
+        modelBuilder.Entity<FactionIdMapEntity>(entity =>
+        {
+            entity.HasKey(e => e.AffiliationId);
+            entity.Property(e => e.AffiliationId).ValueGeneratedNever();
+            entity.HasIndex(e => e.FactionAnonymousId).IsUnique();
+            entity.Property(e => e.Scope).HasConversion<int>();
+        });
+
+        modelBuilder.Entity<FactionMembershipEntity>(entity =>
+        {
+            entity.HasKey(e => new { e.FactionAnonymousId, e.MemberAnonymousId });
+            entity.HasIndex(e => e.MemberAnonymousId);
         });
 
         modelBuilder.Entity<UserLogEntryEntity>(entity =>

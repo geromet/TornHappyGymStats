@@ -1,5 +1,6 @@
 using HappyGymStats.Api.Infrastructure;
 using Microsoft.AspNetCore.Authentication;
+using HappyGymStats.Core.Faction;
 using HappyGymStats.Core.Fetch;
 using HappyGymStats.Identity.Authentication;
 using HappyGymStats.Identity.Provisional;
@@ -52,11 +53,15 @@ builder.Services.AddScoped<IImportRunRepository, ImportRunRepository>();
 builder.Services.AddScoped<IModifierProvenanceRepository, ModifierProvenanceRepository>();
 builder.Services.AddScoped<IAffiliationEventRepository, AffiliationEventRepository>();
 builder.Services.AddScoped<ILogTypeRepository, LogTypeRepository>();
+builder.Services.AddScoped<IFactionIdMapRepository, FactionIdMapRepository>();
+builder.Services.AddScoped<IFactionMembershipRepository, FactionMembershipRepository>();
 
 builder.Services.AddScoped<LogFetcher>();
 builder.Services.AddScoped<PerkLogFetcher>();
 builder.Services.AddScoped<ReconstructionRunner>();
 builder.Services.AddScoped<GymTrainsService>();
+builder.Services.AddScoped<FactionService>();
+builder.Services.AddScoped<IFactionOwnershipVerifier, StubFactionOwnershipVerifier>();
 
 builder.Services.AddSingleton(new SurfacesConfig(surfacesCacheDirectory));
 
