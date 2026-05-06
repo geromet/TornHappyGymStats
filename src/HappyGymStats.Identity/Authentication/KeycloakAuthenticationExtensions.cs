@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -20,7 +19,6 @@ public static class KeycloakAuthenticationExtensions
             });
 
         services.AddAuthorization();
-        services.AddTransient<IClaimsTransformation, KeycloakGroupClaimsTransformer>();
 
         return services;
     }

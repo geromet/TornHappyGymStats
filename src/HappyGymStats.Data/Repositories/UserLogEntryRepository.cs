@@ -115,4 +115,37 @@ WHERE HappyUsed IS NOT NULL
             : null;
         return new CursorPage<GymTrainDto>(items, nextCursor);
     }
+
+    public async Task<CursorPage<GymTrainDto>> GetGymTrainsPageAsync(Guid anonymousId, int take, PageCursor? cursor, CancellationToken ct)
+    {
+        var baseQuery = cursor is null
+            ? db.UserLogEntries.AsNoTracking()
+                .Where(x => x.AnonymousId == anonymousId && x.HappyUsed != null)
+            : db.UserLogEntries.AsNoTracking()
+                .Where(x => x.AnonymousId == anonymousId
+                    && x.HappyUsed != null
+                    && (x.OccurredAtUtc < cursor.OccurredAtUtc
+                        || (x.OccurredAtUtc == cursor.OccurredAtUtc
+                            && string.Compare(x.LogEntryId, cursor.Id, StringComparison.Ordinal) < 0)));
+
+        var rows = await baseQuery
+            .OrderByDescending(row => row.OccurredAtUtc)
+            .ThenByDescending(row => row.LogEntryId)
+            .Take(take + 1)
+            .Select(row => new GymTrainDto(
+                row.LogEntryId,
+                row.OccurredAtUtc,
+                row.HappyBeforeTrain,
+                row.HappyBeforeTrain != null && row.HappyUsed != null ? row.HappyBeforeTrain - row.HappyUsed : null,
+                row.HappyUsed,
+                row.MaxHappyBefore,
+                row.MaxHappyAfter))
+            .ToListAsync(ct);
+
+        var items = rows.Count > take ? rows.Take(take).ToList() : rows;
+        string? nextCursor = rows.Count > take && items.Count > 0
+            ? CursorEncoder.Encode(new PageCursor(items[^1].OccurredAtUtc, items[^1].LogId))
+            : null;
+        return new CursorPage<GymTrainDto>(items, nextCursor);
+    }
 }

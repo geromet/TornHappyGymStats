@@ -1,4 +1,5 @@
 using HappyGymStats.Api.Infrastructure;
+using Microsoft.AspNetCore.Authentication;
 using HappyGymStats.Core.Fetch;
 using HappyGymStats.Identity.Authentication;
 using HappyGymStats.Identity.Provisional;
@@ -16,6 +17,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 builder.Services.AddKeycloakAuthentication("https://auth.geromet.com/realms/torn");
+builder.Services.AddScoped<IClaimsTransformation, HappyGymStatsClaimsTransformer>();
 builder.Services.Configure<ProvisionalTokenOptions>(
     builder.Configuration.GetSection(ProvisionalTokenOptions.Section));
 builder.Services.AddSingleton<IProvisionalTokenService, ProvisionalTokenService>();
