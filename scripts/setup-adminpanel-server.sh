@@ -36,7 +36,8 @@ Mutation phases:
   6) daemon-reload            - sudo systemctl daemon-reload
   7) enable-service           - sudo systemctl enable happygymstats-adminpanel
   8) start-or-restart-service - sudo systemctl start/restart based on current state
-  9) health-check             - curl http://127.0.0.1:5048/admin/health until success
+  9) verify-service-active    - sudo systemctl is-active happygymstats-adminpanel
+ 10) health-check             - classify loopback health failures (inactive/port/http)
 
 Flags:
   -n, --dry-run   Print planned remote mutations without executing them
@@ -131,20 +132,51 @@ else
 fi"
 }
 
+verify_service_active() {
+  log_phase "verify-service-active"
+  run_remote "if ! ${SUDO_CMD} systemctl is-active --quiet '${SERVICE_NAME}'; then
+  echo 'service-inactive: ${SERVICE_NAME}' >&2
+  ${SUDO_CMD} systemctl status '${SERVICE_NAME}' --no-pager >&2 || true
+  exit 1
+fi
+
+echo 'service-active: ${SERVICE_NAME}'"
+}
+
 health_check() {
   log_phase "health-check"
   run_remote "attempt=0
 max_attempts=20
-until curl -fsS '${HEALTH_URL}' >/dev/null 2>&1; do
+while [[ \"\${attempt}\" -lt \"\${max_attempts}\" ]]; do
   attempt=\$((attempt + 1))
-  if [[ \"\${attempt}\" -ge \"\${max_attempts}\" ]]; then
-    echo 'health-check failed for ${HEALTH_URL}' >&2
-    exit 1
+  http_code=\$(curl -sS -o /dev/null -w '%{http_code}' '${HEALTH_URL}')
+  curl_exit=\$?
+
+  if [[ \"\${curl_exit}\" -eq 0 && \"\${http_code}\" -ge 200 && \"\${http_code}\" -lt 300 ]]; then
+    echo 'health-check passed: ${HEALTH_URL} http='\"\${http_code}\"
+    exit 0
   fi
+
+  if [[ \"\${curl_exit}\" -eq 7 ]]; then
+    if ${SUDO_CMD} systemctl is-active --quiet '${SERVICE_NAME}'; then
+      echo 'health-check retry: port-unavailable url=${HEALTH_URL} attempt='\"\${attempt}\" >&2
+    else
+      echo 'health-check fail: service-inactive-during-loopback service=${SERVICE_NAME} attempt='\"\${attempt}\" >&2
+      ${SUDO_CMD} systemctl status '${SERVICE_NAME}' --no-pager >&2 || true
+      exit 1
+    fi
+  elif [[ \"\${curl_exit}\" -eq 0 ]]; then
+    echo 'health-check retry: http-non-2xx url=${HEALTH_URL} http='\"\${http_code}\"' attempt='\"\${attempt}\" >&2
+  else
+    echo 'health-check retry: curl-exit url=${HEALTH_URL} exit='\"\${curl_exit}\"' attempt='\"\${attempt}\" >&2
+  fi
+
   sleep 1
 done
 
-echo 'health-check passed: ${HEALTH_URL}'"
+echo 'health-check failed: exhausted-attempts url=${HEALTH_URL}' >&2
+${SUDO_CMD} systemctl status '${SERVICE_NAME}' --no-pager >&2 || true
+exit 1"
 }
 
 cleanup_staging() {
@@ -185,6 +217,7 @@ install_service_unit
 daemon_reload
 enable_service
 start_or_restart_service
+verify_service_active
 health_check
 cleanup_staging
 

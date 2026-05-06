@@ -115,6 +115,26 @@ These permissions exist to install and activate AdminPanel prerequisites:
 - No shell escalation commands (`/bin/bash`, `/usr/bin/bash`, `sh -c`)
 - No wildcard service names; only `happygymstats-*` units explicitly listed above
 
+### Setup execution + health proof
+Run local static verification before attempting remote bootstrap:
+
+```bash
+bash scripts/verify/s03-adminpanel-setup.sh
+```
+
+Remote bootstrap command (mutates remote server state):
+
+```bash
+bash scripts/setup-adminpanel-server.sh
+```
+
+What mutates remotely:
+- `/etc/sudoers.d/happygymstats` install/refresh (after `visudo -cf`)
+- `/etc/systemd/system/happygymstats-adminpanel.service` install/refresh
+- `systemctl daemon-reload`, `enable`, and `start`/`restart` for `happygymstats-adminpanel`
+
+Agent safety requirement: obtain explicit user confirmation before running the non-dry-run setup command because it changes privileged server state.
+
 ## Production target
 - `torn.geromet.com` static frontend
 - `/api/*` proxied to `127.0.0.1:5047`
