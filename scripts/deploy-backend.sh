@@ -21,6 +21,36 @@ readonly REMOTE_CURRENT_DIR="${DEPLOY_API_REMOTE_ROOT}/current"
 readonly REMOTE_STAGING_DIR="/tmp/happygymstats-api-staging-${DEPLOY_SSH_USER}"
 readonly REMOTE_RELEASE_DIR="${REMOTE_RELEASES_DIR}/${REMOTE_TS}"
 
+# API production runtime contract (names only; values remain server-local):
+# - ConnectionStrings__HappyGymStats OR HAPPYGYMSTATS_CONNECTION_STRING
+# - ProvisionalToken__SigningKey
+# - HAPPYGYMSTATS_SURFACES_CACHE_DIR
+# - ASPNETCORE_ENVIRONMENT
+# - ASPNETCORE_URLS
+readonly REMOTE_API_ENV_FILE="/etc/happygymstats/api.env"
+
+echo "==> Precheck: API runtime contract"
+ssh_cmd_tty "set -euo pipefail
+  if [[ ! -f '${REMOTE_API_ENV_FILE}' ]]; then
+    echo 'DEPLOY_PRECHECK_FAIL: missing_env_file path=${REMOTE_API_ENV_FILE}' >&2
+    exit 20
+  fi
+
+  if ! grep -Eq '^(ConnectionStrings__HappyGymStats|HAPPYGYMSTATS_CONNECTION_STRING)=' '${REMOTE_API_ENV_FILE}'; then
+    echo 'DEPLOY_PRECHECK_FAIL: missing_env_var ConnectionStrings__HappyGymStats_or_HAPPYGYMSTATS_CONNECTION_STRING' >&2
+    exit 21
+  fi
+
+  for key in ProvisionalToken__SigningKey HAPPYGYMSTATS_SURFACES_CACHE_DIR ASPNETCORE_ENVIRONMENT ASPNETCORE_URLS; do
+    if ! grep -Eq "^${key}=" '${REMOTE_API_ENV_FILE}'; then
+      echo "DEPLOY_PRECHECK_FAIL: missing_env_var ${key}" >&2
+      exit 22
+    fi
+  done
+
+  echo 'DEPLOY_PRECHECK_OK: api_env_contract'
+"
+
 echo "==> Publishing API"
 rm -rf "${PUBLISH_DIR}"
 dotnet publish "${API_PROJECT}" -c "${DEPLOY_CONFIGURATION}" -r "${DEPLOY_RUNTIME}" --self-contained true -o "${PUBLISH_DIR}"

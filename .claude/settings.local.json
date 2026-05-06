@@ -33,7 +33,8 @@
       "WebFetch(domain:auth.geromet.com)",
       "Bash(dotnet add *)",
       "Bash(dotnet tool *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(git push *)"
     ]
   }
 }
