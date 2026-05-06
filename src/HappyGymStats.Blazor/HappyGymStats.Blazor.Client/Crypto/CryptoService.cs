@@ -8,6 +8,7 @@ namespace HappyGymStats.Blazor.Client.Crypto;
 public sealed class CryptoService(IJSRuntime js)
 {
     private const string StorageKey = "happygymstats.wrapped_key";
+    private const string PublicKeyStorageKey = "happygymstats.public_key";
 
     public async Task<bool> HasStoredKeyAsync()
         => await js.InvokeAsync<string?>("localStorage.getItem", StorageKey) is not null;
@@ -27,6 +28,18 @@ public sealed class CryptoService(IJSRuntime js)
 
     public async Task StoreWrappedKeyAsync(byte[] wrappedKey)
         => await js.InvokeVoidAsync("localStorage.setItem", StorageKey, Convert.ToBase64String(wrappedKey));
+
+    public async Task StorePublicKeyAsync(byte[] publicKeySpki)
+        => await js.InvokeVoidAsync("localStorage.setItem", PublicKeyStorageKey, Convert.ToBase64String(publicKeySpki));
+
+    public async Task<string?> GetPublicKeyBase64Async()
+        => await js.InvokeAsync<string?>("localStorage.getItem", PublicKeyStorageKey);
+
+    public async Task DeleteKeyAsync()
+    {
+        await js.InvokeVoidAsync("localStorage.removeItem", StorageKey);
+        await js.InvokeVoidAsync("localStorage.removeItem", PublicKeyStorageKey);
+    }
 
     /// <summary>
     /// Loads and unwraps the stored private key. Returns null if no key is stored or the

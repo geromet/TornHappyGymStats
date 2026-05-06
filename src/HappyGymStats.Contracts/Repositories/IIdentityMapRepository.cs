@@ -19,4 +19,8 @@ public interface IIdentityMapRepository
     // Stores the ECIES ciphertext of the user's Torn player ID.
     // Caller commits via IUnitOfWork.
     Task StoreEncryptedTornPlayerIdAsync(Guid anonymousId, byte[] encryptedTornPlayerId, CancellationToken ct);
+
+    // Stores (or replaces) the P-256 SPKI public key for a given AnonymousId.
+    // Caller commits via IUnitOfWork.
+    Task StorePublicKeyAsync(Guid anonymousId, byte[] publicKeySpki, CancellationToken ct);
 }

@@ -24,7 +24,7 @@ public sealed class ModifierProvenanceSchemaTests
         db.ModifierProvenance.AddRange(
             new ModifierProvenanceEntity
             {
-                PlayerId = 1,
+                AnonymousId = new Guid("00000000-0000-0000-0000-000000000001"),
                 LogEntryId = "log-personal",
                 Scope = (int)ModifierScope.Personal,
                 SubjectId = 42,
@@ -32,7 +32,7 @@ public sealed class ModifierProvenanceSchemaTests
             },
             new ModifierProvenanceEntity
             {
-                PlayerId = 1,
+                AnonymousId = new Guid("00000000-0000-0000-0000-000000000001"),
                 LogEntryId = "log-faction",
                 Scope = (int)ModifierScope.Faction,
                 FactionId = 9001,
@@ -40,7 +40,7 @@ public sealed class ModifierProvenanceSchemaTests
             },
             new ModifierProvenanceEntity
             {
-                PlayerId = 1,
+                AnonymousId = new Guid("00000000-0000-0000-0000-000000000001"),
                 LogEntryId = "log-company",
                 Scope = (int)ModifierScope.Company,
                 CompanyId = 5555,
@@ -84,21 +84,21 @@ public sealed class ModifierProvenanceSchemaTests
         db.ModifierProvenance.AddRange(
             new ModifierProvenanceEntity
             {
-                PlayerId = 1, LogEntryId = "log-1",
+                AnonymousId = new Guid("00000000-0000-0000-0000-000000000001"), LogEntryId = "log-1",
                 Scope = (int)ModifierScope.Personal,
                 SubjectId = 1,
                 VerificationStatus = (int)VerificationStatus.Verified,
             },
             new ModifierProvenanceEntity
             {
-                PlayerId = 1, LogEntryId = "log-2",
+                AnonymousId = new Guid("00000000-0000-0000-0000-000000000001"), LogEntryId = "log-2",
                 Scope = (int)ModifierScope.Faction,
                 FactionId = 9,
                 VerificationStatus = (int)VerificationStatus.Unresolved,
             },
             new ModifierProvenanceEntity
             {
-                PlayerId = 1, LogEntryId = "log-3",
+                AnonymousId = new Guid("00000000-0000-0000-0000-000000000001"), LogEntryId = "log-3",
                 Scope = (int)ModifierScope.Company,
                 CompanyId = 5,
                 VerificationStatus = (int)VerificationStatus.Unresolved,
@@ -107,7 +107,7 @@ public sealed class ModifierProvenanceSchemaTests
         await db.SaveChangesAsync();
 
         var unresolved = await db.ModifierProvenance
-            .Where(p => p.PlayerId == 1 && p.VerificationStatus == (int)VerificationStatus.Unresolved)
+            .Where(p => p.AnonymousId == new Guid("00000000-0000-0000-0000-000000000001") && p.VerificationStatus == (int)VerificationStatus.Unresolved)
             .OrderBy(p => p.LogEntryId)
             .ToListAsync();
 
@@ -132,7 +132,7 @@ public sealed class ModifierProvenanceSchemaTests
         // Scope bitmask 7 = personal | faction | company
         db.ModifierProvenance.Add(new ModifierProvenanceEntity
         {
-            PlayerId = 1,
+            AnonymousId = new Guid("00000000-0000-0000-0000-000000000001"),
             LogEntryId = "log-all",
             Scope = (int)(ModifierScope.Personal | ModifierScope.Faction | ModifierScope.Company),
             SubjectId = 1,

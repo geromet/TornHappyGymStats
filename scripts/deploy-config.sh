@@ -32,6 +32,13 @@ readonly _DEPLOY_CONFIG_LOADED=1
 : "${DEPLOY_BLAZOR_GROUP:=www-data}"
 : "${DEPLOY_BLAZOR_RESTART:=1}"
 
+# Admin Panel
+: "${DEPLOY_ADMINPANEL_REMOTE_ROOT:=/var/www/happygymstats-adminpanel}"
+: "${DEPLOY_ADMINPANEL_SERVICE:=happygymstats-adminpanel}"
+: "${DEPLOY_ADMINPANEL_OWNER:=www-data}"
+: "${DEPLOY_ADMINPANEL_GROUP:=www-data}"
+: "${DEPLOY_ADMINPANEL_RESTART:=1}"
+
 # Derived SSH helpers — available after sourcing
 SSH_OPTS=(-i "${DEPLOY_SSH_KEY}" -o "ProxyCommand=${DEPLOY_PROXY_COMMAND}")
 ssh_cmd_tty() { ssh -tt "${SSH_OPTS[@]}" "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}" "$@"; }

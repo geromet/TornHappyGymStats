@@ -63,9 +63,10 @@ public sealed class DbPipelineIntegrationTests
 
         using var scope = provider.CreateScope();
         var fetcher = scope.ServiceProvider.GetRequiredService<LogFetcher>();
+        var testAnonymousId = new Guid("00000000-0000-0000-0000-00000000002a");
         var result = await fetcher.RunAsync(
             apiKey: "test-key",
-            playerId: 42,
+            anonymousId: testAnonymousId,
             mode: FetchMode.Fresh,
             options: FetchOptions.Default(new Uri("https://example.test/user/log?cat=25"), TimeSpan.Zero),
             ct: CancellationToken.None);
@@ -82,13 +83,13 @@ public sealed class DbPipelineIntegrationTests
         var entries = await db.UserLogEntries.AsNoTracking().ToListAsync();
         Assert.Single(entries);
         Assert.Equal("log-1", entries[0].LogEntryId);
-        Assert.Equal(42, entries[0].PlayerId);
+        Assert.Equal(testAnonymousId, entries[0].AnonymousId);
         Assert.Equal(5301, entries[0].LogTypeId);
         Assert.Equal(25, entries[0].HappyUsed);
 
         var run = await db.ImportRuns.AsNoTracking().SingleAsync();
         Assert.Equal("completed", run.Outcome);
-        Assert.Equal(42, run.PlayerId);
+        Assert.Equal(testAnonymousId, run.AnonymousId);
         Assert.Equal(1, run.PagesFetched);
         Assert.Equal(1, run.LogsFetched);
         Assert.Equal(1, run.LogsAppended);
@@ -112,7 +113,7 @@ public sealed class DbPipelineIntegrationTests
             db.UserLogEntries.AddRange(
                 new UserLogEntryEntity
                 {
-                    PlayerId = 0,
+                    AnonymousId = Guid.Empty,
                     LogEntryId = "log-verified",
                     OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
                     LogTypeId = 1,
@@ -124,7 +125,7 @@ public sealed class DbPipelineIntegrationTests
                 },
                 new UserLogEntryEntity
                 {
-                    PlayerId = 0,
+                    AnonymousId = Guid.Empty,
                     LogEntryId = "log-unresolved",
                     OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:05:00Z"),
                     LogTypeId = 2,
@@ -138,7 +139,7 @@ public sealed class DbPipelineIntegrationTests
             db.ModifierProvenance.AddRange(
                 new ModifierProvenanceEntity
                 {
-                    PlayerId = 0,
+                    AnonymousId = Guid.Empty,
                     LogEntryId = "log-verified",
                     Scope = (int)ModifierScope.Personal,
                     SubjectId = 1,
@@ -146,7 +147,7 @@ public sealed class DbPipelineIntegrationTests
                 },
                 new ModifierProvenanceEntity
                 {
-                    PlayerId = 0,
+                    AnonymousId = Guid.Empty,
                     LogEntryId = "log-unresolved",
                     Scope = (int)ModifierScope.Faction,
                     FactionId = 9001,
@@ -225,7 +226,7 @@ public sealed class DbPipelineIntegrationTests
 
             db.UserLogEntries.Add(new UserLogEntryEntity
             {
-                PlayerId = 0,
+                AnonymousId = Guid.Empty,
                 LogEntryId = "log-no-provenance",
                 OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
                 LogTypeId = 1,
@@ -290,7 +291,7 @@ public sealed class DbPipelineIntegrationTests
 
             db.UserLogEntries.Add(new UserLogEntryEntity
             {
-                PlayerId = 0,
+                AnonymousId = Guid.Empty,
                 LogEntryId = "log-a",
                 OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
                 LogTypeId = 1,
@@ -306,9 +307,9 @@ public sealed class DbPipelineIntegrationTests
             // Insert one valid faction/unresolved row and one row with an out-of-range scope (99)
             // that ScopeIntToString maps to "scope-99", which is not in KnownScopes and gets skipped.
             await db.Database.ExecuteSqlRawAsync(
-                "INSERT INTO ModifierProvenance (PlayerId, LogEntryId, Scope, FactionId, VerificationStatus) VALUES (0, 'log-a', 2, 9001, 2);");
+                $"INSERT INTO ModifierProvenance (AnonymousId, LogEntryId, Scope, FactionId, VerificationStatus) VALUES ('{Guid.Empty}', 'log-a', 2, 9001, 2);");
             await db.Database.ExecuteSqlRawAsync(
-                "INSERT INTO ModifierProvenance (PlayerId, LogEntryId, Scope, VerificationStatus) VALUES (0, 'log-a', 99, 2);");
+                $"INSERT INTO ModifierProvenance (AnonymousId, LogEntryId, Scope, VerificationStatus) VALUES ('{Guid.Empty}', 'log-a', 99, 2);");
         }
 
         var services = new ServiceCollection();
@@ -361,7 +362,7 @@ public sealed class DbPipelineIntegrationTests
 
             db.UserLogEntries.Add(new UserLogEntryEntity
             {
-                PlayerId = 0,
+                AnonymousId = Guid.Empty,
                 LogEntryId = "log-override",
                 OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
                 LogTypeId = 1,
@@ -374,7 +375,7 @@ public sealed class DbPipelineIntegrationTests
 
             db.ModifierProvenance.Add(new ModifierProvenanceEntity
             {
-                PlayerId = 0,
+                AnonymousId = Guid.Empty,
                 LogEntryId = "log-override",
                 Scope = (int)ModifierScope.Faction,
                 FactionId = 99999,

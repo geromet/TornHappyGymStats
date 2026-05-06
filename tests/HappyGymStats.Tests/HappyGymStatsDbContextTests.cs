@@ -36,7 +36,7 @@ public sealed class HappyGymStatsDbContextTests
             .SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('ModifierProvenance') ORDER BY name")
             .ToListAsync();
 
-        Assert.Contains("PlayerId", provenanceColumns);
+        Assert.Contains("AnonymousId", provenanceColumns);
         Assert.Contains("LogEntryId", provenanceColumns);
         Assert.Contains("Scope", provenanceColumns);
         Assert.Contains("SubjectId", provenanceColumns);
@@ -48,7 +48,7 @@ public sealed class HappyGymStatsDbContextTests
             .SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'index' AND tbl_name = 'ModifierProvenance' ORDER BY name")
             .ToListAsync();
 
-        Assert.Contains("IX_ModifierProvenance_PlayerId_VerificationStatus", provenanceIndexes);
+        Assert.Contains("IX_ModifierProvenance_AnonymousId_VerificationStatus", provenanceIndexes);
     }
 
     [Fact]
@@ -64,9 +64,10 @@ public sealed class HappyGymStatsDbContextTests
         await using var db = new HappyGymStatsDbContext(options);
         await db.Database.EnsureCreatedAsync();
 
+        var userId = new Guid("00000000-0000-0000-0000-000000000001");
         db.UserLogEntries.Add(new UserLogEntryEntity
         {
-            PlayerId = 1,
+            AnonymousId = userId,
             LogEntryId = "same-log-id",
             OccurredAtUtc = DateTimeOffset.UnixEpoch,
             LogTypeId = 1,
@@ -75,7 +76,7 @@ public sealed class HappyGymStatsDbContextTests
         await db.SaveChangesAsync();
 
         await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlRawAsync(
-            "INSERT INTO UserLogEntries (PlayerId, LogEntryId, OccurredAtUtc, LogTypeId) VALUES (1, 'same-log-id', '2026-01-01', 2)"));
+            $"INSERT INTO UserLogEntries (AnonymousId, LogEntryId, OccurredAtUtc, LogTypeId) VALUES ('{userId}', 'same-log-id', '2026-01-01', 2)"));
     }
 
     [Fact]
@@ -91,9 +92,10 @@ public sealed class HappyGymStatsDbContextTests
         await using var db = new HappyGymStatsDbContext(options);
         await db.Database.EnsureCreatedAsync();
 
+        var userId = new Guid("00000000-0000-0000-0000-000000000001");
         db.ModifierProvenance.Add(new ModifierProvenanceEntity
         {
-            PlayerId = 1,
+            AnonymousId = userId,
             LogEntryId = "log-1",
             Scope = 1,
             SubjectId = 42,
@@ -103,7 +105,7 @@ public sealed class HappyGymStatsDbContextTests
         await db.SaveChangesAsync();
 
         await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlRawAsync(
-            "INSERT INTO ModifierProvenance (PlayerId, LogEntryId, Scope, SubjectId, VerificationStatus) VALUES (1, 'log-1', 1, 99, 2)"));
+            $"INSERT INTO ModifierProvenance (AnonymousId, LogEntryId, Scope, SubjectId, VerificationStatus) VALUES ('{userId}', 'log-1', 1, 99, 2)"));
     }
 
     [Fact]
@@ -119,9 +121,10 @@ public sealed class HappyGymStatsDbContextTests
         await using var db = new HappyGymStatsDbContext(options);
         await db.Database.EnsureCreatedAsync();
 
+        var userId = new Guid("00000000-0000-0000-0000-000000000001");
         db.AffiliationEvents.Add(new AffiliationEventEntity
         {
-            PlayerId = 1,
+            AnonymousId = userId,
             SourceLogEntryId = "log-1",
             LogTypeId = 100,
             Scope = AffiliationScope.Faction,
@@ -131,6 +134,6 @@ public sealed class HappyGymStatsDbContextTests
         await db.SaveChangesAsync();
 
         await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlRawAsync(
-            "INSERT INTO AffiliationEvents (PlayerId, SourceLogEntryId, LogTypeId, Scope, AffiliationId) VALUES (1, 'log-1', 101, 4, 9002)"));
+            $"INSERT INTO AffiliationEvents (AnonymousId, SourceLogEntryId, LogTypeId, Scope, AffiliationId) VALUES ('{userId}', 'log-1', 101, 4, 9002)"));
     }
 }

@@ -37,4 +37,11 @@ public sealed class IdentityMapRepository(HappyGymStatsDbContext db) : IIdentity
         if (entry is not null)
             entry.EncryptedTornPlayerId = encryptedTornPlayerId;
     }
+
+    public async Task StorePublicKeyAsync(Guid anonymousId, byte[] publicKeySpki, CancellationToken ct)
+    {
+        var entry = await db.IdentityMap.FirstOrDefaultAsync(e => e.AnonymousId == anonymousId, ct);
+        if (entry is not null)
+            entry.PublicKey = publicKeySpki;
+    }
 }

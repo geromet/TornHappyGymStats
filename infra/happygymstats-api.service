@@ -13,7 +13,6 @@ RestartSec=5
 
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=ASPNETCORE_URLS=http://127.0.0.1:5047
-Environment=HAPPYGYMSTATS_DATABASE=/var/www/happygymstats/data/happygymstats.db
 
 [Install]
 WantedBy=multi-user.target

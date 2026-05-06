@@ -64,7 +64,7 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
         await _factory.SeedUserLogEntriesAsync(
             new UserLogEntryEntity
             {
-                PlayerId = 0,
+                AnonymousId = Guid.Empty,
                 LogEntryId = "train-c",
                 OccurredAtUtc = new DateTimeOffset(2026, 04, 30, 12, 00, 00, TimeSpan.Zero),
                 LogTypeId = 1,
@@ -73,7 +73,7 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
             },
             new UserLogEntryEntity
             {
-                PlayerId = 0,
+                AnonymousId = Guid.Empty,
                 LogEntryId = "train-b",
                 OccurredAtUtc = new DateTimeOffset(2026, 04, 30, 12, 00, 00, TimeSpan.Zero),
                 LogTypeId = 1,
@@ -82,7 +82,7 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
             },
             new UserLogEntryEntity
             {
-                PlayerId = 0,
+                AnonymousId = Guid.Empty,
                 LogEntryId = "train-a",
                 OccurredAtUtc = new DateTimeOffset(2026, 04, 30, 11, 45, 00, TimeSpan.Zero),
                 LogTypeId = 1,
