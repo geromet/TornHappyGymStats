@@ -199,11 +199,11 @@ else if (_surfaces != null)
         }
         catch (ApiFailure failure)
         {
-            _loadError = $"Failed to load surfaces data: {failure.SafeMessage}";
+            _loadError = BuildLoadFailureMessage(failure);
             Logger.LogError(failure,
                 "Failed to load surfaces data. Endpoint={Endpoint} Status={StatusCode} Category={Category}",
                 failure.Endpoint,
-                failure.StatusCode,
+                failure.StatusCode is null ? null : (int)failure.StatusCode,
                 failure.Category);
         }
         catch (Exception ex)
@@ -248,12 +248,12 @@ else if (_surfaces != null)
         }
         catch (ApiFailure failure)
         {
-            _statusMessage = failure.SafeMessage;
+            _statusMessage = BuildImportFailureMessage(failure);
             _statusSeverity = Severity.Error;
             Logger.LogError(failure,
                 "Import failed. Endpoint={Endpoint} Status={StatusCode} Category={Category}",
                 failure.Endpoint,
-                failure.StatusCode,
+                failure.StatusCode is null ? null : (int)failure.StatusCode,
                 failure.Category);
         }
         catch (Exception ex)
@@ -341,6 +341,25 @@ else if (_surfaces != null)
             bgcolor = "rgba(0,0,0,0)"
         },
         margin = new { l = 0, r = 0, t = 0, b = 0 }
+    };
+
+    private static string BuildLoadFailureMessage(ApiFailure failure) => failure.Category switch
+    {
+        ApiFailureCategory.ApiUnavailable => "Could not load surfaces data: API is unavailable. Verify the API service is running on the configured boundary.",
+        ApiFailureCategory.BadGateway => "Could not load surfaces data: reverse proxy returned 502 Bad Gateway. Verify nginx upstream to the API boundary.",
+        ApiFailureCategory.NotFound => "No surfaces data found. Run an import first.",
+        ApiFailureCategory.Deserialization => "Could not load surfaces data: API response format was invalid.",
+        _ => $"Could not load surfaces data: {failure.SafeMessage}"
+    };
+
+    private static string BuildImportFailureMessage(ApiFailure failure) => failure.Category switch
+    {
+        ApiFailureCategory.ApiUnavailable => "Import failed: API is unavailable. Verify the API service is running.",
+        ApiFailureCategory.BadGateway => "Import failed: reverse proxy returned 502 Bad Gateway. Check nginx upstream.",
+        ApiFailureCategory.ImportFailure => "Import failed: backend rejected or could not process the import.",
+        ApiFailureCategory.Validation => "Import rejected: request validation failed.",
+        ApiFailureCategory.Deserialization => "Import failed: API response format was invalid.",
+        _ => $"Import failed: {failure.SafeMessage}"
     };
 
     private static string FormatWarningTitle(ProvenanceWarningDto w)
