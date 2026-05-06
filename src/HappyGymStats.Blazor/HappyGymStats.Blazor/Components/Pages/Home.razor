@@ -197,9 +197,18 @@ else if (_surfaces != null)
             if (_surfaces == null)
                 _loadError = "No surfaces data found. Run an import first.";
         }
+        catch (ApiFailure failure)
+        {
+            _loadError = $"Failed to load surfaces data: {failure.SafeMessage}";
+            Logger.LogError(failure,
+                "Failed to load surfaces data. Endpoint={Endpoint} Status={StatusCode} Category={Category}",
+                failure.Endpoint,
+                failure.StatusCode,
+                failure.Category);
+        }
         catch (Exception ex)
         {
-            _loadError = $"Failed to load surfaces data: {ex.Message}";
+            _loadError = "Failed to load surfaces data due to an unexpected error.";
             Logger.LogError(ex, "Failed to load surfaces data");
         }
         finally
@@ -237,9 +246,19 @@ else if (_surfaces != null)
             _statusMessage = "Data refreshed.";
             _statusSeverity = Severity.Success;
         }
+        catch (ApiFailure failure)
+        {
+            _statusMessage = failure.SafeMessage;
+            _statusSeverity = Severity.Error;
+            Logger.LogError(failure,
+                "Import failed. Endpoint={Endpoint} Status={StatusCode} Category={Category}",
+                failure.Endpoint,
+                failure.StatusCode,
+                failure.Category);
+        }
         catch (Exception ex)
         {
-            _statusMessage = $"Error: {ex.Message}";
+            _statusMessage = "Import failed due to an unexpected error.";
             _statusSeverity = Severity.Error;
             Logger.LogError(ex, "Import failed");
         }
