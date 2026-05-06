@@ -1,3 +1,10 @@
+# happygymstats deploy privilege boundary
+#
+# Permanent (steady-state deploy): release activation + service restart/status.
+# Bootstrap-only (one-time setup): install/validate sudoers + install/enable/start adminpanel service.
+# Keep entries command-specific; no shell escapes or wildcard service names.
+
+# --- steady-state deploy permissions ---
 anon ALL=(ALL) NOPASSWD: /usr/bin/rsync
 anon ALL=(ALL) NOPASSWD: /usr/bin/find
 anon ALL=(ALL) NOPASSWD: /bin/mkdir
@@ -10,15 +17,34 @@ anon ALL=(ALL) NOPASSWD: /usr/bin/rm
 anon ALL=(ALL) NOPASSWD: /usr/bin/ln
 anon ALL=(ALL) NOPASSWD: /usr/bin/chown
 anon ALL=(ALL) NOPASSWD: /usr/bin/chmod
+
+# API + Blazor steady-state service controls
 anon ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart happygymstats-api
-anon ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart happygymstats-blazor
-anon ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart happygymstats-adminpanel
 anon ALL=(ALL) NOPASSWD: /usr/bin/systemctl status happygymstats-api
+anon ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart happygymstats-blazor
 anon ALL=(ALL) NOPASSWD: /usr/bin/systemctl status happygymstats-blazor
-anon ALL=(ALL) NOPASSWD: /usr/bin/systemctl status happygymstats-adminpanel
 anon ALL=(ALL) NOPASSWD: /bin/systemctl restart happygymstats-api
-anon ALL=(ALL) NOPASSWD: /bin/systemctl restart happygymstats-blazor
-anon ALL=(ALL) NOPASSWD: /bin/systemctl restart happygymstats-adminpanel
 anon ALL=(ALL) NOPASSWD: /bin/systemctl status happygymstats-api
+anon ALL=(ALL) NOPASSWD: /bin/systemctl restart happygymstats-blazor
 anon ALL=(ALL) NOPASSWD: /bin/systemctl status happygymstats-blazor
+
+# AdminPanel steady-state restart/status
+anon ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart happygymstats-adminpanel
+anon ALL=(ALL) NOPASSWD: /usr/bin/systemctl status happygymstats-adminpanel
+anon ALL=(ALL) NOPASSWD: /bin/systemctl restart happygymstats-adminpanel
 anon ALL=(ALL) NOPASSWD: /bin/systemctl status happygymstats-adminpanel
+
+# --- bootstrap-only setup permissions (S03 one-time setup path) ---
+# Install/refresh unit + sudoers artifacts and validate syntax before activation.
+anon ALL=(ALL) NOPASSWD: /usr/bin/install
+anon ALL=(ALL) NOPASSWD: /bin/install
+anon ALL=(ALL) NOPASSWD: /usr/sbin/visudo -cf /etc/sudoers.d/happygymstats
+anon ALL=(ALL) NOPASSWD: /sbin/visudo -cf /etc/sudoers.d/happygymstats
+
+# AdminPanel unit registration and first enable/start lifecycle.
+anon ALL=(ALL) NOPASSWD: /usr/bin/systemctl daemon-reload
+anon ALL=(ALL) NOPASSWD: /bin/systemctl daemon-reload
+anon ALL=(ALL) NOPASSWD: /usr/bin/systemctl enable happygymstats-adminpanel
+anon ALL=(ALL) NOPASSWD: /bin/systemctl enable happygymstats-adminpanel
+anon ALL=(ALL) NOPASSWD: /usr/bin/systemctl start happygymstats-adminpanel
+anon ALL=(ALL) NOPASSWD: /bin/systemctl start happygymstats-adminpanel

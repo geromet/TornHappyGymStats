@@ -89,6 +89,32 @@ See script headers and `--help` output for:
 - service name
 - sudo behavior
 
+## AdminPanel sudoers + setup boundary (S03)
+
+Source of truth: `infra/sudoers-happygymstats`
+
+### Permanent (steady-state deploy)
+These permissions are expected to remain after bootstrap and support normal deploys:
+- release activation/file ownership operations (`rsync`, `mkdir`, `rm`, `ln`, `chown`, `chmod`, `find`)
+- service `restart` + `status` for:
+  - `happygymstats-api`
+  - `happygymstats-blazor`
+  - `happygymstats-adminpanel`
+
+### Bootstrap-only (one-time setup)
+These permissions exist to install and activate AdminPanel prerequisites:
+- `install` for writing service/sudoers artifacts with controlled mode/ownership
+- `visudo -cf /etc/sudoers.d/happygymstats` for sudoers syntax validation before activation
+- `systemctl daemon-reload`
+- `systemctl enable happygymstats-adminpanel`
+- `systemctl start happygymstats-adminpanel`
+- `systemctl status happygymstats-adminpanel` (also used in steady-state)
+
+### Explicit hard boundaries
+- No `NOPASSWD: ALL`
+- No shell escalation commands (`/bin/bash`, `/usr/bin/bash`, `sh -c`)
+- No wildcard service names; only `happygymstats-*` units explicitly listed above
+
 ## Production target
 - `torn.geromet.com` static frontend
 - `/api/*` proxied to `127.0.0.1:5047`
