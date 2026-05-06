@@ -1,5 +1,8 @@
 using HappyGymStats.Api.Infrastructure;
 using HappyGymStats.Core.Import;
+using HappyGymStats.Core.Repositories;
+using HappyGymStats.Data.Entities;
+using HappyGymStats.Identity.Provisional;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HappyGymStats.Api.Controllers;
@@ -8,8 +11,21 @@ namespace HappyGymStats.Api.Controllers;
 public sealed class ImportController : ApiControllerBase
 {
     private readonly ImportOrchestrator _importService;
+    private readonly IIdentityMapRepository _identityMapRepo;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IProvisionalTokenService _provisionalTokenService;
 
-    public ImportController(ImportOrchestrator importService) => _importService = importService;
+    public ImportController(
+        ImportOrchestrator importService,
+        IIdentityMapRepository identityMapRepo,
+        IUnitOfWork unitOfWork,
+        IProvisionalTokenService provisionalTokenService)
+    {
+        _importService = importService;
+        _identityMapRepo = identityMapRepo;
+        _unitOfWork = unitOfWork;
+        _provisionalTokenService = provisionalTokenService;
+    }
 
     [HttpPost]
     public IActionResult StartImport([FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ImportRequest? request)
@@ -32,6 +48,36 @@ public sealed class ImportController : ApiControllerBase
             return ApiError(StatusCodes.Status404NotFound, "not_found", "No import has been started.");
 
         return Ok(ToDto(status));
+    }
+
+    [HttpPost("anonymous")]
+    public async Task<IActionResult> StartAnonymousImport(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ImportRequest? request,
+        CancellationToken ct)
+    {
+        var apiKey = request?.ApiKey?.Trim();
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return ValidationError("apiKey is required.", new { field = "apiKey" });
+
+        var status = _importService.Enqueue(apiKey, fresh: true);
+
+        await _identityMapRepo.CreateAsync(new IdentityMapEntity
+        {
+            AnonymousId = status.AnonymousId,
+            IsProvisional = true,
+            CreatedAtUtc = status.StartedAtUtc,
+            ExpiresAtUtc = status.StartedAtUtc.AddHours(24),
+        }, ct);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        var provisionalToken = _provisionalTokenService.Issue(status.AnonymousId);
+
+        return StatusCode(StatusCodes.Status202Accepted, new
+        {
+            anonymousId = status.AnonymousId,
+            provisionalToken,
+            job = ToDto(status),
+        });
     }
 
     private static ImportStatusDto ToDto(ImportJobStatus s)

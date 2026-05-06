@@ -45,8 +45,14 @@ public sealed class ImportOrchestrator : BackgroundService
         if (_latest is { IsTerminal: false })
             return _latest;
 
+        // Generate AnonymousId here for fresh imports so callers can use it immediately
+        // (e.g. to create an IdentityMap entry before the background job runs).
+        // Resume imports resolve the existing AnonymousId from the DB in RunImportAsync.
+        var anonymousId = fresh ? Guid.NewGuid() : Guid.Empty;
+
         var status = new ImportJobStatus(
             Id: Guid.NewGuid().ToString("N"),
+            AnonymousId: anonymousId,
             Outcome: "queued",
             StartedAtUtc: DateTimeOffset.UtcNow,
             CompletedAtUtc: null,
@@ -56,7 +62,7 @@ public sealed class ImportOrchestrator : BackgroundService
             ErrorMessage: null);
 
         _latest = status;
-        _queue.Enqueue(new ImportJobRequest(apiKey, fresh, status.Id));
+        _queue.Enqueue(new ImportJobRequest(apiKey, fresh, status.Id, anonymousId));
         return status;
     }
 
@@ -103,8 +109,8 @@ public sealed class ImportOrchestrator : BackgroundService
 
             var mode = request.Fresh ? FetchMode.Fresh : FetchMode.Resume;
 
-            Guid anonymousId = request.Fresh
-                ? Guid.NewGuid()
+            Guid anonymousId = request.AnonymousId != Guid.Empty
+                ? request.AnonymousId
                 : await importRunRepo.ResolveAnonymousIdAsync(stoppingToken).ConfigureAwait(false) ?? Guid.NewGuid();
 
             _logger.LogInformation("Import job {JobId} using AnonymousId {AnonymousId}", request.JobId, anonymousId);
@@ -215,11 +221,12 @@ public sealed class ImportOrchestrator : BackgroundService
             _latest = mutate(_latest);
     }
 
-    private sealed record ImportJobRequest(string ApiKey, bool Fresh, string JobId);
+    private sealed record ImportJobRequest(string ApiKey, bool Fresh, string JobId, Guid AnonymousId);
 }
 
 public sealed record ImportJobStatus(
     string Id,
+    Guid AnonymousId,
     string Outcome,
     DateTimeOffset StartedAtUtc,
     DateTimeOffset? CompletedAtUtc,

@@ -1,6 +1,7 @@
 using HappyGymStats.Api.Infrastructure;
 using HappyGymStats.Core.Fetch;
 using HappyGymStats.Identity.Authentication;
+using HappyGymStats.Identity.Provisional;
 using HappyGymStats.Core.Import;
 using HappyGymStats.Core.Reconstruction;
 using HappyGymStats.Core.Repositories;
@@ -15,6 +16,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 builder.Services.AddKeycloakAuthentication("https://auth.geromet.com/realms/torn");
+builder.Services.Configure<ProvisionalTokenOptions>(
+    builder.Configuration.GetSection(ProvisionalTokenOptions.Section));
+builder.Services.AddSingleton<IProvisionalTokenService, ProvisionalTokenService>();
 
 builder.Services.AddCors(options =>
     options.AddPolicy("ReadApi", policy => policy
@@ -40,6 +44,7 @@ builder.Services.AddHttpClient<TornApiClient>(client =>
 
 builder.Services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<HappyGymStatsDbContext>());
 
+builder.Services.AddScoped<IIdentityMapRepository, IdentityMapRepository>();
 builder.Services.AddScoped<IUserLogEntryRepository, UserLogEntryRepository>();
 builder.Services.AddScoped<IImportRunRepository, ImportRunRepository>();
 builder.Services.AddScoped<IModifierProvenanceRepository, ModifierProvenanceRepository>();

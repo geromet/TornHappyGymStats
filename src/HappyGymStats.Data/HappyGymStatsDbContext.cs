@@ -20,6 +20,8 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
     {
     }
 
+    public DbSet<IdentityMapEntity> IdentityMap => Set<IdentityMapEntity>();
+
     public DbSet<ImportRunEntity> ImportRuns => Set<ImportRunEntity>();
 
     public DbSet<ModifierProvenanceEntity> ModifierProvenance => Set<ModifierProvenanceEntity>();
@@ -32,6 +34,16 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<IdentityMapEntity>(entity =>
+        {
+            entity.HasKey(e => e.AnonymousId);
+            entity.Property(e => e.AnonymousId).ValueGeneratedNever();
+            entity.HasIndex(e => e.KeycloakSub).IsUnique()
+                .HasFilter("\"KeycloakSub\" IS NOT NULL");
+            entity.Property(e => e.CreatedAtUtc).HasConversion(UtcDateTimeOffsetConverter);
+            entity.Property(e => e.ExpiresAtUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
+        });
+
         modelBuilder.Entity<ImportRunEntity>(entity =>
         {
             entity.HasKey(e => e.Id);
