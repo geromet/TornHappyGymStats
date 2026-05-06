@@ -5,6 +5,7 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly SERVICE_SRC="${ROOT_DIR}/infra/happygymstats-adminpanel.service"
+readonly SUDOERS_SRC="${ROOT_DIR}/infra/sudoers-happygymstats"
 
 [[ -f "${ROOT_DIR}/.env.deploy" ]] && source "${ROOT_DIR}/.env.deploy"
 source "${SCRIPT_DIR}/deploy-config.sh"
@@ -12,7 +13,9 @@ source "${SCRIPT_DIR}/deploy-config.sh"
 readonly SERVICE_NAME="${DEPLOY_ADMINPANEL_SERVICE}"
 readonly REMOTE_STAGE_DIR="/tmp/${SERVICE_NAME}-setup-${DEPLOY_SSH_USER}"
 readonly REMOTE_STAGE_UNIT="${REMOTE_STAGE_DIR}/${SERVICE_NAME}.service"
+readonly REMOTE_STAGE_SUDOERS="${REMOTE_STAGE_DIR}/sudoers-happygymstats"
 readonly REMOTE_SYSTEMD_UNIT="/etc/systemd/system/${SERVICE_NAME}.service"
+readonly REMOTE_SYSTEM_SUDOERS="/etc/sudoers.d/happygymstats"
 readonly HEALTH_URL="http://127.0.0.1:5048/admin/health"
 
 DRY_RUN=0
@@ -26,11 +29,14 @@ enables and starts/restarts the service, and verifies local loopback health.
 
 Mutation phases:
   1) upload-service-unit      - rsync service file to remote staging path
-  2) install-service-unit     - sudo install to /etc/systemd/system
-  3) daemon-reload            - sudo systemctl daemon-reload
-  4) enable-service           - sudo systemctl enable happygymstats-adminpanel
-  5) start-or-restart-service - sudo systemctl start/restart based on current state
-  6) health-check             - curl http://127.0.0.1:5048/admin/health until success
+  2) upload-sudoers-policy    - rsync sudoers policy to remote staging path
+  3) validate-sudoers-policy  - sudo visudo -cf staged sudoers file
+  4) install-sudoers-policy   - sudo install -m 0440 to /etc/sudoers.d/happygymstats
+  5) install-service-unit     - sudo install to /etc/systemd/system
+  6) daemon-reload            - sudo systemctl daemon-reload
+  7) enable-service           - sudo systemctl enable happygymstats-adminpanel
+  8) start-or-restart-service - sudo systemctl start/restart based on current state
+  9) health-check             - curl http://127.0.0.1:5048/admin/health until success
 
 Flags:
   -n, --dry-run   Print planned remote mutations without executing them
@@ -70,6 +76,35 @@ upload_service_unit() {
 mkdir -p '${REMOTE_STAGE_DIR}'"
 
   rsync -av --delete -e "ssh ${SSH_OPTS[*]}" "${SERVICE_SRC}" "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}:${REMOTE_STAGE_UNIT}"
+}
+
+upload_sudoers_policy() {
+  log_phase "upload-sudoers-policy"
+
+  if [[ ! -f "${SUDOERS_SRC}" ]]; then
+    echo "Sudoers policy file missing: ${SUDOERS_SRC}" >&2
+    exit 1
+  fi
+
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    echo "[dry-run] would rsync '${SUDOERS_SRC}' to '${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}:${REMOTE_STAGE_SUDOERS}'"
+    return 0
+  fi
+
+  ssh_cmd_tty "set -euo pipefail
+mkdir -p '${REMOTE_STAGE_DIR}'"
+
+  rsync -av --delete -e "ssh ${SSH_OPTS[*]}" "${SUDOERS_SRC}" "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}:${REMOTE_STAGE_SUDOERS}"
+}
+
+validate_sudoers_policy() {
+  log_phase "validate-sudoers-policy"
+  run_remote "${SUDO_CMD} visudo -cf '${REMOTE_STAGE_SUDOERS}'"
+}
+
+install_sudoers_policy() {
+  log_phase "install-sudoers-policy"
+  run_remote "${SUDO_CMD} install -m 0440 '${REMOTE_STAGE_SUDOERS}' '${REMOTE_SYSTEM_SUDOERS}'"
 }
 
 install_service_unit() {
@@ -138,9 +173,14 @@ done
 echo "==> AdminPanel setup target: ${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}"
 echo "==> Service unit source: ${SERVICE_SRC}"
 echo "==> Service unit destination: ${REMOTE_SYSTEMD_UNIT}"
+echo "==> Sudoers source: ${SUDOERS_SRC}"
+echo "==> Sudoers destination: ${REMOTE_SYSTEM_SUDOERS}"
 [[ "${DRY_RUN}" == "1" ]] && echo "==> Dry-run enabled: no remote mutations will execute"
 
 upload_service_unit
+upload_sudoers_policy
+validate_sudoers_policy
+install_sudoers_policy
 install_service_unit
 daemon_reload
 enable_service

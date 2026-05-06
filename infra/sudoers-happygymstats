@@ -38,6 +38,8 @@ anon ALL=(ALL) NOPASSWD: /bin/systemctl status happygymstats-adminpanel
 # Install/refresh unit + sudoers artifacts and validate syntax before activation.
 anon ALL=(ALL) NOPASSWD: /usr/bin/install
 anon ALL=(ALL) NOPASSWD: /bin/install
+anon ALL=(ALL) NOPASSWD: /usr/sbin/visudo -cf /tmp/happygymstats-adminpanel-setup-anon/sudoers-happygymstats
+anon ALL=(ALL) NOPASSWD: /sbin/visudo -cf /tmp/happygymstats-adminpanel-setup-anon/sudoers-happygymstats
 anon ALL=(ALL) NOPASSWD: /usr/sbin/visudo -cf /etc/sudoers.d/happygymstats
 anon ALL=(ALL) NOPASSWD: /sbin/visudo -cf /etc/sudoers.d/happygymstats
 
