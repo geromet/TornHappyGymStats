@@ -153,6 +153,37 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
     }
 
     [Fact]
+    public async Task Surfaces_latest_returns_structured_not_found_when_cache_missing()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/api/v1/torn/surfaces/latest");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
+
+        Assert.NotNull(payload);
+        Assert.Equal("not_found", payload.Error.Code);
+        Assert.Equal("No cached surfaces dataset found.", payload.Error.Message);
+        Assert.False(string.IsNullOrWhiteSpace(payload.Error.RequestId));
+    }
+
+    [Fact]
+    public async Task Surfaces_meta_returns_structured_not_found_when_cache_missing()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/api/v1/torn/surfaces/meta");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
+
+        Assert.NotNull(payload);
+        Assert.Equal("not_found", payload.Error.Code);
+        Assert.Equal("No cached surfaces dataset found.", payload.Error.Message);
+    }
+
+    [Fact]
     public async Task Import_requires_api_key()
     {
         using var client = _factory.CreateClient();

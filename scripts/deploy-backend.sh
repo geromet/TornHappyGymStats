@@ -154,6 +154,71 @@ run_backend_health_gates() {
     echo \"DEPLOY_HEALTH_OK: category=external_2xx url=${DEPLOY_API_EXTERNAL_HEALTH_URL} status=\${status_code}\"
     rm -f \"\${body_file}\" \"\${code_file}\"
   "
+
+  echo "==> Health gate: loopback surfaces metadata (${DEPLOY_API_LOOPBACK_SURFACES_META_URL})"
+  ssh_cmd_tty "set -euo pipefail
+    url='${DEPLOY_API_LOOPBACK_SURFACES_META_URL}'
+    timeout='${DEPLOY_API_HEALTH_TIMEOUT_SECONDS}'
+    body_max='${DEPLOY_API_HEALTH_BODY_MAX_BYTES}'
+    body_file=\"/tmp/happygymstats-loopback-surfaces-meta-${DEPLOY_SSH_USER}.body\"
+    code_file=\"/tmp/happygymstats-loopback-surfaces-meta-${DEPLOY_SSH_USER}.code\"
+    rm -f \"\${body_file}\" \"\${code_file}\"
+
+    curl_status=0
+    if ! curl -sS --max-time \"\${timeout}\" -o \"\${body_file}\" -w '%{http_code}' \"\${url}\" > \"\${code_file}\"; then
+      curl_status=$?
+      echo \"DEPLOY_HEALTH_FAIL: category=surfaces_meta_unreachable url=${DEPLOY_API_LOOPBACK_SURFACES_META_URL} curl_exit=\${curl_status}\" >&2
+      rm -f \"\${body_file}\" \"\${code_file}\"
+      exit 36
+    fi
+
+    status_code=\"\$(tr -d '[:space:]' < \"\${code_file}\")\"
+    if [[ ! \"\${status_code}\" =~ ^2 ]]; then
+      body_excerpt=\"\$(head -c \"\${body_max}\" \"\${body_file}\" | tr '\\n' ' ' | tr '\\r' ' ')\"
+      echo \"DEPLOY_HEALTH_FAIL: category=surfaces_meta_non_2xx url=${DEPLOY_API_LOOPBACK_SURFACES_META_URL} status=\${status_code} body='\${body_excerpt}'\" >&2
+      rm -f \"\${body_file}\" \"\${code_file}\"
+      exit 37
+    fi
+
+    echo \"DEPLOY_HEALTH_OK: category=surfaces_meta_2xx url=${DEPLOY_API_LOOPBACK_SURFACES_META_URL} status=\${status_code}\"
+    rm -f \"\${body_file}\" \"\${code_file}\"
+  "
+
+  echo "==> Health gate: loopback latest surfaces (${DEPLOY_API_LOOPBACK_SURFACES_LATEST_URL})"
+  ssh_cmd_tty "set -euo pipefail
+    url='${DEPLOY_API_LOOPBACK_SURFACES_LATEST_URL}'
+    timeout='${DEPLOY_API_HEALTH_TIMEOUT_SECONDS}'
+    body_max='${DEPLOY_API_HEALTH_BODY_MAX_BYTES}'
+    body_file=\"/tmp/happygymstats-loopback-surfaces-latest-${DEPLOY_SSH_USER}.body\"
+    code_file=\"/tmp/happygymstats-loopback-surfaces-latest-${DEPLOY_SSH_USER}.code\"
+    rm -f \"\${body_file}\" \"\${code_file}\"
+
+    curl_status=0
+    if ! curl -sS --max-time \"\${timeout}\" -o \"\${body_file}\" -w '%{http_code}' \"\${url}\" > \"\${code_file}\"; then
+      curl_status=$?
+      echo \"DEPLOY_HEALTH_FAIL: category=surfaces_latest_unreachable url=${DEPLOY_API_LOOPBACK_SURFACES_LATEST_URL} curl_exit=\${curl_status}\" >&2
+      rm -f \"\${body_file}\" \"\${code_file}\"
+      exit 38
+    fi
+
+    status_code=\"\$(tr -d '[:space:]' < \"\${code_file}\")\"
+    body_excerpt=\"\$(head -c \"\${body_max}\" \"\${body_file}\" | tr '\\n' ' ' | tr '\\r' ' ')\"
+    if [[ \"\${status_code}\" =~ ^2 ]]; then
+      echo \"DEPLOY_HEALTH_OK: category=surfaces_latest_2xx url=${DEPLOY_API_LOOPBACK_SURFACES_LATEST_URL} status=\${status_code}\"
+      rm -f \"\${body_file}\" \"\${code_file}\"
+      exit 0
+    fi
+
+    if [[ \"\${status_code}\" == \"404\" ]] && grep -q '"code":"not_found"' \"\${body_file}\"; then
+      echo \"DEPLOY_HEALTH_WARN: category=surfaces_latest_missing status=404 code=not_found url=${DEPLOY_API_LOOPBACK_SURFACES_LATEST_URL}\"
+      rm -f \"\${body_file}\" \"\${code_file}\"
+      exit 0
+    fi
+
+    echo \"DEPLOY_HEALTH_FAIL: category=surfaces_latest_non_2xx url=${DEPLOY_API_LOOPBACK_SURFACES_LATEST_URL} status=\${status_code} body='\${body_excerpt}'\" >&2
+    rm -f \"\${body_file}\" \"\${code_file}\"
+    exit 39
+  "
 }
 
 if [[ "${DEPLOY_API_RESTART}" == "1" ]]; then
