@@ -24,6 +24,11 @@ readonly _DEPLOY_CONFIG_LOADED=1
 : "${DEPLOY_API_OWNER:=www-data}"
 : "${DEPLOY_API_GROUP:=www-data}"
 : "${DEPLOY_API_RESTART:=1}"
+: "${DEPLOY_API_HEALTH_GATES:=1}"
+: "${DEPLOY_API_LOOPBACK_HEALTH_URL:=http://127.0.0.1:5047/api/v1/torn/health}"
+: "${DEPLOY_API_EXTERNAL_HEALTH_URL:=https://torn.geromet.com/api/v1/torn/health}"
+: "${DEPLOY_API_HEALTH_TIMEOUT_SECONDS:=10}"
+: "${DEPLOY_API_HEALTH_BODY_MAX_BYTES:=200}"
 
 # Frontend (Blazor)
 : "${DEPLOY_BLAZOR_REMOTE_ROOT:=/var/www/happygymstats-blazor}"

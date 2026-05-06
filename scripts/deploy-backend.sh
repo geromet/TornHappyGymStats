@@ -73,9 +73,94 @@ ssh_cmd_tty "set -euo pipefail
   [[ -f '${REMOTE_RELEASE_DIR}/HappyGymStats.Api' ]] && ${SUDO_CMD} chmod 755 '${REMOTE_RELEASE_DIR}/HappyGymStats.Api'
   rm -rf '${REMOTE_STAGING_DIR}'"
 
+run_backend_health_gates() {
+  if [[ "${DEPLOY_API_HEALTH_GATES}" != "1" ]]; then
+    echo "==> Health gates disabled (DEPLOY_API_HEALTH_GATES=${DEPLOY_API_HEALTH_GATES})"
+    return 0
+  fi
+
+  echo "==> Health gate: service status (${DEPLOY_API_SERVICE})"
+  ssh_cmd_tty "set -euo pipefail
+    service='${DEPLOY_API_SERVICE}'
+    if ! ${SUDO_CMD} systemctl is-active --quiet \"${DEPLOY_API_SERVICE}\"; then
+      echo \"DEPLOY_HEALTH_FAIL: category=service_inactive service=${DEPLOY_API_SERVICE}\" >&2
+      ${SUDO_CMD} systemctl status --no-pager --full \"${DEPLOY_API_SERVICE}\" >&2 || true
+      exit 30
+    fi
+    echo \"DEPLOY_HEALTH_OK: category=service_active service=${DEPLOY_API_SERVICE}\"
+  "
+
+  echo "==> Health gate: loopback API (${DEPLOY_API_LOOPBACK_HEALTH_URL})"
+  ssh_cmd_tty "set -euo pipefail
+    url='${DEPLOY_API_LOOPBACK_HEALTH_URL}'
+    timeout='${DEPLOY_API_HEALTH_TIMEOUT_SECONDS}'
+    body_max='${DEPLOY_API_HEALTH_BODY_MAX_BYTES}'
+    body_file=\"/tmp/happygymstats-loopback-health-${DEPLOY_SSH_USER}.body\"
+    code_file=\"/tmp/happygymstats-loopback-health-${DEPLOY_SSH_USER}.code\"
+    rm -f \"\${body_file}\" \"\${code_file}\"
+
+    curl_status=0
+    if ! curl -sS --max-time \"\${timeout}\" -o \"\${body_file}\" -w '%{http_code}' \"\${url}\" > \"\${code_file}\"; then
+      curl_status=$?
+      echo \"DEPLOY_HEALTH_FAIL: category=loopback_unreachable url=${DEPLOY_API_LOOPBACK_HEALTH_URL} curl_exit=\${curl_status}\" >&2
+      rm -f \"\${body_file}\" \"\${code_file}\"
+      exit 31
+    fi
+
+    status_code=\"\$(tr -d '[:space:]' < \"\${code_file}\")\"
+    if [[ ! \"\${status_code}\" =~ ^2 ]]; then
+      body_excerpt=\"\$(head -c \"\${body_max}\" \"\${body_file}\" | tr '\\n' ' ' | tr '\\r' ' ')\"
+      echo \"DEPLOY_HEALTH_FAIL: category=loopback_non_2xx url=${DEPLOY_API_LOOPBACK_HEALTH_URL} status=\${status_code} body='\${body_excerpt}'\" >&2
+      rm -f \"\${body_file}\" \"\${code_file}\"
+      exit 32
+    fi
+
+    echo \"DEPLOY_HEALTH_OK: category=loopback_2xx url=${DEPLOY_API_LOOPBACK_HEALTH_URL} status=\${status_code}\"
+    rm -f \"\${body_file}\" \"\${code_file}\"
+  "
+
+  echo "==> Health gate: external API (${DEPLOY_API_EXTERNAL_HEALTH_URL})"
+  ssh_cmd_tty "set -euo pipefail
+    url='${DEPLOY_API_EXTERNAL_HEALTH_URL}'
+    timeout='${DEPLOY_API_HEALTH_TIMEOUT_SECONDS}'
+    body_max='${DEPLOY_API_HEALTH_BODY_MAX_BYTES}'
+    body_file=\"/tmp/happygymstats-external-health-${DEPLOY_SSH_USER}.body\"
+    code_file=\"/tmp/happygymstats-external-health-${DEPLOY_SSH_USER}.code\"
+    rm -f \"\${body_file}\" \"\${code_file}\"
+
+    curl_status=0
+    if ! curl -sS --max-time \"\${timeout}\" -o \"\${body_file}\" -w '%{http_code}' \"\${url}\" > \"\${code_file}\"; then
+      curl_status=$?
+      echo \"DEPLOY_HEALTH_FAIL: category=external_unreachable url=${DEPLOY_API_EXTERNAL_HEALTH_URL} curl_exit=\${curl_status}\" >&2
+      rm -f \"\${body_file}\" \"\${code_file}\"
+      exit 33
+    fi
+
+    status_code=\"\$(tr -d '[:space:]' < \"\${code_file}\")\"
+    if [[ \"\${status_code}\" == \"502\" ]]; then
+      body_excerpt=\"\$(head -c \"\${body_max}\" \"\${body_file}\" | tr '\\n' ' ' | tr '\\r' ' ')\"
+      echo \"DEPLOY_HEALTH_FAIL: category=external_nginx_502 url=${DEPLOY_API_EXTERNAL_HEALTH_URL} status=\${status_code} body='\${body_excerpt}'\" >&2
+      rm -f \"\${body_file}\" \"\${code_file}\"
+      exit 34
+    fi
+
+    if [[ ! \"\${status_code}\" =~ ^2 ]]; then
+      body_excerpt=\"\$(head -c \"\${body_max}\" \"\${body_file}\" | tr '\\n' ' ' | tr '\\r' ' ')\"
+      echo \"DEPLOY_HEALTH_FAIL: category=external_non_2xx url=${DEPLOY_API_EXTERNAL_HEALTH_URL} status=\${status_code} body='\${body_excerpt}'\" >&2
+      rm -f \"\${body_file}\" \"\${code_file}\"
+      exit 35
+    fi
+
+    echo \"DEPLOY_HEALTH_OK: category=external_2xx url=${DEPLOY_API_EXTERNAL_HEALTH_URL} status=\${status_code}\"
+    rm -f \"\${body_file}\" \"\${code_file}\"
+  "
+}
+
 if [[ "${DEPLOY_API_RESTART}" == "1" ]]; then
   echo "==> Restarting ${DEPLOY_API_SERVICE}"
   ssh_cmd_tty "${SUDO_CMD} systemctl restart '${DEPLOY_API_SERVICE}'"
 fi
+
+run_backend_health_gates
 
 echo "==> Backend deployment complete — ${REMOTE_RELEASE_DIR}"
