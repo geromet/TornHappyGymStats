@@ -135,6 +135,27 @@ What mutates remotely:
 
 Agent safety requirement: obtain explicit user confirmation before running the non-dry-run setup command because it changes privileged server state.
 
-## Production target
-- `torn.geromet.com` static frontend
-- `/api/*` proxied to `127.0.0.1:5047`
+## AdminPanel nginx route ownership (S04)
+
+Decision: use a dedicated host, `admin.geromet.com`, for AdminPanel traffic, instead of mounting AdminPanel under `torn.geromet.com/admin/*` or `auth.geromet.com/admin/*`.
+
+Why this host ownership is preferred:
+- Avoids path collision with existing `torn.geromet.com` responsibilities (`/api/*`, static/frontend root, and Blazor SignalR/WebSocket behavior).
+- Keeps `auth.geromet.com` focused on Keycloak/OIDC concerns and avoids mixing identity-host responsibilities with AdminPanel app routing.
+- Gives nginx a single-purpose upstream boundary for AdminPanel (`127.0.0.1:5048`) with cleaner smoke checks and failure categorization.
+
+Route/auth boundary contract:
+- Public health endpoint: `https://admin.geromet.com/admin/health` should be reachable anonymously (2xx).
+- Protected AdminPanel APIs (for example `/admin/api/v1/...`) must remain auth-gated and reject unauthenticated requests (401/403 expected).
+- Do not log or print auth tokens in smoke checks; prefer unauthenticated negative assertions for protected routes.
+
+Infra assumptions to validate during nginx implementation:
+- DNS: Cloudflare record for `admin.geromet.com` points to the same VPS/origin as other hosts.
+- TLS: existing Cloudflare origin certificate (`/etc/ssl/cloudflare/origin.pem`) covers `admin.geromet.com` (wildcard `*.geromet.com` or equivalent SAN).
+- Origin reachability: AdminPanel systemd service remains loopback-bound at `127.0.0.1:5048`; nginx is the only external ingress path.
+
+## Production targets
+- `torn.geromet.com` static frontend + Blazor root
+- `torn.geromet.com/api/*` proxied to `127.0.0.1:5047`
+- `auth.geromet.com` Keycloak host
+- `admin.geromet.com/admin/*` proxied to `127.0.0.1:5048` (with anonymous health and auth-gated admin APIs)
