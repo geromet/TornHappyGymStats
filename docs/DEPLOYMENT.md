@@ -1,121 +1,130 @@
 # Deployment
 
-## Script operation taxonomy (S06)
+This document is the operational contract for deploying and verifying the current runtime shape:
 
-Use this categorization to avoid running manual bootstrap steps as if they were deploy failures:
+- `happygymstats-api` (loopback `127.0.0.1:5047`)
+- `happygymstats-blazor` (loopback `127.0.0.1:5182`)
+- `happygymstats-adminpanel` (loopback `127.0.0.1:5048`)
+- nginx routes for `/api/*`, `/`, and `/admin/*`
+- optional Postgres/Keycloak container health visibility via smoke checks
 
-- **automated-deploy (state-mutating):** `scripts/deploy.sh`, `scripts/deploy-backend.sh`, `scripts/deploy-frontend.sh`, `scripts/deploy-adminpanel.sh`, `scripts/deploy-containers.sh`
-- **diagnostic-read-only (safe for agent verification):** `scripts/verify/production-smoke.sh`, `scripts/verify/s05-local-surfaces.sh`, `scripts/verify/s05-production-smoke-contract.sh`, `scripts/verify/s06-provenance-warnings.sh`
-- **manual-bootstrap (explicit confirmation required before remote mutation):** `scripts/setup-adminpanel-server.sh`
+## Setup vs deploy (important split)
 
-Machine-readable safety hints:
-- `SCRIPT_CATEGORY=<category>`
-- `SCRIPT_MUTATES_SERVER_STATE=<0|1|conditional>`
-- `SCRIPT_AUTOMATION_SAFE_DEFAULT=<0|1>`
+### One-time setup / bootstrap
 
-## Main scripts
+- `bash scripts/setup-adminpanel-server.sh --help`
+- Installs/updates nginx admin route config (`infra/nginx-adminpanel.conf`) with explicit confirmation flags.
+- Use this for server bootstrapping and route setup changes, not routine deploys.
 
-Deploy all:
+### Routine deploy
 
-```bash
-bash scripts/deploy.sh --target all
-```
+- `bash scripts/deploy-backend.sh` (API)
+- `bash scripts/deploy-frontend.sh` (legacy static `web/` path, if still used)
+- `bash scripts/deploy-adminpanel.sh` (AdminPanel)
+- `bash scripts/deploy.sh --target all` (orchestrated entrypoint)
 
-Deploy separately:
+### Post-deploy verification
 
-```bash
-bash scripts/deploy-backend.sh
-bash scripts/deploy-frontend.sh
-```
+- `bash scripts/verify/production-smoke.sh`
+- Remote: `SMOKE_MODE=remote bash scripts/verify/production-smoke.sh`
 
-## Backend
-- Publishes `src/HappyGymStats.Api`
-- Uploads to timestamped release directory
-- Flips `current` symlink
-- Restarts systemd service
+## Required env files and secret policy
 
-## Frontend
-- Uploads `web/` to timestamped release directory
-- Flips `/var/www/torn-frontend/current`
+- Deployment scripts source `scripts/deploy-config.sh`, which can read `.env.deploy` when present.
+- Production runtime env files (for systemd services) must be managed on host, outside git.
+- Never commit secret values. Reference env var names only.
 
-## Environment / override knobs
-See script headers and `--help` output for:
-- SSH host/user/key/proxy
-- remote roots
-- service name
-- sudo behavior
+Critical API env var names:
 
-## Production target
-- `torn.geromet.com` static frontend
-- `/api/*` proxied to `127.0.0.1:5047`
+- `HAPPYGYMSTATS_CONNECTION_STRING`
+- `ConnectionStrings__HappyGymStats`
+- `ProvisionalToken__SigningKey`
+- `HAPPYGYMSTATS_SURFACES_CACHE_DIR`
+- `ASPNETCORE_URLS`
+- `ASPNETCORE_ENVIRONMENT`
 
-## AdminPanel nginx route setup (S04)
+## Service and release roots
 
-Use the dedicated host route config source:
-- `infra/nginx-adminpanel.conf`
+Current deploy scripts enforce timestamped release + `current` symlink activation:
 
-Run local/static verification freely:
+- API root: `/var/www/happygymstats`
+- AdminPanel root: `/var/www/happygymstats-adminpanel`
+- Legacy static frontend root: `/var/www/torn-frontend`
+
+Core units expected by smoke and deploy guards:
+
+- `happygymstats-api`
+- `happygymstats-blazor`
+- `happygymstats-adminpanel`
+
+## nginx routes and boundary checks
+
+The runtime route contract checked by smoke:
+
+- `https://torn.geromet.com/api/v1/torn/health` → API loopback
+- `https://torn.geromet.com/api/v1/torn/surfaces/latest` → API surfaces endpoint (200 or structured 404)
+- `https://torn.geromet.com/` → Blazor home
+- `https://admin.geromet.com/admin/health` → AdminPanel health
+- `https://admin.geromet.com/admin/api/v1/import-runs` should return auth denial (401/403) when unauthenticated
+
+## AdminPanel setup details
+
+Dry-run validation (safe):
+
 ```bash
 bash -n scripts/setup-adminpanel-server.sh
 ```
 
-Remote setup is intentionally gated behind explicit user confirmation because it mutates privileged nginx paths.
-Do not run remote setup unless you intentionally confirm both flags:
+Mutating setup requires explicit confirmation flags:
+
 ```bash
 DEPLOY_INSTALL_ADMIN_NGINX=1 \
   bash scripts/setup-adminpanel-server.sh --execute --confirm-remote-setup
 ```
 
-Safety behavior in the setup script:
-- installs `nginx-adminpanel.conf` into `sites-available` + `sites-enabled` by default
-- optional `conf.d` mode via `DEPLOY_ADMIN_NGINX_USE_CONF_D=1`
-- runs `nginx -t` before attempting reload nginx
-- runs `systemctl reload nginx` only after validation passes
-- no route mutation occurs without explicit confirmation flags
+The setup script validates nginx config (`nginx -t`) before reload and does not mutate routes without explicit confirmation.
 
-## Production smoke verification (S05)
+## Sudo/systemd/admin expectations
 
-Canonical post-deploy smoke command:
+- Deploy scripts assume SSH access and (by default) sudo-enabled host operations.
+- `deploy-config.sh` controls sudo behavior (`DEPLOY_USE_SUDO`, `DEPLOY_SUDO_NON_INTERACTIVE`).
+- Service restarts and status checks use `systemctl`; missing privileges or missing units are hard failures in required checks.
+
+## Production smoke command (canonical)
 
 ```bash
 bash scripts/verify/production-smoke.sh
 ```
 
-Optional remote execution (same read-only checks, over SSH):
+This command is read-only (`SCRIPT_MUTATES_SERVER_STATE=0`) and emits phase-based diagnostics:
+
+- framework
+- services
+- http-routes
+- containers
+- summary
+
+Result contract:
+
+- `RESULT required_failures=<n> optional_warnings=<n>`
+- non-zero exit when `required_failures > 0`
+
+## `ASPNETCORE_URLS` verification warning
+
+When running local verification flows that pin `ASPNETCORE_URLS`, always include `--no-launch-profile` for `dotnet run` so launch profile settings do not override your explicit URL binding. See `scripts/verify/s05-local-surfaces.sh` for the canonical pattern.
+
+## Quick operator sequence
 
 ```bash
-SMOKE_MODE=remote bash scripts/verify/production-smoke.sh
-```
+# 1) Deploy target (example: API)
+bash scripts/deploy-backend.sh
 
-Optional local contract verifier for drift (syntax + required tokens + docs contract):
+# 2) Run smoke checks
+bash scripts/verify/production-smoke.sh
 
-```bash
+# 3) If needed, run route/setup contract verifiers
 bash scripts/verify/s05-production-smoke-contract.sh
+bash scripts/verify/s06-deploy-script-contract.sh
 ```
 
-### Privilege and safety expectations
-- Smoke script is read-only: no deploy/restart/mutation operations are performed.
-- Service/port/nginx checks may need host privileges depending on machine policy.
-- Remote mode requires SSH access configured via `SMOKE_SSH_*` variables.
-- Script does not require Torn API key and does not print env file contents.
-
-### Phase contract
-The smoke script emits phase-organized output and a summary line:
-- phases: `framework`, `services`, `http-routes`, `containers`, `summary`
-- summary signal: `RESULT required_failures=<n> optional_warnings=<n>`
-
-Exit behavior:
-- any `required_failures > 0` => non-zero exit code
-- `optional_warnings` do not fail the run (warning-only visibility)
-
-### Expected failure categories
-Required boundary failures include:
-- missing/inactive systemd units (`missing`, `inactive-state=*`, `systemd-unavailable`, `no-privilege`)
-- invalid nginx configuration (`nginx -t failed` / unavailable)
-- missing required listener ports (`not-listening`)
-- API/route boundary failures (including explicit 502 Bad Gateway on required surfaces/auth probes)
-
-Optional visibility failures include:
-- container lookup failures (`not-found`)
-- docker inspection unavailability (`docker-access-unavailable`)
-- container unhealthy state (`state!=running` or `health!=healthy/none`)
+If smoke fails, use emitted failure category and service/route phase to diagnose before rerunning deploy.
