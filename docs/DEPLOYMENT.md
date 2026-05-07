@@ -1,5 +1,18 @@
 # Deployment
 
+## Script operation taxonomy (S06)
+
+Use this categorization to avoid running manual bootstrap steps as if they were deploy failures:
+
+- **automated-deploy (state-mutating):** `scripts/deploy.sh`, `scripts/deploy-backend.sh`, `scripts/deploy-frontend.sh`, `scripts/deploy-adminpanel.sh`, `scripts/deploy-containers.sh`
+- **diagnostic-read-only (safe for agent verification):** `scripts/verify/production-smoke.sh`, `scripts/verify/s05-local-surfaces.sh`, `scripts/verify/s05-production-smoke-contract.sh`, `scripts/verify/s06-provenance-warnings.sh`
+- **manual-bootstrap (explicit confirmation required before remote mutation):** `scripts/setup-adminpanel-server.sh`
+
+Machine-readable safety hints:
+- `SCRIPT_CATEGORY=<category>`
+- `SCRIPT_MUTATES_SERVER_STATE=<0|1|conditional>`
+- `SCRIPT_AUTOMATION_SAFE_DEFAULT=<0|1>`
+
 ## Main scripts
 
 Deploy all:

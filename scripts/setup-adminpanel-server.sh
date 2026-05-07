@@ -10,6 +10,10 @@ usage() {
   cat <<'EOF'
 Usage: bash scripts/setup-adminpanel-server.sh [--execute] [--confirm-remote-setup]
 
+SCRIPT_CATEGORY=manual-bootstrap
+SCRIPT_MUTATES_SERVER_STATE=conditional
+SCRIPT_AUTOMATION_SAFE_DEFAULT=1
+
 By default this script performs local/static checks only and prints the remote setup command.
 It mutates remote nginx configuration only when both flags are present:
   --execute
@@ -95,6 +99,9 @@ readonly REMOTE_CONF_D_FILE="${DEPLOY_ADMIN_NGINX_CONF_D_DIR}/${DEPLOY_ADMIN_NGI
 
 cat <<EOF
 ==> Local preflight complete
+SCRIPT_CATEGORY=manual-bootstrap
+SCRIPT_MUTATES_SERVER_STATE=conditional
+SCRIPT_AUTOMATION_SAFE_DEFAULT=1
     source: ${ADMIN_NGINX_SOURCE}
     remote setup host: ${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}
     DEPLOY_INSTALL_ADMIN_NGINX=${DEPLOY_INSTALL_ADMIN_NGINX}

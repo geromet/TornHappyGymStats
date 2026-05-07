@@ -41,6 +41,10 @@ usage() {
   cat <<EOF
 Usage: bash scripts/verify/production-smoke.sh [--help]
 
+SCRIPT_CATEGORY=diagnostic-read-only
+SCRIPT_MUTATES_SERVER_STATE=0
+SCRIPT_AUTOMATION_SAFE_DEFAULT=1
+
 Production smoke framework for read-only checks.
 
 Mode:
@@ -473,6 +477,7 @@ check_container_status_optional() {
 
 phase "framework"
 pass "required" "mode=${SMOKE_MODE}"
+pass "required" "SCRIPT_CATEGORY=diagnostic-read-only SCRIPT_MUTATES_SERVER_STATE=0 SCRIPT_AUTOMATION_SAFE_DEFAULT=1"
 
 if [[ "${SMOKE_MODE}" == "remote" ]]; then
   phase "remote-preflight"
