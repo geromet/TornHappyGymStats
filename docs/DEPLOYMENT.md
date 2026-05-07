@@ -59,3 +59,50 @@ Safety behavior in the setup script:
 - runs `nginx -t` before attempting reload nginx
 - runs `systemctl reload nginx` only after validation passes
 - no route mutation occurs without explicit confirmation flags
+
+## Production smoke verification (S05)
+
+Canonical post-deploy smoke command:
+
+```bash
+bash scripts/verify/production-smoke.sh
+```
+
+Optional remote execution (same read-only checks, over SSH):
+
+```bash
+SMOKE_MODE=remote bash scripts/verify/production-smoke.sh
+```
+
+Optional local contract verifier for drift (syntax + required tokens + docs contract):
+
+```bash
+bash scripts/verify/s05-production-smoke-contract.sh
+```
+
+### Privilege and safety expectations
+- Smoke script is read-only: no deploy/restart/mutation operations are performed.
+- Service/port/nginx checks may need host privileges depending on machine policy.
+- Remote mode requires SSH access configured via `SMOKE_SSH_*` variables.
+- Script does not require Torn API key and does not print env file contents.
+
+### Phase contract
+The smoke script emits phase-organized output and a summary line:
+- phases: `framework`, `services`, `http-routes`, `containers`, `summary`
+- summary signal: `RESULT required_failures=<n> optional_warnings=<n>`
+
+Exit behavior:
+- any `required_failures > 0` => non-zero exit code
+- `optional_warnings` do not fail the run (warning-only visibility)
+
+### Expected failure categories
+Required boundary failures include:
+- missing/inactive systemd units (`missing`, `inactive-state=*`, `systemd-unavailable`, `no-privilege`)
+- invalid nginx configuration (`nginx -t failed` / unavailable)
+- missing required listener ports (`not-listening`)
+- API/route boundary failures (including explicit 502 Bad Gateway on required surfaces/auth probes)
+
+Optional visibility failures include:
+- container lookup failures (`not-found`)
+- docker inspection unavailability (`docker-access-unavailable`)
+- container unhealthy state (`state!=running` or `health!=healthy/none`)
