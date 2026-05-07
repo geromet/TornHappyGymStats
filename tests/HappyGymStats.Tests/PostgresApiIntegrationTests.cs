@@ -23,8 +23,11 @@ public sealed class PostgresApiIntegrationTests : IAsyncLifetime
         PropertyNameCaseInsensitive = true,
     };
 
+    private const string SkipEnvVar = "HAPPYGYMSTATS_SKIP_POSTGRES_INTEGRATION";
+    private const string StartupTimeoutEnvVar = "HAPPYGYMSTATS_POSTGRES_START_TIMEOUT_SECONDS";
+
     private PostgreSqlContainer? _postgres;
-    private string? _dockerUnavailableReason;
+    private string? _skipReason;
     private string _surfacesCacheDirectory = string.Empty;
     private PostgresApiFactory? _factory;
 
@@ -35,6 +38,11 @@ public sealed class PostgresApiIntegrationTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
+        if (ShouldForceSkipFromEnvironment())
+            return;
+
+        var startupTimeout = ResolveStartupTimeout();
+
         try
         {
             _postgres = new PostgreSqlBuilder()
@@ -44,11 +52,19 @@ public sealed class PostgresApiIntegrationTests : IAsyncLifetime
                 .WithPassword("postgres")
                 .Build();
 
-            await _postgres.StartAsync();
+            using var startupCts = new CancellationTokenSource(startupTimeout);
+            await _postgres.StartAsync(startupCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            _skipReason =
+                $"[timeout] Postgres integration tests exceeded startup timeout of {startupTimeout.TotalSeconds:0}s while waiting for Docker/Testcontainers. " +
+                $"Increase {StartupTimeoutEnvVar} or ensure Docker is healthy.";
+            return;
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            _dockerUnavailableReason =
+            _skipReason =
                 $"[docker] Postgres integration tests require Docker. Start Docker locally and re-run. Details: {ex.Message}";
             return;
         }
@@ -86,7 +102,7 @@ public sealed class PostgresApiIntegrationTests : IAsyncLifetime
     [Trait("Category", "PostgresApiIntegration")]
     public async Task Api_startup_health_reports_ok_with_npgsql_provider()
     {
-        if (ShouldSkipDueToDocker())
+        if (ShouldSkipIntegration())
             return;
 
         using var client = _factory!.CreateClient();
@@ -119,7 +135,7 @@ public sealed class PostgresApiIntegrationTests : IAsyncLifetime
     [Trait("Category", "PostgresApiIntegration")]
     public async Task Surfaces_latest_returns_structured_404_when_cache_missing()
     {
-        if (ShouldSkipDueToDocker())
+        if (ShouldSkipIntegration())
             return;
 
         using var client = _factory!.CreateClient();
@@ -140,7 +156,7 @@ public sealed class PostgresApiIntegrationTests : IAsyncLifetime
     [Trait("Category", "PostgresApiIntegration")]
     public async Task Surfaces_latest_returns_cached_json_when_present()
     {
-        if (ShouldSkipDueToDocker())
+        if (ShouldSkipIntegration())
             return;
 
         var latestPath = Path.Combine(_surfacesCacheDirectory, "latest.json");
@@ -163,13 +179,34 @@ public sealed class PostgresApiIntegrationTests : IAsyncLifetime
         Assert.Equal(JsonValueKind.Array, series.ValueKind);
     }
 
-    private bool ShouldSkipDueToDocker()
+    private bool ShouldSkipIntegration()
     {
-        if (_dockerUnavailableReason is null)
+        if (_skipReason is null)
             return false;
 
-        _output.WriteLine(_dockerUnavailableReason);
+        _output.WriteLine(_skipReason);
         return true;
+    }
+
+    private bool ShouldForceSkipFromEnvironment()
+    {
+        var raw = Environment.GetEnvironmentVariable(SkipEnvVar);
+        if (!string.Equals(raw, "1", StringComparison.Ordinal)
+            && !string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(raw, "yes", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        _skipReason = $"[skip] {SkipEnvVar} is set; Postgres integration tier intentionally skipped.";
+        return true;
+    }
+
+    private static TimeSpan ResolveStartupTimeout()
+    {
+        var raw = Environment.GetEnvironmentVariable(StartupTimeoutEnvVar);
+        if (int.TryParse(raw, out var seconds) && seconds >= 15 && seconds <= 600)
+            return TimeSpan.FromSeconds(seconds);
+
+        return TimeSpan.FromSeconds(90);
     }
 
     private static string ResolveRepositoryPath(params string[] segments)

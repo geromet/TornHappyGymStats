@@ -15,9 +15,12 @@ dotnet test
 - **Default unit/integration-lite tier (SQLite/in-memory)**
   - Runs with plain `dotnet test`
 - **Postgres provider integration tier (Testcontainers)**
-  - Intended command filter: `dotnet test --filter "PostgresApiIntegration"`
+  - Canonical verifier: `bash scripts/verify/s07-postgres-integration.sh`
+  - Under the hood it runs: `dotnet test --filter "Category=PostgresApiIntegration"`
   - Requires Docker daemon availability (local Docker Desktop/Engine or CI Docker service)
-  - If Docker is unavailable, Postgres provider tests are expected to skip with a clear setup message rather than fail with a generic connection exception
+  - Intentional skip switch: set `HAPPYGYMSTATS_SKIP_POSTGRES_INTEGRATION=1`
+  - Startup timeout control: `HAPPYGYMSTATS_POSTGRES_START_TIMEOUT_SECONDS` (default 90, range 15-600)
+  - Verifier emits explicit outcomes: `SKIP` (Docker unavailable or intentional), `FAIL` (test or timeout), `PASS` (provider checks succeeded)
 
 Why this tiering exists: production uses Postgres/Npgsql paths that SQLite-only tests cannot fully prove.
 
