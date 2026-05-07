@@ -96,4 +96,5 @@ else
   echo "==> Skipping service restart"
 fi
 
-echo "==> Backend deployment complete"
+echo "==> Backend release activation complete"
+deploy_print_post_deploy_smoke_next_step

@@ -98,4 +98,5 @@ else
   echo "==> Skipping service restart"
 fi
 
-echo "==> AdminPanel deployment complete"
+echo "==> AdminPanel release activation complete"
+deploy_print_post_deploy_smoke_next_step

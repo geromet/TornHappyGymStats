@@ -148,3 +148,38 @@ deploy_precheck_remote_sudo_access() {
     deploy_ssh_tty "set -euo pipefail; sudo -n true" >/dev/null 2>&1 || deploy_precheck_fail "missing_remote_sudo_privilege" "sudo_non_interactive=true"
   fi
 }
+
+: "${DEPLOY_RUN_SMOKE:=0}"
+: "${DEPLOY_SMOKE_SCRIPT:=${DEPLOY_CONFIG_DIR}/verify/production-smoke.sh}"
+: "${DEPLOY_SMOKE_MODE:=remote}"
+
+deploy_print_post_deploy_smoke_next_step() {
+  local smoke_env="SMOKE_MODE=${DEPLOY_SMOKE_MODE}"
+  local run_cmd="${smoke_env} bash ${DEPLOY_SMOKE_SCRIPT}"
+
+  echo "==> Post-deploy verification"
+  echo "    Next step: ${run_cmd}"
+  echo "    Set DEPLOY_RUN_SMOKE=1 to run smoke automatically from scripts/deploy.sh"
+}
+
+deploy_run_post_deploy_smoke_if_enabled() {
+  deploy_print_post_deploy_smoke_next_step
+
+  if [[ "${DEPLOY_RUN_SMOKE}" != "1" ]]; then
+    return 0
+  fi
+
+  if [[ ! -f "${DEPLOY_SMOKE_SCRIPT}" ]]; then
+    echo "DEPLOY_SMOKE_FAIL category=missing_smoke_script path=${DEPLOY_SMOKE_SCRIPT}" >&2
+    return 1
+  fi
+
+  echo "==> Running post-deploy production smoke"
+  if SMOKE_MODE="${DEPLOY_SMOKE_MODE}" bash "${DEPLOY_SMOKE_SCRIPT}"; then
+    echo "DEPLOY_SMOKE_PASS script=${DEPLOY_SMOKE_SCRIPT} mode=${DEPLOY_SMOKE_MODE}"
+    return 0
+  fi
+
+  echo "DEPLOY_SMOKE_FAIL category=smoke_failed script=${DEPLOY_SMOKE_SCRIPT} mode=${DEPLOY_SMOKE_MODE}" >&2
+  return 1
+}

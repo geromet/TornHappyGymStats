@@ -72,7 +72,8 @@ deploy_ssh_tty "set -euo pipefail; \
   ${DEPLOY_SUDO_CMD} find '${REMOTE_RELEASE_DIR}' -type f -exec chmod 644 {} \\;; \
   rm -rf '${REMOTE_STAGING_DIR}'"
 
-echo "==> Frontend deployment complete"
+echo "==> Frontend release activation complete"
 echo "    Host: ${DEPLOY_SSH_HOST}"
 echo "    Release: ${REMOTE_RELEASE_DIR}"
 echo "    Current symlink: ${REMOTE_CURRENT_DIR}"
+deploy_print_post_deploy_smoke_next_step
