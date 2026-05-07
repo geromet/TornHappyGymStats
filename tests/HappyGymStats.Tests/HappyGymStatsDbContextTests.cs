@@ -7,7 +7,11 @@ using Xunit;
 
 namespace HappyGymStats.Tests;
 
-public sealed class HappyGymStatsDbContextTests
+/// <summary>
+/// Fast schema-contract tests for the SQLite test provider only.
+/// Production startup/migration/provider behavior is validated in Postgres integration tests.
+/// </summary>
+public sealed class SqliteHappyGymStatsDbContextTests
 {
     [Fact]
     public async Task EnsureCreated_creates_initial_sqlite_schema()
@@ -53,7 +57,7 @@ public sealed class HappyGymStatsDbContextTests
     }
 
     [Fact]
-    public async Task Raw_user_logs_enforce_unique_torn_log_ids()
+    public async Task Sqlite_raw_user_logs_enforce_unique_torn_log_ids()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -85,7 +89,7 @@ public sealed class HappyGymStatsDbContextTests
     }
 
     [Fact]
-    public async Task Modifier_provenance_rejects_invalid_status_or_missing_scope_identifier()
+    public async Task Sqlite_modifier_provenance_rejects_invalid_status_or_missing_scope_identifier()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -140,7 +144,7 @@ public sealed class HappyGymStatsDbContextTests
     }
 
     [Fact]
-    public async Task Modifier_provenance_allows_adjacent_time_windows()
+    public async Task Sqlite_modifier_provenance_allows_adjacent_time_windows()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();

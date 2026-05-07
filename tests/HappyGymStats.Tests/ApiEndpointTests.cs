@@ -13,23 +13,28 @@ using Xunit;
 
 namespace HappyGymStats.Tests;
 
-public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplicationFactory>
+/// <summary>
+/// Fast API endpoint tests that intentionally run against the in-memory SQLite test host.
+/// These validate endpoint contracts and pagination behavior, not production-provider parity.
+/// </summary>
+public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTests.SqliteTestApplicationFactory>
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
     };
 
-    private readonly TestApplicationFactory _factory;
+    private readonly SqliteTestApplicationFactory _factory;
 
-    public ApiEndpointTests(TestApplicationFactory factory)
+    public SqliteApiEndpointTests(SqliteTestApplicationFactory factory)
     {
         _factory = factory;
         _factory.ResetDatabase();
     }
 
-    [Fact]
-    public async Task Health_endpoint_reports_ok()
+    [Fact(DisplayName = "SqliteApiEndpoint: health endpoint reports ok with SQLite provider")]
+    [Trait("Category", "SqliteApiEndpoint")]
+    public async Task Health_endpoint_reports_ok_with_sqlite_provider()
     {
         using var client = _factory.CreateClient();
 
@@ -41,6 +46,7 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
         Assert.NotNull(payload);
         Assert.Equal("ok", payload.Status);
         Assert.Equal("HappyGymStats.Api", payload.Api);
+        // This assertion is SQLite-tier specific; production provider parity is covered by PostgresApiIntegrationTests.
         Assert.Contains("Sqlite", payload.DatabaseProvider, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -249,7 +255,7 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
         Assert.Contains(latestPayload.Outcome, new[] { "queued", "running", "failed", "completed", "cancelled" });
     }
 
-    public sealed class TestApplicationFactory : WebApplicationFactory<Program>
+    public sealed class SqliteTestApplicationFactory : WebApplicationFactory<Program>
     {
         private SqliteConnection? _connection;
 
