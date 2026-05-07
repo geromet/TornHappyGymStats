@@ -24,6 +24,13 @@ fi
 : "${SMOKE_API_PORT:=5047}"
 : "${SMOKE_BLAZOR_PORT:=5182}"
 : "${SMOKE_ADMINPANEL_PORT:=5048}"
+: "${SMOKE_API_LOOPBACK_HEALTH_URL:=http://127.0.0.1:${SMOKE_API_PORT}/api/v1/torn/health}"
+: "${SMOKE_API_EXTERNAL_HEALTH_URL:=https://torn.geromet.com/api/v1/torn/health}"
+: "${SMOKE_SURFACES_LATEST_URL:=https://torn.geromet.com/api/v1/torn/surfaces/latest}"
+: "${SMOKE_BLAZOR_HOME_URL:=https://torn.geromet.com/}"
+: "${SMOKE_ADMIN_LOOPBACK_HEALTH_URL:=http://127.0.0.1:${SMOKE_ADMINPANEL_PORT}/admin/health}"
+: "${SMOKE_ADMIN_EXTERNAL_HEALTH_URL:=https://admin.geromet.com/admin/health}"
+: "${SMOKE_ADMIN_PROTECTED_URL:=https://admin.geromet.com/admin/api/v1/import-runs}"
 
 required_failures=0
 optional_warnings=0
@@ -45,6 +52,13 @@ Environment overrides:
   SMOKE_SSH_USER          Remote SSH user for remote mode (default: ${SMOKE_SSH_USER})
   SMOKE_SSH_KEY           SSH key path for remote mode (default: ${SMOKE_SSH_KEY})
   SMOKE_PROXY_COMMAND     SSH ProxyCommand for remote mode (default: ${SMOKE_PROXY_COMMAND})
+  SMOKE_API_LOOPBACK_HEALTH_URL   Loopback API health URL
+  SMOKE_API_EXTERNAL_HEALTH_URL   External API health URL
+  SMOKE_SURFACES_LATEST_URL       External surfaces/latest URL
+  SMOKE_BLAZOR_HOME_URL           External Blazor home URL
+  SMOKE_ADMIN_LOOPBACK_HEALTH_URL Loopback AdminPanel health URL
+  SMOKE_ADMIN_EXTERNAL_HEALTH_URL External AdminPanel health URL
+  SMOKE_ADMIN_PROTECTED_URL       Protected AdminPanel endpoint URL
 
 Exit semantics:
   - required check failure => non-zero exit
@@ -179,6 +193,133 @@ check_http_optional() {
   fi
 }
 
+sanitize_excerpt() {
+  local input="$1"
+  printf '%s' "${input}" | tr '\n\r\t' '   ' | sed -E 's/[[:space:]]+/ /g' | cut -c1-180
+}
+
+http_probe_host() {
+  local url="$1"
+  local timeout="$2"
+  local cmd="curl -sS --max-time ${timeout} -w '||HTTP:%{http_code}||CURL:%{exitcode}' '${url}'"
+
+  set +e
+  local out
+  out="$(run_host_capture "${cmd}" 2>/dev/null)"
+  local rc=$?
+  set -e
+
+  local http_code="000"
+  local curl_exit="1"
+  local body=""
+
+  if [[ "${out}" == *"||HTTP:"*"||CURL:"* ]]; then
+    body="${out%%||HTTP:*}"
+    local tail="${out##*||HTTP:}"
+    http_code="${tail%%||CURL:*}"
+    curl_exit="${tail##*||CURL:}"
+  elif [[ -n "${out}" ]]; then
+    body="${out}"
+  fi
+
+  if [[ ${rc} -ne 0 && "${curl_exit}" == "0" ]]; then
+    curl_exit="${rc}"
+  fi
+
+  printf '%s|%s|%s\n' "${http_code}" "${curl_exit}" "$(sanitize_excerpt "${body}")"
+}
+
+check_http_required_host() {
+  local label="$1"
+  local url="$2"
+  local expected_regex="$3"
+
+  local result
+  result="$(http_probe_host "${url}" "${SMOKE_TIMEOUT_SECONDS}")"
+  local code="${result%%|*}"
+  local remainder="${result#*|}"
+  local curl_exit="${remainder%%|*}"
+  local excerpt="${remainder#*|}"
+
+  if [[ "${curl_exit}" != "0" ]]; then
+    fail "required" "${label}: curl_exit=${curl_exit} status=${code} url=${url} excerpt='${excerpt}'"
+    return
+  fi
+
+  if [[ "${code}" =~ ${expected_regex} ]]; then
+    pass "required" "${label}: status=${code} url=${url}"
+  else
+    fail "required" "${label}: status=${code} expected=${expected_regex} url=${url} excerpt='${excerpt}'"
+  fi
+}
+
+check_surfaces_latest_required() {
+  local label="$1"
+  local url="$2"
+
+  local result
+  result="$(http_probe_host "${url}" "${SMOKE_TIMEOUT_SECONDS}")"
+  local code="${result%%|*}"
+  local remainder="${result#*|}"
+  local curl_exit="${remainder%%|*}"
+  local excerpt="${remainder#*|}"
+
+  if [[ "${curl_exit}" != "0" ]]; then
+    fail "required" "${label}: curl_exit=${curl_exit} status=${code} url=${url} excerpt='${excerpt}'"
+    return
+  fi
+
+  if [[ "${code}" == "502" ]]; then
+    fail "required" "${label}: status=502 (Bad Gateway) url=${url} excerpt='${excerpt}'"
+    return
+  fi
+
+  if [[ "${code}" == "200" ]]; then
+    if [[ "${excerpt}" == *"{"* || "${excerpt}" == *"["* ]]; then
+      pass "required" "${label}: status=200 json-like-body url=${url}"
+    else
+      fail "required" "${label}: status=200 non-json-body url=${url} excerpt='${excerpt}'"
+    fi
+    return
+  fi
+
+  if [[ "${code}" == "404" ]]; then
+    if [[ "${excerpt}" == *"cache"* || "${excerpt}" == *"not found"* || "${excerpt}" == *"no data"* || "${excerpt}" == *"{"* ]]; then
+      pass "required" "${label}: status=404 structured-no-cache url=${url}"
+    else
+      fail "required" "${label}: status=404 unstructured-body url=${url} excerpt='${excerpt}'"
+    fi
+    return
+  fi
+
+  fail "required" "${label}: status=${code} expected=200_or_404 url=${url} excerpt='${excerpt}'"
+}
+
+check_http_auth_denied_required() {
+  local label="$1"
+  local url="$2"
+
+  local result
+  result="$(http_probe_host "${url}" "${SMOKE_TIMEOUT_SECONDS}")"
+  local code="${result%%|*}"
+  local remainder="${result#*|}"
+  local curl_exit="${remainder%%|*}"
+  local excerpt="${remainder#*|}"
+
+  if [[ "${curl_exit}" != "0" ]]; then
+    fail "required" "${label}: curl_exit=${curl_exit} status=${code} url=${url} excerpt='${excerpt}'"
+    return
+  fi
+
+  if [[ "${code}" == "502" ]]; then
+    fail "required" "${label}: status=502 (Bad Gateway) url=${url} excerpt='${excerpt}'"
+  elif [[ "${code}" == "401" || "${code}" == "403" ]]; then
+    pass "required" "${label}: status=${code} auth-denied url=${url}"
+  else
+    fail "required" "${label}: status=${code} expected=401_or_403 url=${url} excerpt='${excerpt}'"
+  fi
+}
+
 run_host_command() {
   local cmd="$1"
   if [[ "${SMOKE_MODE}" == "remote" ]]; then
@@ -298,6 +439,15 @@ check_nginx_config_required
 check_port_listening_required "${SMOKE_API_PORT}"
 check_port_listening_required "${SMOKE_BLAZOR_PORT}"
 check_port_listening_required "${SMOKE_ADMINPANEL_PORT}"
+
+phase "http-routes"
+check_http_required_host "api health loopback" "${SMOKE_API_LOOPBACK_HEALTH_URL}" '^2[0-9][0-9]$'
+check_http_required_host "api health external" "${SMOKE_API_EXTERNAL_HEALTH_URL}" '^2[0-9][0-9]$'
+check_surfaces_latest_required "api surfaces latest" "${SMOKE_SURFACES_LATEST_URL}"
+check_http_required_host "Blazor home" "${SMOKE_BLAZOR_HOME_URL}" '^2[0-9][0-9]$'
+check_http_required_host "admin health loopback" "${SMOKE_ADMIN_LOOPBACK_HEALTH_URL}" '^2[0-9][0-9]$'
+check_http_required_host "admin health external" "${SMOKE_ADMIN_EXTERNAL_HEALTH_URL}" '^2[0-9][0-9]$'
+check_http_auth_denied_required "admin protected unauthenticated" "${SMOKE_ADMIN_PROTECTED_URL}"
 
 phase "summary"
 printf "RESULT required_failures=%s optional_warnings=%s\n" "${required_failures}" "${optional_warnings}"
