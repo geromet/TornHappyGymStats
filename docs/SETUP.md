@@ -48,6 +48,17 @@ dotnet build
 dotnet test
 ```
 
+## Package restore reproducibility policy (M003 S09)
+
+- **Lockfile decision:** no `packages.lock.json` files are committed right now.
+- **Determinism strategy:** reproducibility is enforced by pinned package versions in tracked `.csproj` files plus pinned SDK in `global.json`.
+- **Floating/range versions:** not allowed unless explicitly allowlisted with a written justification.
+- **Enforcement:** run `bash scripts/verify/s09-package-restore-policy.sh` to check policy, validate lockfile decision, and run a concrete `dotnet restore`.
+
+If a floating version is intentionally introduced later, update both:
+1. this section with package name + justification, and
+2. the verifier allowlist in `scripts/verify/s09-package-restore-policy.sh`.
+
 ### Postgres provider verification tier
 
 ```bash
