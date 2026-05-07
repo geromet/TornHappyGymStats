@@ -10,21 +10,28 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
 using Xunit;
+using Xunit.Abstractions;
+using Xunit.Sdk;
 
 namespace HappyGymStats.Tests;
 
 public sealed class PostgresApiIntegrationTests : IAsyncLifetime
 {
+    private readonly ITestOutputHelper _output;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
     };
 
     private PostgreSqlContainer? _postgres;
-
     private string? _dockerUnavailableReason;
     private string _surfacesCacheDirectory = string.Empty;
     private PostgresApiFactory? _factory;
+
+    public PostgresApiIntegrationTests(ITestOutputHelper output)
+    {
+        _output = output;
+    }
 
     public async Task InitializeAsync()
     {
@@ -41,13 +48,27 @@ public sealed class PostgresApiIntegrationTests : IAsyncLifetime
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            _dockerUnavailableReason = $"Postgres integration tests require Docker. Start Docker locally and re-run: {ex.Message}";
+            _dockerUnavailableReason =
+                $"[docker] Postgres integration tests require Docker. Start Docker locally and re-run. Details: {ex.Message}";
             return;
         }
 
         _surfacesCacheDirectory = Path.Combine(Path.GetTempPath(), "happygymstats-surfaces", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_surfacesCacheDirectory);
-        _factory = new PostgresApiFactory(_postgres.GetConnectionString(), _surfacesCacheDirectory);
+
+        try
+        {
+            _factory = new PostgresApiFactory(_postgres.GetConnectionString(), _surfacesCacheDirectory);
+
+            // Force host startup so migration/startup failures are attributed to startup phase.
+            using var _ = _factory.CreateClient();
+        }
+        catch (Exception ex)
+        {
+            throw new XunitException(
+                $"[startup] Failed to build API host with Npgsql provider and run startup migrations. " +
+                $"ConnectionString='{_postgres.GetConnectionString()}'. Details: {ex.Message}");
+        }
     }
 
     public async Task DisposeAsync()
@@ -61,10 +82,44 @@ public sealed class PostgresApiIntegrationTests : IAsyncLifetime
             await _postgres.DisposeAsync();
     }
 
+    [Fact(DisplayName = "PostgresApiIntegration: api startup health reports ok with Npgsql provider")]
+    [Trait("Category", "PostgresApiIntegration")]
+    public async Task Api_startup_health_reports_ok_with_npgsql_provider()
+    {
+        if (ShouldSkipDueToDocker())
+            return;
+
+        using var client = _factory!.CreateClient();
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await client.GetAsync("/api/v1/torn/health");
+        }
+        catch (Exception ex)
+        {
+            throw new XunitException($"[health] Failed calling /api/v1/torn/health after startup. Details: {ex.Message}");
+        }
+
+        Assert.True(
+            response.IsSuccessStatusCode,
+            $"[health] Expected success status but got {(int)response.StatusCode} ({response.StatusCode}).");
+
+        var payload = await response.Content.ReadFromJsonAsync<HealthResponse>(JsonOptions);
+        Assert.NotNull(payload);
+        Assert.Equal("ok", payload.Status);
+
+        Assert.True(
+            payload.DatabaseProvider.Contains("Npgsql", StringComparison.OrdinalIgnoreCase)
+            || payload.DatabaseProvider.Contains("PostgreSQL", StringComparison.OrdinalIgnoreCase),
+            $"[provider] Expected Npgsql/PostgreSQL provider in health response but got '{payload.DatabaseProvider}'.");
+    }
+
     [Fact(DisplayName = "PostgresApiIntegration: surfaces latest returns structured 404 when cache missing")]
+    [Trait("Category", "PostgresApiIntegration")]
     public async Task Surfaces_latest_returns_structured_404_when_cache_missing()
     {
-        if (_dockerUnavailableReason is not null)
+        if (ShouldSkipDueToDocker())
             return;
 
         using var client = _factory!.CreateClient();
@@ -82,9 +137,10 @@ public sealed class PostgresApiIntegrationTests : IAsyncLifetime
     }
 
     [Fact(DisplayName = "PostgresApiIntegration: surfaces latest returns cached json when present")]
+    [Trait("Category", "PostgresApiIntegration")]
     public async Task Surfaces_latest_returns_cached_json_when_present()
     {
-        if (_dockerUnavailableReason is not null)
+        if (ShouldSkipDueToDocker())
             return;
 
         var latestPath = Path.Combine(_surfacesCacheDirectory, "latest.json");
@@ -105,6 +161,15 @@ public sealed class PostgresApiIntegrationTests : IAsyncLifetime
         Assert.True(root.TryGetProperty("generatedAtUtc", out _));
         Assert.True(root.TryGetProperty("series", out var series));
         Assert.Equal(JsonValueKind.Array, series.ValueKind);
+    }
+
+    private bool ShouldSkipDueToDocker()
+    {
+        if (_dockerUnavailableReason is null)
+            return false;
+
+        _output.WriteLine(_dockerUnavailableReason);
+        return true;
     }
 
     private static string ResolveRepositoryPath(params string[] segments)
@@ -144,8 +209,16 @@ public sealed class PostgresApiIntegrationTests : IAsyncLifetime
 
             builder.ConfigureServices(services =>
             {
-                var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(DbContextOptions<HappyGymStatsDbContext>));
-                if (descriptor is not null)
+                var descriptors = services
+                    .Where(d => d.ServiceType == typeof(DbContextOptions<HappyGymStatsDbContext>)
+                                || (d.ServiceType.IsGenericType
+                                    && d.ServiceType.GetGenericTypeDefinition().FullName?.StartsWith(
+                                        "Microsoft.EntityFrameworkCore.Infrastructure.IDbContextOptionsConfiguration",
+                                        StringComparison.Ordinal) == true
+                                    && d.ServiceType.GenericTypeArguments[0] == typeof(HappyGymStatsDbContext)))
+                    .ToList();
+
+                foreach (var descriptor in descriptors)
                     services.Remove(descriptor);
 
                 services.AddDbContext<HappyGymStatsDbContext>(options => options.UseNpgsql(_connectionString));
