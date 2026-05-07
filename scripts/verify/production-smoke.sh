@@ -31,6 +31,8 @@ fi
 : "${SMOKE_ADMIN_LOOPBACK_HEALTH_URL:=http://127.0.0.1:${SMOKE_ADMINPANEL_PORT}/admin/health}"
 : "${SMOKE_ADMIN_EXTERNAL_HEALTH_URL:=https://admin.geromet.com/admin/health}"
 : "${SMOKE_ADMIN_PROTECTED_URL:=https://admin.geromet.com/admin/api/v1/import-runs}"
+: "${SMOKE_POSTGRES_CONTAINER_HINT:=postgres}"
+: "${SMOKE_KEYCLOAK_CONTAINER_HINT:=keycloak}"
 
 required_failures=0
 optional_warnings=0
@@ -59,6 +61,8 @@ Environment overrides:
   SMOKE_ADMIN_LOOPBACK_HEALTH_URL Loopback AdminPanel health URL
   SMOKE_ADMIN_EXTERNAL_HEALTH_URL External AdminPanel health URL
   SMOKE_ADMIN_PROTECTED_URL       Protected AdminPanel endpoint URL
+  SMOKE_POSTGRES_CONTAINER_HINT   Postgres container name/image hint (default: ${SMOKE_POSTGRES_CONTAINER_HINT})
+  SMOKE_KEYCLOAK_CONTAINER_HINT   Keycloak container name/image hint (default: ${SMOKE_KEYCLOAK_CONTAINER_HINT})
 
 Exit semantics:
   - required check failure => non-zero exit
@@ -420,6 +424,53 @@ check_port_listening_required() {
   fail "required" "port ${port}: ss/netstat unavailable"
 }
 
+find_container_by_hint() {
+  local hint="$1"
+  run_host_capture "docker ps -a --format '{{.ID}}|{{.Names}}|{{.Image}}' 2>&1 | rg -i --max-count 1 --fixed-strings '${hint}'" || true
+}
+
+check_container_status_optional() {
+  local label="$1"
+  local hint="$2"
+
+  if ! run_host_command "command -v docker >/dev/null 2>&1" >/dev/null 2>&1; then
+    warn "optional" "container ${label}: docker-cli-unavailable"
+    return
+  fi
+
+  local docker_listing
+  docker_listing="$(find_container_by_hint "${hint}")"
+
+  if [[ "${docker_listing}" =~ [Pp]ermission[[:space:]]denied|[Oo]peration[[:space:]]not[[:space:]]permitted|[Cc]annot[[:space:]]connect[[:space:]]to[[:space:]]the[[:space:]]Docker[[:space:]]daemon|permission[[:space:]]denied[[:space:]]while[[:space:]]trying[[:space:]]to[[:space:]]connect ]]; then
+    warn "optional" "container ${label}: docker-access-unavailable (${docker_listing})"
+    return
+  fi
+
+  if [[ -z "${docker_listing}" ]]; then
+    warn "optional" "container ${label}: not-found (hint=${hint})"
+    return
+  fi
+
+  local container_id="${docker_listing%%|*}"
+  local state_health
+  state_health="$(run_host_capture "docker inspect --format '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' '${container_id}' 2>&1" || true)"
+
+  if [[ "${state_health}" =~ [Pp]ermission[[:space:]]denied|[Oo]peration[[:space:]]not[[:space:]]permitted|[Cc]annot[[:space:]]connect[[:space:]]to[[:space:]]the[[:space:]]Docker[[:space:]]daemon ]]; then
+    warn "optional" "container ${label}: docker-access-unavailable (${state_health})"
+    return
+  fi
+
+  local state="${state_health%%|*}"
+  local health="${state_health##*|}"
+
+  if [[ "${state}" == "running" && ( "${health}" == "healthy" || "${health}" == "none" ) ]]; then
+    pass "optional" "container ${label}: state=${state} health=${health}"
+    return
+  fi
+
+  warn "optional" "container ${label}: unhealthy state=${state} health=${health}"
+}
+
 phase "framework"
 pass "required" "mode=${SMOKE_MODE}"
 
@@ -448,6 +499,10 @@ check_http_required_host "Blazor home" "${SMOKE_BLAZOR_HOME_URL}" '^2[0-9][0-9]$
 check_http_required_host "admin health loopback" "${SMOKE_ADMIN_LOOPBACK_HEALTH_URL}" '^2[0-9][0-9]$'
 check_http_required_host "admin health external" "${SMOKE_ADMIN_EXTERNAL_HEALTH_URL}" '^2[0-9][0-9]$'
 check_http_auth_denied_required "admin protected unauthenticated" "${SMOKE_ADMIN_PROTECTED_URL}"
+
+phase "containers"
+check_container_status_optional "postgres" "${SMOKE_POSTGRES_CONTAINER_HINT}"
+check_container_status_optional "keycloak" "${SMOKE_KEYCLOAK_CONTAINER_HINT}"
 
 phase "summary"
 printf "RESULT required_failures=%s optional_warnings=%s\n" "${required_failures}" "${optional_warnings}"
