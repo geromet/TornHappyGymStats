@@ -10,6 +10,17 @@ dotnet build
 dotnet test
 ```
 
+### Test tiers
+
+- **Default unit/integration-lite tier (SQLite/in-memory)**
+  - Runs with plain `dotnet test`
+- **Postgres provider integration tier (Testcontainers)**
+  - Intended command filter: `dotnet test --filter "PostgresApiIntegration"`
+  - Requires Docker daemon availability (local Docker Desktop/Engine or CI Docker service)
+  - If Docker is unavailable, Postgres provider tests are expected to skip with a clear setup message rather than fail with a generic connection exception
+
+Why this tiering exists: production uses Postgres/Npgsql paths that SQLite-only tests cannot fully prove.
+
 ## Run API locally
 
 ```bash
