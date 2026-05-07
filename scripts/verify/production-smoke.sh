@@ -18,6 +18,12 @@ fi
 : "${SMOKE_SSH_KEY:=$HOME/.ssh/id_token2_bio3_hetzner}"
 : "${SMOKE_PROXY_COMMAND:=cloudflared access ssh --hostname ssh.geromet.com}"
 : "${SMOKE_TIMEOUT_SECONDS:=8}"
+: "${SMOKE_SERVICE_API:=happygymstats-api}"
+: "${SMOKE_SERVICE_BLAZOR:=happygymstats-blazor}"
+: "${SMOKE_SERVICE_ADMINPANEL:=happygymstats-adminpanel}"
+: "${SMOKE_API_PORT:=5047}"
+: "${SMOKE_BLAZOR_PORT:=5182}"
+: "${SMOKE_ADMINPANEL_PORT:=5048}"
 
 required_failures=0
 optional_warnings=0
@@ -173,6 +179,106 @@ check_http_optional() {
   fi
 }
 
+run_host_command() {
+  local cmd="$1"
+  if [[ "${SMOKE_MODE}" == "remote" ]]; then
+    smoke_ssh "bash -lc $(printf '%q' "${cmd}")"
+  else
+    bash -lc "${cmd}"
+  fi
+}
+
+run_host_capture() {
+  local cmd="$1"
+  if [[ "${SMOKE_MODE}" == "remote" ]]; then
+    smoke_ssh "bash -lc $(printf '%q' "${cmd}")"
+  else
+    bash -lc "${cmd}"
+  fi
+}
+
+check_systemd_service_required() {
+  local service_name="$1"
+
+  if ! run_host_command "command -v systemctl >/dev/null 2>&1" >/dev/null 2>&1; then
+    fail "required" "service ${service_name}: systemctl unavailable"
+    return
+  fi
+
+  if run_host_command "systemctl is-active --quiet '${service_name}.service'" >/dev/null 2>&1; then
+    pass "required" "service ${service_name}: active"
+    return
+  fi
+
+  local state_detail
+  state_detail="$(run_host_capture "systemctl is-active '${service_name}.service' 2>&1" || true)"
+
+  if [[ "${state_detail}" =~ [Nn]ot[[:space:]]found|[Nn]o[[:space:]]such[[:space:]]file|[Nn]ot[[:space:]]loaded|[Cc]ould[[:space:]]not[[:space:]]be[[:space:]]found ]]; then
+    fail "required" "service ${service_name}: missing"
+  elif [[ "${state_detail}" =~ [Pp]ermission[[:space:]]denied|[Aa]ccess[[:space:]]denied|[Ii]nteractive[[:space:]]authentication[[:space:]]required ]]; then
+    fail "required" "service ${service_name}: no-privilege (${state_detail})"
+  elif [[ "${state_detail}" =~ [Nn]ot[[:space:]]been[[:space:]]booted[[:space:]]with[[:space:]]systemd|[Ff]ailed[[:space:]]to[[:space:]]connect[[:space:]]to[[:space:]]bus ]]; then
+    fail "required" "service ${service_name}: systemd-unavailable (${state_detail})"
+  elif [[ "${state_detail}" =~ ^inactive|^failed|^activating|^deactivating ]]; then
+    fail "required" "service ${service_name}: inactive-state=${state_detail}"
+  else
+    fail "required" "service ${service_name}: inactive-or-unknown (${state_detail:-unknown})"
+  fi
+}
+
+check_nginx_config_required() {
+  if ! run_host_command "command -v nginx >/dev/null 2>&1" >/dev/null 2>&1; then
+    fail "required" "nginx config: nginx unavailable"
+    return
+  fi
+
+  local nginx_output
+  nginx_output="$(run_host_capture "nginx -t 2>&1" || true)"
+
+  if [[ "${nginx_output}" =~ [Pp]ermission[[:space:]]denied ]]; then
+    fail "required" "nginx config: no-privilege (${nginx_output})"
+  elif [[ "${nginx_output}" =~ [Tt]est[[:space:]]is[[:space:]]successful|syntax[[:space:]]is[[:space:]]ok ]]; then
+    pass "required" "nginx config: nginx -t passed"
+  else
+    fail "required" "nginx config: nginx -t failed (${nginx_output})"
+  fi
+}
+
+check_port_listening_required() {
+  local port="$1"
+
+  local socket_output=""
+  if run_host_command "command -v ss >/dev/null 2>&1" >/dev/null 2>&1; then
+    socket_output="$(run_host_capture "ss -ltn '( sport = :${port} )' 2>&1" || true)"
+    if [[ "${socket_output}" =~ [Pp]ermission[[:space:]]denied|[Oo]peration[[:space:]]not[[:space:]]permitted ]]; then
+      fail "required" "port ${port}: no-privilege (ss)"
+      return
+    fi
+    if [[ "${socket_output}" =~ LISTEN ]]; then
+      pass "required" "port ${port}: listening"
+    else
+      fail "required" "port ${port}: not-listening"
+    fi
+    return
+  fi
+
+  if run_host_command "command -v netstat >/dev/null 2>&1" >/dev/null 2>&1; then
+    socket_output="$(run_host_capture "netstat -ltn 2>&1" || true)"
+    if [[ "${socket_output}" =~ [Pp]ermission[[:space:]]denied|[Oo]peration[[:space:]]not[[:space:]]permitted ]]; then
+      fail "required" "port ${port}: no-privilege (netstat)"
+      return
+    fi
+    if printf '%s\n' "${socket_output}" | rg -q "[:.]${port}[[:space:]].*LISTEN"; then
+      pass "required" "port ${port}: listening"
+    else
+      fail "required" "port ${port}: not-listening"
+    fi
+    return
+  fi
+
+  fail "required" "port ${port}: ss/netstat unavailable"
+}
+
 phase "framework"
 pass "required" "mode=${SMOKE_MODE}"
 
@@ -183,6 +289,15 @@ if [[ "${SMOKE_MODE}" == "remote" ]]; then
 else
   pass "required" "local checks execute on host with read-only commands"
 fi
+
+phase "services"
+check_systemd_service_required "${SMOKE_SERVICE_API}"
+check_systemd_service_required "${SMOKE_SERVICE_BLAZOR}"
+check_systemd_service_required "${SMOKE_SERVICE_ADMINPANEL}"
+check_nginx_config_required
+check_port_listening_required "${SMOKE_API_PORT}"
+check_port_listening_required "${SMOKE_BLAZOR_PORT}"
+check_port_listening_required "${SMOKE_ADMINPANEL_PORT}"
 
 phase "summary"
 printf "RESULT required_failures=%s optional_warnings=%s\n" "${required_failures}" "${optional_warnings}"
