@@ -1,32 +1,54 @@
 @HappyGymStats.Api_HostAddress = http://localhost:5047
+@TornApiKey = replace-with-torn-api-key
 
-GET {{HappyGymStats.Api_HostAddress}}/v1/health
+# Health (anonymous)
+GET {{HappyGymStats.Api_HostAddress}}/api/v1/torn/health
 Accept: application/json
 
 ###
 
-GET {{HappyGymStats.Api_HostAddress}}/v1/gym-trains?limit=2
+# Import status (anonymous)
+GET {{HappyGymStats.Api_HostAddress}}/api/v1/torn/import-jobs/latest
 Accept: application/json
 
 ###
 
-GET {{HappyGymStats.Api_HostAddress}}/v1/happy-events?limit=2
-Accept: application/json
-
-###
-
-POST {{HappyGymStats.Api_HostAddress}}/v1/import
+# Start import job (placeholder only; do not commit real keys)
+POST {{HappyGymStats.Api_HostAddress}}/api/v1/torn/import-jobs
 Content-Type: application/json
 Accept: application/json
 
 {
-  "apiKey": "replace-with-real-key",
+  "apiKey": "{{TornApiKey}}",
   "fresh": false
 }
 
 ###
 
-GET {{HappyGymStats.Api_HostAddress}}/v1/import/latest
+# Surfaces metadata (anonymous; 404 until at least one import completes)
+GET {{HappyGymStats.Api_HostAddress}}/api/v1/torn/surfaces/meta
 Accept: application/json
 
 ###
+
+# Surfaces latest snapshot (anonymous; contains identity/faction aggregates when available)
+GET {{HappyGymStats.Api_HostAddress}}/api/v1/torn/surfaces/latest
+Accept: application/json
+
+###
+
+# Read model: gym trains page (anonymous)
+GET {{HappyGymStats.Api_HostAddress}}/api/v1/torn/gym-trains?limit=2
+Accept: application/json
+
+###
+
+# Read model: happy events page (anonymous)
+GET {{HappyGymStats.Api_HostAddress}}/api/v1/torn/happy-events?limit=2
+Accept: application/json
+
+###
+
+# Optional follow-up for cached links (auth requirements depend on linked UI/service, not this API)
+# GET https://app.example.local/users/{userId}
+# GET https://app.example.local/factions/{factionId}
