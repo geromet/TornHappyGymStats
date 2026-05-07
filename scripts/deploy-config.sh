@@ -75,3 +75,76 @@ Connection target:
   DEPLOY_SUDO_NON_INTERACTIVE=${DEPLOY_SUDO_NON_INTERACTIVE}
 EOF
 }
+
+deploy_precheck_fail() {
+  local category="$1"
+  local detail="$2"
+  echo "DEPLOY_PRECHECK_FAIL category=${category} detail=${detail}" >&2
+  return 1
+}
+
+deploy_precheck_require_local_file() {
+  local path="$1"
+  local category="${2:-missing_local_file}"
+  [[ -f "${path}" ]] || deploy_precheck_fail "${category}" "path=${path}"
+}
+
+deploy_precheck_require_local_dir() {
+  local path="$1"
+  local category="${2:-missing_local_dir}"
+  [[ -d "${path}" ]] || deploy_precheck_fail "${category}" "path=${path}"
+}
+
+deploy_precheck_require_local_command() {
+  local cmd="$1"
+  local category="${2:-missing_local_command}"
+  command -v "${cmd}" >/dev/null 2>&1 || deploy_precheck_fail "${category}" "command=${cmd}"
+}
+
+deploy_precheck_remote_command() {
+  local cmd="$1"
+  local category="${2:-missing_remote_command}"
+  deploy_ssh_tty "set -euo pipefail; command -v '${cmd}' >/dev/null" >/dev/null 2>&1 || deploy_precheck_fail "${category}" "command=${cmd}"
+}
+
+deploy_precheck_remote_service_exists() {
+  local service="$1"
+  local setup_hint="${2:-}"
+  local service_unit="${service}"
+  [[ "${service_unit}" == *.service ]] || service_unit="${service_unit}.service"
+
+  if ! deploy_ssh_tty "set -euo pipefail; systemctl list-unit-files --type=service --all | awk '{print \$1}' | grep -Fx '${service_unit}' >/dev/null" >/dev/null 2>&1; then
+    local detail="service=${service_unit}"
+    [[ -n "${setup_hint}" ]] && detail="${detail} hint=${setup_hint}"
+    deploy_precheck_fail "missing_remote_service" "${detail}"
+  fi
+}
+
+deploy_precheck_remote_path_writable() {
+  local path="$1"
+  local category="${2:-missing_remote_write_privilege}"
+
+  if ! deploy_ssh_tty "set -euo pipefail; if [[ -e '${path}' ]]; then test -w '${path}'; else test -w \"\$(dirname '${path}')\"; fi" >/dev/null 2>&1; then
+    if [[ -n "${DEPLOY_SUDO_CMD}" ]]; then
+      deploy_ssh_tty "set -euo pipefail; ${DEPLOY_SUDO_CMD} test -w '${path}' || ${DEPLOY_SUDO_CMD} test -w \"\$(dirname '${path}')\"" >/dev/null 2>&1 || deploy_precheck_fail "${category}" "path=${path}"
+    else
+      deploy_precheck_fail "${category}" "path=${path}"
+    fi
+  fi
+}
+
+deploy_precheck_remote_root_ready() {
+  local remote_root="$1"
+  local category="${2:-missing_remote_write_privilege}"
+  deploy_precheck_remote_path_writable "${remote_root}" "${category}"
+}
+
+deploy_precheck_remote_sudo_access() {
+  if [[ "${DEPLOY_USE_SUDO}" != "1" ]]; then
+    return 0
+  fi
+
+  if [[ "${DEPLOY_SUDO_NON_INTERACTIVE}" == "1" ]]; then
+    deploy_ssh_tty "set -euo pipefail; sudo -n true" >/dev/null 2>&1 || deploy_precheck_fail "missing_remote_sudo_privilege" "sudo_non_interactive=true"
+  fi
+}
