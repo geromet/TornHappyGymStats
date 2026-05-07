@@ -8,6 +8,12 @@ This document is the operational contract for deploying and verifying the curren
 - nginx routes for `/api/*`, `/`, and `/admin/*`
 - optional Postgres/Keycloak container health visibility via smoke checks
 
+## .NET runtime/publish contract (M003 S09)
+
+- Repository projects currently target `net8.0`; build hosts should use the SDK pinned by root `global.json`.
+- Backend and AdminPanel deploy flows publish for `linux-x64` with `--self-contained true`.
+- Operational implication: target servers do not require a separately installed shared .NET/ASP.NET runtime for these self-contained services, but do require systemd/nginx/service wiring validated by smoke checks.
+
 ## Setup vs deploy (important split)
 
 ### One-time setup / bootstrap

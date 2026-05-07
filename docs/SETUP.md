@@ -7,9 +7,16 @@ This setup guide reflects the current production shape: **API + Blazor + AdminPa
 
 ## Prerequisites
 
-- .NET 8 SDK
+- .NET 8 SDK (8.0.126 currently pinned via repository `global.json`)
 - Docker (for Postgres/Testcontainers verification paths)
 - `curl`, `bash`, and `rg`
+
+## .NET SDK/runtime contract (M003 S09)
+
+- All tracked projects currently target `net8.0`.
+- Local build/test/restore should use the SDK selected by `global.json` (repo root).
+- Deployment publish scripts target `linux-x64` and use `dotnet publish --self-contained true` for API/AdminPanel.
+- Because deploy artifacts are self-contained, the server does **not** need a preinstalled shared ASP.NET/.NET runtime for those services; it still needs systemd/nginx/service prerequisites documented in deployment smoke checks.
 
 ## Secret handling (required)
 
