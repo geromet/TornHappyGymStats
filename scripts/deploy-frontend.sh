@@ -49,6 +49,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 fi
 
 echo "==> Running frontend deploy preconditions"
+echo "==> Runtime contract: frontend is static assets (dotnet runtime not required on host)"
 deploy_precheck_require_local_dir "${WEB_DIR}" "missing_frontend_directory"
 deploy_precheck_require_local_command tar
 deploy_precheck_require_local_command ssh

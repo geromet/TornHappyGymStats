@@ -101,6 +101,21 @@ deploy_precheck_require_local_command() {
   command -v "${cmd}" >/dev/null 2>&1 || deploy_precheck_fail "${category}" "command=${cmd}"
 }
 
+deploy_precheck_require_executable_file() {
+  local path="$1"
+  local category="${2:-missing_executable_file}"
+
+  if [[ ! -f "${path}" ]]; then
+    deploy_precheck_fail "${category}" "path=${path} reason=missing"
+    return 1
+  fi
+
+  if [[ ! -x "${path}" ]]; then
+    deploy_precheck_fail "${category}" "path=${path} reason=not_executable"
+    return 1
+  fi
+}
+
 deploy_precheck_remote_command() {
   local cmd="$1"
   local category="${2:-missing_remote_command}"

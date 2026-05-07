@@ -24,6 +24,7 @@ source "${DEPLOY_CONFIG_PATH}"
 : "${DEPLOY_ADMIN_RESTART_SERVICE:=1}"
 
 readonly PUBLISH_DIR="${ROOT_DIR}/dist/adminpanel"
+readonly PUBLISH_EXECUTABLE="${PUBLISH_DIR}/HappyGymStats.AdminPanel"
 readonly REMOTE_RELEASES_DIR="${DEPLOY_ADMIN_REMOTE_ROOT}/releases"
 readonly REMOTE_CURRENT_DIR="${DEPLOY_ADMIN_REMOTE_ROOT}/current"
 readonly REMOTE_STAGING_DIR="/tmp/happygymstats-adminpanel-staging-${DEPLOY_SSH_USER}"
@@ -75,7 +76,10 @@ fi
 
 echo "==> Publishing AdminPanel"
 rm -rf "${PUBLISH_DIR}"
+echo "==> Runtime contract: target_runtime=${DEPLOY_ADMIN_RUNTIME} self_contained=true"
 dotnet publish "${DEPLOY_ADMIN_PROJECT}" -c "${DEPLOY_ADMIN_CONFIGURATION}" -r "${DEPLOY_ADMIN_RUNTIME}" --self-contained true -o "${PUBLISH_DIR}"
+chmod 755 "${PUBLISH_EXECUTABLE}"
+deploy_precheck_require_executable_file "${PUBLISH_EXECUTABLE}" "adminpanel_publish_executable_invalid"
 
 echo "==> Uploading payload"
 tar -C "${PUBLISH_DIR}" -cf - . | deploy_ssh_pipe "set -euo pipefail; mkdir -p '${REMOTE_STAGING_DIR}'; rm -rf '${REMOTE_STAGING_DIR}'/*; tar -xf - -C '${REMOTE_STAGING_DIR}'"
@@ -89,6 +93,7 @@ deploy_ssh_tty "set -euo pipefail; \
   ${DEPLOY_SUDO_CMD} chown -R '${DEPLOY_ADMIN_OWNER}:${DEPLOY_ADMIN_GROUP}' '${REMOTE_RELEASE_DIR}'; \
   ${DEPLOY_SUDO_CMD} find '${REMOTE_RELEASE_DIR}' -type d -exec chmod 755 {} \\;; \
   ${DEPLOY_SUDO_CMD} find '${REMOTE_RELEASE_DIR}' -type f -exec chmod 644 {} \\;; \
+  if [[ -f '${REMOTE_RELEASE_DIR}/HappyGymStats.AdminPanel' ]]; then ${DEPLOY_SUDO_CMD} chmod 755 '${REMOTE_RELEASE_DIR}/HappyGymStats.AdminPanel'; fi; \
   rm -rf '${REMOTE_STAGING_DIR}'"
 
 if [[ "${DEPLOY_ADMIN_RESTART_SERVICE}" == "1" ]]; then

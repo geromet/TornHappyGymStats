@@ -24,6 +24,7 @@ source "${DEPLOY_CONFIG_PATH}"
 : "${DEPLOY_RESTART_SERVICE:=1}"
 
 readonly PUBLISH_DIR="${ROOT_DIR}/dist/backend-api"
+readonly PUBLISH_EXECUTABLE="${PUBLISH_DIR}/HappyGymStats.Api"
 readonly REMOTE_RELEASES_DIR="${DEPLOY_REMOTE_ROOT}/releases"
 readonly REMOTE_CURRENT_DIR="${DEPLOY_REMOTE_ROOT}/current"
 readonly REMOTE_STAGING_DIR="/tmp/happygymstats-staging-${DEPLOY_SSH_USER}"
@@ -72,7 +73,10 @@ fi
 
 echo "==> Publishing API"
 rm -rf "${PUBLISH_DIR}"
+echo "==> Runtime contract: target_runtime=${DEPLOY_RUNTIME} self_contained=true"
 dotnet publish "${API_PROJECT}" -c "${DEPLOY_CONFIGURATION}" -r "${DEPLOY_RUNTIME}" --self-contained true -o "${PUBLISH_DIR}"
+chmod 755 "${PUBLISH_EXECUTABLE}"
+deploy_precheck_require_executable_file "${PUBLISH_EXECUTABLE}" "backend_publish_executable_invalid"
 
 echo "==> Uploading payload"
 tar -C "${PUBLISH_DIR}" -cf - . | deploy_ssh_pipe "set -euo pipefail; mkdir -p '${REMOTE_STAGING_DIR}'; rm -rf '${REMOTE_STAGING_DIR}'/*; tar -xf - -C '${REMOTE_STAGING_DIR}'"

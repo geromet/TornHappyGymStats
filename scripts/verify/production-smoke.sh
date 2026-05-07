@@ -33,6 +33,8 @@ fi
 : "${SMOKE_ADMIN_PROTECTED_URL:=https://admin.geromet.com/admin/api/v1/import-runs}"
 : "${SMOKE_POSTGRES_CONTAINER_HINT:=postgres}"
 : "${SMOKE_KEYCLOAK_CONTAINER_HINT:=keycloak}"
+: "${SMOKE_EXPECT_RUNTIME:=linux-x64}"
+: "${SMOKE_EXPECT_SELF_CONTAINED:=1}"
 
 required_failures=0
 optional_warnings=0
@@ -67,6 +69,8 @@ Environment overrides:
   SMOKE_ADMIN_PROTECTED_URL       Protected AdminPanel endpoint URL
   SMOKE_POSTGRES_CONTAINER_HINT   Postgres container name/image hint (default: ${SMOKE_POSTGRES_CONTAINER_HINT})
   SMOKE_KEYCLOAK_CONTAINER_HINT   Keycloak container name/image hint (default: ${SMOKE_KEYCLOAK_CONTAINER_HINT})
+  SMOKE_EXPECT_RUNTIME            Expected publish runtime identifier (default: ${SMOKE_EXPECT_RUNTIME})
+  SMOKE_EXPECT_SELF_CONTAINED     1=self-contained deploys (dotnet runtime optional), 0=runtime-dependent (default: ${SMOKE_EXPECT_SELF_CONTAINED})
 
 Exit semantics:
   - required check failure => non-zero exit
@@ -346,6 +350,48 @@ run_host_capture() {
   fi
 }
 
+check_runtime_preflight() {
+  local runtime_major="${SMOKE_EXPECT_RUNTIME##*-}"
+
+  pass "required" "runtime contract expected_runtime=${SMOKE_EXPECT_RUNTIME} self_contained=${SMOKE_EXPECT_SELF_CONTAINED} arch_hint=${runtime_major}"
+
+  if ! run_host_command "uname -m >/dev/null 2>&1" >/dev/null 2>&1; then
+    fail "required" "runtime preflight: unable to determine host architecture"
+  else
+    local host_arch
+    host_arch="$(run_host_capture "uname -m" 2>/dev/null || true)"
+    pass "required" "runtime preflight: host_architecture=${host_arch}"
+  fi
+
+  if run_host_command "command -v dotnet >/dev/null 2>&1" >/dev/null 2>&1; then
+    pass "required" "runtime preflight: dotnet command available"
+
+    local dotnet_info
+    dotnet_info="$(run_host_capture "dotnet --info 2>/dev/null | head -n 6" || true)"
+    if [[ -n "${dotnet_info}" ]]; then
+      pass "required" "runtime preflight: dotnet --info captured"
+      printf "INFO [runtime] dotnet --info (excerpt): %s\n" "$(sanitize_excerpt "${dotnet_info}")"
+    else
+      warn "optional" "runtime preflight: dotnet --info returned no output"
+    fi
+
+    local runtimes
+    runtimes="$(run_host_capture "dotnet --list-runtimes 2>/dev/null" || true)"
+    if [[ -n "${runtimes}" ]]; then
+      pass "required" "runtime preflight: dotnet --list-runtimes captured"
+      printf "INFO [runtime] dotnet --list-runtimes: %s\n" "$(sanitize_excerpt "${runtimes}")"
+    else
+      warn "optional" "runtime preflight: dotnet --list-runtimes returned no output"
+    fi
+  else
+    if [[ "${SMOKE_EXPECT_SELF_CONTAINED}" == "1" ]]; then
+      pass "required" "runtime preflight: dotnet command not installed (acceptable for self-contained deploys)"
+    else
+      fail "required" "runtime preflight: dotnet command missing for runtime-dependent deploy"
+    fi
+  fi
+}
+
 check_systemd_service_required() {
   local service_name="$1"
 
@@ -486,6 +532,9 @@ if [[ "${SMOKE_MODE}" == "remote" ]]; then
 else
   pass "required" "local checks execute on host with read-only commands"
 fi
+
+phase "runtime-preflight"
+check_runtime_preflight
 
 phase "services"
 check_systemd_service_required "${SMOKE_SERVICE_API}"
