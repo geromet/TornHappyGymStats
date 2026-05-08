@@ -91,6 +91,7 @@ See script headers and `--help` output for:
 
 ## AdminPanel sudoers + setup boundary (S03)
 
+<<<<<<< Updated upstream
 Source of truth: `infra/sudoers-happygymstats`
 
 ### Permanent (steady-state deploy)
@@ -117,6 +118,9 @@ These permissions exist to install and activate AdminPanel prerequisites:
 
 ### Setup execution + health proof
 Run local static verification before attempting remote bootstrap:
+=======
+## Production smoke verification (S05)
+
 ## Production smoke command (canonical)
 >>>>>>> Stashed changes
 
