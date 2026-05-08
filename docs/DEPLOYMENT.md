@@ -117,12 +117,36 @@ These permissions exist to install and activate AdminPanel prerequisites:
 
 ### Setup execution + health proof
 Run local static verification before attempting remote bootstrap:
+## Production smoke command (canonical)
+>>>>>>> Stashed changes
 
 ```bash
 bash scripts/verify/s03-adminpanel-setup.sh
 ```
 
+<<<<<<< Updated upstream
 Remote bootstrap command (mutates remote server state):
+=======
+This command is read-only (`SCRIPT_MUTATES_SERVER_STATE=0`) and emits phase-based diagnostics:
+
+- framework
+- services
+- http-routes
+- containers
+- summary
+
+Result contract:
+
+- `RESULT required_failures=<n> optional_warnings=<n>`
+- non-zero exit when `required_failures > 0`
+- expected failure categories include `systemd-unavailable` and `docker-access-unavailable` for hosts without systemd/docker access in the current execution context.
+
+## `ASPNETCORE_URLS` verification warning
+
+When running local verification flows that pin `ASPNETCORE_URLS`, always include `--no-launch-profile` for `dotnet run` so launch profile settings do not override your explicit URL binding. See `scripts/verify/s05-local-surfaces.sh` for the canonical pattern.
+
+## Quick operator sequence
+>>>>>>> Stashed changes
 
 ```bash
 bash scripts/setup-adminpanel-server.sh

@@ -140,6 +140,7 @@ verify_service_active() {
   exit 1
 fi
 
+<<<<<<< Updated upstream
 echo 'service-active: ${SERVICE_NAME}'"
 }
 
@@ -184,6 +185,11 @@ cleanup_staging() {
   run_remote "rm -rf '${REMOTE_STAGE_DIR}'"
 }
 
+=======
+RUN_REMOTE_SETUP=0
+CONFIRM_REMOTE_SETUP=0
+DRY_RUN=0
+>>>>>>> Stashed changes
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help)
@@ -193,6 +199,9 @@ while [[ $# -gt 0 ]]; do
     -n|--dry-run)
       DRY_RUN=1
       shift
+      ;;
+    --dry-run)
+      DRY_RUN=1
       ;;
     *)
       echo "Unknown option: $1" >&2
@@ -221,4 +230,60 @@ verify_service_active
 health_check
 cleanup_staging
 
+<<<<<<< Updated upstream
 echo "==> AdminPanel server setup complete"
+=======
+cat <<EOF
+==> Local preflight complete
+SCRIPT_CATEGORY=manual-bootstrap
+SCRIPT_MUTATES_SERVER_STATE=conditional
+SCRIPT_AUTOMATION_SAFE_DEFAULT=1
+    source: ${ADMIN_NGINX_SOURCE}
+    remote setup host: ${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}
+    DEPLOY_INSTALL_ADMIN_NGINX=${DEPLOY_INSTALL_ADMIN_NGINX}
+    mode: $( [[ "${DEPLOY_ADMIN_NGINX_USE_CONF_D}" == "1" ]] && echo "conf.d" || echo "sites-available/sites-enabled" )
+EOF
+
+if [[ "${DRY_RUN}" == "1" ]]; then
+  echo "==> Dry-run requested; verified local/static contract and exiting before remote mutation."
+  exit 0
+fi
+
+if [[ "${DEPLOY_INSTALL_ADMIN_NGINX}" != "1" ]]; then
+  echo "==> Skipping remote nginx install because DEPLOY_INSTALL_ADMIN_NGINX=${DEPLOY_INSTALL_ADMIN_NGINX}."
+  echo "    Set DEPLOY_INSTALL_ADMIN_NGINX=1 only after DNS/TLS is ready for admin host."
+  exit 0
+fi
+
+if [[ "${RUN_REMOTE_SETUP}" != "1" || "${CONFIRM_REMOTE_SETUP}" != "1" ]]; then
+  echo "==> Remote setup is gated by explicit user confirmation."
+  echo "    To mutate remote nginx, re-run with: --execute --confirm-remote-setup"
+  echo "    Local/static verification is allowed without those flags."
+  exit 0
+fi
+
+echo "==> Staging nginx-adminpanel config to remote temp path"
+cat "${ADMIN_NGINX_SOURCE}" | ssh_cmd_pipe "set -euo pipefail; cat > '${REMOTE_STAGING_FILE}'"
+
+echo "==> Installing nginx-adminpanel config (idempotent)"
+if [[ "${DEPLOY_ADMIN_NGINX_USE_CONF_D}" == "1" ]]; then
+  ssh_cmd_tty "set -euo pipefail; \
+    ${SUDO_CMD} mkdir -p '${DEPLOY_ADMIN_NGINX_CONF_D_DIR}'; \
+    ${SUDO_CMD} install -m 0644 '${REMOTE_STAGING_FILE}' '${REMOTE_CONF_D_FILE}'; \
+    rm -f '${REMOTE_STAGING_FILE}'"
+else
+  ssh_cmd_tty "set -euo pipefail; \
+    ${SUDO_CMD} mkdir -p '${DEPLOY_ADMIN_NGINX_TARGET_DIR}' '${DEPLOY_ADMIN_NGINX_LINK_DIR}'; \
+    ${SUDO_CMD} install -m 0644 '${REMOTE_STAGING_FILE}' '${REMOTE_TARGET_FILE}'; \
+    ${SUDO_CMD} ln -sfn '${REMOTE_TARGET_FILE}' '${REMOTE_LINK_FILE}'; \
+    rm -f '${REMOTE_STAGING_FILE}'"
+fi
+
+echo "==> Running nginx -t"
+ssh_cmd_tty "set -euo pipefail; ${SUDO_CMD} nginx -t"
+
+echo "==> Reload nginx"
+ssh_cmd_tty "set -euo pipefail; ${SUDO_CMD} systemctl reload nginx"
+
+echo "==> AdminPanel nginx route setup complete"
+>>>>>>> Stashed changes

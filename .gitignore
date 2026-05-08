@@ -55,3 +55,8 @@ tmp/
 # ── GSD baseline (auto-generated) ──
 .mcp.json
 gsd-session-2026-05-01T22-03-19-663Z_54d4e4d9-a166-4eff-899d-aac74a94fe7e.html
+docs/DEPLOYMENT.md
+docs/m003-artifact-remediation-evidence.md
+docs/m003-s04-blocking-issues-manual-guide.md
+infra/sudoers-happygymstats
+infra/sudoers-happygymstats

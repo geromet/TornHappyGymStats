@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 # happygymstats deploy privilege boundary
 #
 # Permanent (steady-state deploy): release activation + service restart/status.
@@ -50,3 +51,15 @@ anon ALL=(ALL) NOPASSWD: /usr/bin/systemctl enable happygymstats-adminpanel
 anon ALL=(ALL) NOPASSWD: /bin/systemctl enable happygymstats-adminpanel
 anon ALL=(ALL) NOPASSWD: /usr/bin/systemctl start happygymstats-adminpanel
 anon ALL=(ALL) NOPASSWD: /bin/systemctl start happygymstats-adminpanel
+=======
+# Narrow bootstrap policy for HappyGymStats adminpanel route setup.
+# Intentionally avoids broad mutator grants and shell execution.
+
+Cmnd_Alias HGS_NGINX_DIRS = /usr/bin/mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled, /usr/bin/mkdir -p /etc/nginx/conf.d
+Cmnd_Alias HGS_NGINX_INSTALL = /usr/bin/install -m 0644 /tmp/nginx-adminpanel.conf.anon.staging /etc/nginx/sites-available/nginx-adminpanel.conf, /usr/bin/install -m 0644 /tmp/nginx-adminpanel.conf.anon.staging /etc/nginx/conf.d/nginx-adminpanel.conf
+Cmnd_Alias HGS_NGINX_LINK = /usr/bin/ln -sfn /etc/nginx/sites-available/nginx-adminpanel.conf /etc/nginx/sites-enabled/nginx-adminpanel.conf
+Cmnd_Alias HGS_NGINX_VALIDATE = /usr/sbin/nginx -t
+Cmnd_Alias HGS_NGINX_RELOAD = /usr/bin/systemctl reload nginx
+
+anon ALL=(root) NOPASSWD: HGS_NGINX_DIRS, HGS_NGINX_INSTALL, HGS_NGINX_LINK, HGS_NGINX_VALIDATE, HGS_NGINX_RELOAD
+>>>>>>> Stashed changes
