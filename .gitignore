@@ -10,35 +10,31 @@ dist/
 *.log
 TestResults/
 
-## Runtime data (user-specific, never commit)
+## Runtime/local data (never commit)
 data/
 *.db
 *.db-shm
 *.db-wal
 
-## IDE
+## IDE/editor
 .vs/
 .vscode/
 .idea/
 *.swp
+*.swo
 *~
+*.code-workspace
 
 ## OS
 .DS_Store
 Thumbs.db
 
-## GSD project management (internal)
-.gsd/
-
-# ── GSD baseline (auto-generated) ──
-.gsd
-.gsd-id
-.bg-shell/
-*.swo
-*.code-workspace
+## Environment/secrets
 .env
 .env.*
 !.env.example
+
+## Package/build caches
 node_modules/
 .next/
 build/
@@ -50,14 +46,22 @@ target/
 vendor/
 coverage/
 .cache/
-tmp/
 
-# ── GSD baseline (auto-generated) ──
+## Temporary files
+tmp/
+.bg-shell/
+
+## GSD internal state
+.gsd/
+.gsd
+.gsd-id
+
+## MCP local config
 .mcp.json
-gsd-session-2026-05-01T22-03-19-663Z_54d4e4d9-a166-4eff-899d-aac74a94fe7e.html
-docs/DEPLOYMENT.md
-docs/m003-artifact-remediation-evidence.md
-docs/m003-s04-blocking-issues-manual-guide.md
-infra/sudoers-happygymstats
-infra/sudoers-happygymstats
-docs/DEPLOYMENT.md
+
+## Local artifacts
+happygymstats.dump
+torn-log-samples.json
+
+## Docs sandbox for ignored scratch docs
+docs/gitignore/
