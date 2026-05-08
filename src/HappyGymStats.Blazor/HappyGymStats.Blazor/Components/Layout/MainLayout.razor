@@ -1,0 +1,69 @@
+@inherits LayoutComponentBase
+
+<MudThemeProvider Theme="_theme" IsDarkMode="true" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
+                       OnClick="ToggleDrawer" />
+        <MudText Typo="Typo.h6" Class="ml-2">Happy Gym Stats</MudText>
+        <MudSpacer />
+        <MudLink Href="https://www.torn.com" Target="_blank" Color="Color.Inherit">
+            <MudText Typo="Typo.caption">Torn City</MudText>
+        </MudLink>
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="1" Variant="DrawerVariant.Temporary">
+        <MudDrawerHeader>
+            <MudText Typo="Typo.subtitle1" Class="mt-1">Happy Gym Stats</MudText>
+        </MudDrawerHeader>
+        <MudNavMenu>
+            <MudNavLink Href="/" Icon="@Icons.Material.Filled.BarChart" Match="NavLinkMatch.All">
+                Dashboard
+            </MudNavLink>
+            <MudNavLink Href="/security" Icon="@Icons.Material.Filled.Key">
+                Security
+            </MudNavLink>
+        </MudNavMenu>
+    </MudDrawer>
+
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-6 pb-4">
+            @Body
+        </MudContainer>
+        <MudDivider />
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-3">
+            <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary">
+                Happy Gym Stats — Data stored locally, never shared externally.
+            </MudText>
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen;
+
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+
+    private static readonly MudTheme _theme = new()
+    {
+        PaletteDark = new PaletteDark
+        {
+            Primary = "#58a6ff",
+            PrimaryContrastText = "#041426",
+            Background = "#0b1020",
+            BackgroundGray = "#0d1529",
+            Surface = "#121a2f",
+            AppbarBackground = "#0d1529",
+            DrawerBackground = "#0d1529",
+            TextPrimary = "#e8f1ff",
+            TextSecondary = "#b8e1ff",
+            TableLines = "#243457",
+            Divider = "#243457",
+            LinesDefault = "#243457",
+        }
+    };
+}

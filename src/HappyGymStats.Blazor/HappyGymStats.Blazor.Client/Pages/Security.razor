@@ -1,0 +1,229 @@
+@page "/security"
+@rendermode InteractiveWebAssembly
+@inject CryptoService Crypto
+@inject ISnackbar Snackbar
+
+<PageTitle>Security — Happy Gym Stats</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-4">Encryption Key</MudText>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (!_hasKey)
+{
+    <MudCard>
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.LockOpen" Color="Color.Warning" />
+                    <MudText Typo="Typo.h6">No key stored</MudText>
+                </MudStack>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudText Class="mb-4">
+                Generate a P-256 keypair. Your private key is encrypted with a password and stored
+                in your browser's localStorage. The public key is used to encrypt your Torn player ID
+                on the server — only you can decrypt it.
+            </MudText>
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="_password"
+                              Label="Password"
+                              InputType="InputType.Password"
+                              Variant="Variant.Outlined"
+                              HelperText="Used to protect your private key. Not sent to any server."
+                              Disabled="@_generating" />
+                <MudTextField @bind-Value="_passwordConfirm"
+                              Label="Confirm password"
+                              InputType="InputType.Password"
+                              Variant="Variant.Outlined"
+                              Disabled="@_generating" />
+                @if (!string.IsNullOrEmpty(_generateError))
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true">@_generateError</MudAlert>
+                }
+            </MudStack>
+        </MudCardContent>
+        <MudCardActions>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.VpnKey"
+                       OnClick="GenerateKeyAsync"
+                       Disabled="@(_generating || string.IsNullOrWhiteSpace(_password))">
+                @(_generating ? "Generating…" : "Generate key")
+            </MudButton>
+        </MudCardActions>
+    </MudCard>
+}
+else
+{
+    <MudCard Class="mb-4">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Success" />
+                    <MudText Typo="Typo.h6">Key stored</MudText>
+                </MudStack>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudText Class="mb-3">
+                A key is stored in this browser. Enter your password to reveal the public key or
+                to test decryption.
+            </MudText>
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="_verifyPassword"
+                              Label="Password"
+                              InputType="InputType.Password"
+                              Variant="Variant.Outlined"
+                              Disabled="@_verifying" />
+                @if (!string.IsNullOrEmpty(_verifyError))
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true">@_verifyError</MudAlert>
+                }
+                @if (!string.IsNullOrEmpty(_publicKeyBase64))
+                {
+                    <MudText Typo="Typo.subtitle2">Public key (base64 SPKI)</MudText>
+                    <MudTextField Value="@_publicKeyBase64"
+                                  ReadOnly="true"
+                                  Variant="Variant.Outlined"
+                                  Lines="3"
+                                  HelperText="Submit this with your Torn API key when importing data." />
+                    <MudButton Variant="Variant.Text"
+                               StartIcon="@Icons.Material.Filled.ContentCopy"
+                               OnClick="CopyPublicKeyAsync">
+                        Copy
+                    </MudButton>
+                }
+            </MudStack>
+        </MudCardContent>
+        <MudCardActions>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Visibility"
+                       OnClick="VerifyKeyAsync"
+                       Disabled="@(_verifying || string.IsNullOrWhiteSpace(_verifyPassword))">
+                @(_verifying ? "Unlocking…" : "Unlock & show public key")
+            </MudButton>
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Error"
+                       StartIcon="@Icons.Material.Filled.DeleteForever"
+                       OnClick="DeleteKeyAsync">
+                Delete key
+            </MudButton>
+        </MudCardActions>
+    </MudCard>
+
+    @if (!string.IsNullOrEmpty(_cachedPublicKeyBase64) && string.IsNullOrEmpty(_publicKeyBase64))
+    {
+        <MudAlert Severity="Severity.Info" Dense="true">
+            Public key cached from a previous unlock — enter your password to re-verify.
+        </MudAlert>
+    }
+}
+
+@code {
+    private bool _loading = true;
+    private bool _hasKey;
+
+    private string _password = "";
+    private string _passwordConfirm = "";
+    private bool _generating;
+    private string _generateError = "";
+
+    private string _verifyPassword = "";
+    private bool _verifying;
+    private string _verifyError = "";
+    private string _publicKeyBase64 = "";
+    private string _cachedPublicKeyBase64 = "";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _hasKey = await Crypto.HasStoredKeyAsync();
+        if (_hasKey)
+            _cachedPublicKeyBase64 = await Crypto.GetPublicKeyBase64Async() ?? "";
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private async Task GenerateKeyAsync()
+    {
+        _generateError = "";
+        if (_password != _passwordConfirm)
+        {
+            _generateError = "Passwords do not match.";
+            return;
+        }
+        if (_password.Length < 8)
+        {
+            _generateError = "Password must be at least 8 characters.";
+            return;
+        }
+
+        _generating = true;
+        try
+        {
+            var (publicKeySpki, wrappedKey) = CryptoService.GenerateKeyPair(_password);
+            await Crypto.StoreWrappedKeyAsync(wrappedKey);
+            await Crypto.StorePublicKeyAsync(publicKeySpki);
+            _hasKey = true;
+            _cachedPublicKeyBase64 = Convert.ToBase64String(publicKeySpki);
+            _password = "";
+            _passwordConfirm = "";
+            Snackbar.Add("Key generated and stored.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            _generateError = $"Key generation failed: {ex.Message}";
+        }
+        finally
+        {
+            _generating = false;
+        }
+    }
+
+    private async Task VerifyKeyAsync()
+    {
+        _verifyError = "";
+        _publicKeyBase64 = "";
+        _verifying = true;
+        try
+        {
+            using var key = await Crypto.LoadKeyAsync(_verifyPassword);
+            if (key is null)
+            {
+                _verifyError = "Wrong password or key data is corrupted.";
+                return;
+            }
+            var spki = key.ExportSubjectPublicKeyInfo();
+            _publicKeyBase64 = Convert.ToBase64String(spki);
+            await Crypto.StorePublicKeyAsync(spki);
+            _cachedPublicKeyBase64 = _publicKeyBase64;
+            Snackbar.Add("Key unlocked successfully.", Severity.Success);
+        }
+        finally
+        {
+            _verifying = false;
+        }
+    }
+
+    private async Task CopyPublicKeyAsync()
+    {
+        // Clipboard API requires JS interop; use a simple snackbar reminder if not available
+        Snackbar.Add("Use the text field above to copy your public key.", Severity.Info);
+        await Task.CompletedTask;
+    }
+
+    private async Task DeleteKeyAsync()
+    {
+        await Crypto.DeleteKeyAsync();
+        _hasKey = false;
+        _publicKeyBase64 = "";
+        _cachedPublicKeyBase64 = "";
+        _verifyPassword = "";
+        Snackbar.Add("Key deleted from this browser.", Severity.Warning);
+    }
+}

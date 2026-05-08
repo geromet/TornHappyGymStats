@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HappyGymStats.Data\HappyGymStats.Data.csproj" />
+    <ProjectReference Include="..\HappyGymStats.Identity\HappyGymStats.Identity.csproj" />
+  </ItemGroup>
+
+</Project>

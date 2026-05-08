@@ -2,34 +2,42 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using HappyGymStats.Api;
+using HappyGymStats.Core.Models;
 using HappyGymStats.Data;
 using HappyGymStats.Data.Entities;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
 
 namespace HappyGymStats.Tests;
 
-public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplicationFactory>
+/// <summary>
+/// Fast API endpoint tests that intentionally run against the in-memory SQLite test host.
+/// These validate endpoint contracts and pagination behavior, not production-provider parity.
+/// </summary>
+public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTests.SqliteTestApplicationFactory>
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
     };
 
-    private readonly TestApplicationFactory _factory;
+    private readonly SqliteTestApplicationFactory _factory;
 
-    public ApiEndpointTests(TestApplicationFactory factory)
+    public SqliteApiEndpointTests(SqliteTestApplicationFactory factory)
     {
         _factory = factory;
         _factory.ResetDatabase();
     }
 
-    [Fact]
-    public async Task Health_endpoint_reports_ok()
+    [Fact(DisplayName = "SqliteApiEndpoint: health endpoint reports ok with SQLite provider")]
+    [Trait("Category", "SqliteApiEndpoint")]
+    public async Task Health_endpoint_reports_ok_with_sqlite_provider()
     {
         using var client = _factory.CreateClient();
 
@@ -41,6 +49,7 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
         Assert.NotNull(payload);
         Assert.Equal("ok", payload.Status);
         Assert.Equal("HappyGymStats.Api", payload.Api);
+        // This assertion is SQLite-tier specific; production provider parity is covered by PostgresApiIntegrationTests.
         Assert.Contains("Sqlite", payload.DatabaseProvider, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -60,42 +69,33 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
     [Fact]
     public async Task Gym_trains_endpoint_uses_cursor_pagination()
     {
-        await _factory.SeedGymTrainsAsync(
-            new DerivedGymTrainEntity
+        await _factory.SeedUserLogEntriesAsync(
+            new UserLogEntryEntity
             {
-                LogId = "train-c",
+                AnonymousId = Guid.Empty,
+                LogEntryId = "train-c",
                 OccurredAtUtc = new DateTimeOffset(2026, 04, 30, 12, 00, 00, TimeSpan.Zero),
+                LogTypeId = 1,
                 HappyBeforeTrain = 300,
-                HappyAfterTrain = 250,
                 HappyUsed = 50,
-                RegenTicksApplied = 0,
-                RegenHappyGained = 0,
-                MaxHappyAtTimeUtc = 500,
-                ClampedToMax = false,
             },
-            new DerivedGymTrainEntity
+            new UserLogEntryEntity
             {
-                LogId = "train-b",
+                AnonymousId = Guid.Empty,
+                LogEntryId = "train-b",
                 OccurredAtUtc = new DateTimeOffset(2026, 04, 30, 12, 00, 00, TimeSpan.Zero),
+                LogTypeId = 1,
                 HappyBeforeTrain = 280,
-                HappyAfterTrain = 240,
                 HappyUsed = 40,
-                RegenTicksApplied = 0,
-                RegenHappyGained = 0,
-                MaxHappyAtTimeUtc = 500,
-                ClampedToMax = false,
             },
-            new DerivedGymTrainEntity
+            new UserLogEntryEntity
             {
-                LogId = "train-a",
+                AnonymousId = Guid.Empty,
+                LogEntryId = "train-a",
                 OccurredAtUtc = new DateTimeOffset(2026, 04, 30, 11, 45, 00, TimeSpan.Zero),
+                LogTypeId = 1,
                 HappyBeforeTrain = 260,
-                HappyAfterTrain = 220,
                 HappyUsed = 40,
-                RegenTicksApplied = 1,
-                RegenHappyGained = 5,
-                MaxHappyAtTimeUtc = 500,
-                ClampedToMax = false,
             });
 
         using var client = _factory.CreateClient();
@@ -110,59 +110,6 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
 
         Assert.NotNull(secondPage);
         Assert.Equal(new[] { "train-a" }, secondPage.Items.Select(x => x.LogId).ToArray());
-        Assert.Null(secondPage.NextCursor);
-    }
-
-    [Fact]
-    public async Task Happy_events_endpoint_uses_cursor_pagination()
-    {
-        await _factory.SeedHappyEventsAsync(
-            new DerivedHappyEventEntity
-            {
-                EventId = "event-c",
-                EventType = "gym_train",
-                OccurredAtUtc = new DateTimeOffset(2026, 04, 30, 12, 00, 00, TimeSpan.Zero),
-                SourceLogId = "train-c",
-                HappyBeforeEvent = 300,
-                HappyAfterEvent = 250,
-                Delta = -50,
-                Note = null,
-            },
-            new DerivedHappyEventEntity
-            {
-                EventId = "event-b",
-                EventType = "gym_train",
-                OccurredAtUtc = new DateTimeOffset(2026, 04, 30, 12, 00, 00, TimeSpan.Zero),
-                SourceLogId = "train-b",
-                HappyBeforeEvent = 280,
-                HappyAfterEvent = 240,
-                Delta = -40,
-                Note = null,
-            },
-            new DerivedHappyEventEntity
-            {
-                EventId = "event-a",
-                EventType = "regen",
-                OccurredAtUtc = new DateTimeOffset(2026, 04, 30, 11, 45, 00, TimeSpan.Zero),
-                SourceLogId = null,
-                HappyBeforeEvent = 255,
-                HappyAfterEvent = 260,
-                Delta = 5,
-                Note = "quarter-hour tick",
-            });
-
-        using var client = _factory.CreateClient();
-
-        var firstPage = await client.GetFromJsonAsync<CursorPage<HappyEventDto>>("/api/v1/torn/happy-events?limit=2", JsonOptions);
-
-        Assert.NotNull(firstPage);
-        Assert.Equal(new[] { "event-c", "event-b" }, firstPage.Items.Select(x => x.EventId).ToArray());
-        Assert.False(string.IsNullOrWhiteSpace(firstPage.NextCursor));
-
-        var secondPage = await client.GetFromJsonAsync<CursorPage<HappyEventDto>>($"/api/v1/torn/happy-events?limit=2&cursor={Uri.EscapeDataString(firstPage.NextCursor!)}", JsonOptions);
-
-        Assert.NotNull(secondPage);
-        Assert.Equal(new[] { "event-a" }, secondPage.Items.Select(x => x.EventId).ToArray());
         Assert.Null(secondPage.NextCursor);
     }
 
@@ -188,7 +135,7 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
     {
         using var client = _factory.CreateClient();
 
-        var response = await client.GetAsync("/api/v1/torn/happy-events?cursor=not-base64");
+        var response = await client.GetAsync("/api/v1/torn/gym-trains?cursor=not-base64");
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         var payload = await response.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
@@ -211,6 +158,37 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
 
         Assert.NotNull(payload);
         Assert.Equal("not_found", payload.Error.Code);
+    }
+
+    [Fact]
+    public async Task Surfaces_latest_returns_structured_not_found_when_cache_missing()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/api/v1/torn/surfaces/latest");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
+
+        Assert.NotNull(payload);
+        Assert.Equal("not_found", payload.Error.Code);
+        Assert.Equal("No cached surfaces dataset found.", payload.Error.Message);
+        Assert.False(string.IsNullOrWhiteSpace(payload.Error.RequestId));
+    }
+
+    [Fact]
+    public async Task Surfaces_meta_returns_structured_not_found_when_cache_missing()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/api/v1/torn/surfaces/meta");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
+
+        Assert.NotNull(payload);
+        Assert.Equal("not_found", payload.Error.Code);
+        Assert.Equal("No cached surfaces dataset found.", payload.Error.Message);
     }
 
     [Fact]
@@ -249,31 +227,33 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
         Assert.Contains(latestPayload.Outcome, new[] { "queued", "running", "failed", "completed", "cancelled" });
     }
 
-    public sealed class TestApplicationFactory : WebApplicationFactory<Program>
+    public sealed class SqliteTestApplicationFactory : WebApplicationFactory<Program>
     {
         private SqliteConnection? _connection;
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseContentRoot(ResolveApiContentRoot());
-            builder.UseEnvironment("Development");
+            builder.UseEnvironment("Testing");
             builder.ConfigureServices(services =>
             {
                 _connection?.Dispose();
                 _connection = new SqliteConnection("Data Source=:memory:");
                 _connection.Open();
 
-                var dbContextDescriptor = services.SingleOrDefault(descriptor =>
-                    descriptor.ServiceType == typeof(DbContextOptions<HappyGymStatsDbContext>));
+                services.RemoveAll(typeof(DbContextOptions<HappyGymStatsDbContext>));
+                services.RemoveAll(typeof(HappyGymStatsDbContext));
 
-                if (dbContextDescriptor is not null)
-                    services.Remove(dbContextDescriptor);
+                var efContextOptionConfigs = services
+                    .Where(descriptor => descriptor.ServiceType.IsGenericType
+                        && descriptor.ServiceType.GetGenericTypeDefinition() == typeof(IDbContextOptionsConfiguration<>)
+                        && descriptor.ServiceType.GetGenericArguments()[0] == typeof(HappyGymStatsDbContext))
+                    .ToList();
 
-                var connectionDescriptor = services.SingleOrDefault(descriptor =>
-                    descriptor.ServiceType == typeof(SqliteConnection));
+                foreach (var descriptor in efContextOptionConfigs)
+                    services.Remove(descriptor);
 
-                if (connectionDescriptor is not null)
-                    services.Remove(connectionDescriptor);
+                services.RemoveAll(typeof(SqliteConnection));
 
                 services.AddSingleton(_connection);
                 services.AddDbContext<HappyGymStatsDbContext>(options => options.UseSqlite(_connection));
@@ -284,27 +264,16 @@ public sealed class ApiEndpointTests : IClassFixture<ApiEndpointTests.TestApplic
         {
             using var scope = Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<HappyGymStatsDbContext>();
-            db.DerivedGymTrains.RemoveRange(db.DerivedGymTrains);
-            db.DerivedHappyEvents.RemoveRange(db.DerivedHappyEvents);
-            db.ImportCheckpoints.RemoveRange(db.ImportCheckpoints);
+            db.UserLogEntries.RemoveRange(db.UserLogEntries);
             db.ImportRuns.RemoveRange(db.ImportRuns);
-            db.RawUserLogs.RemoveRange(db.RawUserLogs);
             db.SaveChanges();
         }
 
-        public async Task SeedGymTrainsAsync(params DerivedGymTrainEntity[] rows)
+        public async Task SeedUserLogEntriesAsync(params UserLogEntryEntity[] rows)
         {
             using var scope = Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<HappyGymStatsDbContext>();
-            db.DerivedGymTrains.AddRange(rows);
-            await db.SaveChangesAsync();
-        }
-
-        public async Task SeedHappyEventsAsync(params DerivedHappyEventEntity[] rows)
-        {
-            using var scope = Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<HappyGymStatsDbContext>();
-            db.DerivedHappyEvents.AddRange(rows);
+            db.UserLogEntries.AddRange(rows);
             await db.SaveChangesAsync();
         }
 

@@ -124,23 +124,18 @@ public static class HappyReconstructionModels
     /// This shape is consumed by persistence and confidence scoring in downstream slices.
     /// </summary>
     public sealed record ModifierProvenanceRecord(
-        string DerivedGymTrainLogId,
-        string Scope,
-        string? SubjectId,
-        string? FactionId,
-        string? CompanyId,
-        DateTimeOffset ValidFromUtc,
-        DateTimeOffset? ValidToUtc,
-        string VerificationStatus,
-        string VerificationReasonCode,
-        string? VerificationDetails);
+        int PlayerId,
+        string LogEntryId,
+        int Scope,            // ModifierScope bitmask value
+        int? SubjectId,
+        int? FactionId,
+        int? CompanyId,
+        int VerificationStatus);
 
     /// <summary>
     /// High-level reconstruction stats suitable for a UI summary panel.
     /// </summary>
     public sealed record ReconstructionStats(
-        int LinesRead,
-        int MalformedLines,
         int GymTrainEventsExtracted,
         int MaxHappyEventsExtracted,
         int HappyDeltaEventsExtracted,

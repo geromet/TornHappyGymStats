@@ -5,4 +5,5 @@ public sealed record UserLog(
     long Timestamp,
     string? Title,
     string? Category,
+    int? LogTypeId,
     System.Text.Json.JsonElement Raw);

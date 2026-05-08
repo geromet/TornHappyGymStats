@@ -47,6 +47,59 @@ public sealed class TornApiClient
         _http = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
     }
 
+    public async Task<int> GetPlayerIdAsync(string apiKey, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(apiKey))
+            throw new ArgumentException("API key must be provided.", nameof(apiKey));
+
+        var url = new Uri("https://api.torn.com/v2/user/basic");
+        var requestUrl = BuildUrlWithApiKey(url, apiKey);
+        using var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new TornApiException("Request timed out while calling Torn API.", isRetryable: true, statusCode: null, tornErrorCode: null);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new TornApiException("Network error while calling Torn API.", isRetryable: true, statusCode: null, tornErrorCode: null, innerException: ex);
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        JsonDocument doc;
+        try
+        {
+            doc = await JsonDocument.ParseAsync(stream, JsonDocumentOptions, ct).ConfigureAwait(false);
+        }
+        catch (JsonException ex)
+        {
+            throw new TornApiException("Malformed JSON response from Torn API.", isRetryable: IsRetryableStatusCode(response.StatusCode), statusCode: response.StatusCode, tornErrorCode: null, innerException: ex);
+        }
+
+        using (doc)
+        {
+            if (TryGetTornError(doc.RootElement, out var tornErrorCode, out var tornErrorMessage))
+                throw new TornApiException(BuildUserSafeErrorMessage(response.StatusCode, tornErrorCode, tornErrorMessage), isRetryable: IsRetryableTornError(response.StatusCode, tornErrorCode, tornErrorMessage), statusCode: response.StatusCode, tornErrorCode: tornErrorCode);
+
+            if (!response.IsSuccessStatusCode)
+                throw new TornApiException($"Torn API returned HTTP {(int)response.StatusCode} ({response.StatusCode}).", isRetryable: IsRetryableStatusCode(response.StatusCode), statusCode: response.StatusCode, tornErrorCode: null);
+
+            // Torn API v2: /v2/user/basic wraps data under "profile", user id is "id"
+            if (doc.RootElement.TryGetProperty("profile", out var profileEl) &&
+                profileEl.TryGetProperty("id", out var playerIdEl) &&
+                playerIdEl.TryGetInt32(out var playerId))
+                return playerId;
+
+            throw new TornApiException("Torn API /v2/user/basic response missing 'profile.id'.", isRetryable: false, statusCode: response.StatusCode, tornErrorCode: null);
+        }
+    }
+
     public async Task<UserLogPage> GetUserLogPageAsync(string apiKey, Uri url, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(apiKey))
@@ -175,6 +228,7 @@ public sealed class TornApiClient
 
                 string? title = null;
                 string? category = null;
+                int? logTypeId = null;
 
                 if (logEl.TryGetProperty("details", out var detailsEl) && detailsEl.ValueKind == JsonValueKind.Object)
                 {
@@ -187,6 +241,11 @@ public sealed class TornApiClient
                     {
                         category = categoryEl.GetString();
                     }
+
+                    if (detailsEl.TryGetProperty("id", out var idPropEl) && idPropEl.TryGetInt32(out var idInt))
+                    {
+                        logTypeId = idInt;
+                    }
                 }
 
                 logs.Add(new UserLog(
@@ -194,6 +253,7 @@ public sealed class TornApiClient
                     Timestamp: ts,
                     Title: title,
                     Category: category,
+                    LogTypeId: logTypeId,
                     Raw: logEl.Clone()));
             }
 

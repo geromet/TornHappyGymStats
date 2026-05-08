@@ -1,0 +1,26 @@
+[Unit]
+Description=HappyGymStats API backend
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/happygymstats/current
+ExecStart=/var/www/happygymstats/current/HappyGymStats.Api
+Restart=on-failure
+RestartSec=5
+
+# Runtime contract source (secrets are server-local; never committed):
+# /etc/happygymstats/api.env must define:
+# - ConnectionStrings__HappyGymStats (preferred) or HAPPYGYMSTATS_CONNECTION_STRING
+# - ProvisionalToken__SigningKey
+# - HAPPYGYMSTATS_SURFACES_CACHE_DIR
+EnvironmentFile=/etc/happygymstats/api.env
+
+# Non-secret service defaults.
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5047
+
+[Install]
+WantedBy=multi-user.target

@@ -1,12 +1,9 @@
+using System.Globalization;
 using System.Text.Json;
-using HappyGymStats.Core.Storage;
-using HappyGymStats.Core.Storage.Models;
+using HappyGymStats.Core.Repositories;
 using HappyGymStats.Core.Torn;
 using HappyGymStats.Core.Torn.Models;
-using HappyGymStats.Data;
 using HappyGymStats.Data.Entities;
-using HappyGymStats.Data.Storage;
-using Microsoft.EntityFrameworkCore;
 
 namespace HappyGymStats.Core.Fetch;
 
@@ -17,24 +14,28 @@ public enum FetchMode
 }
 
 public sealed record FetchRunResult(
-    Checkpoint Checkpoint,
     int PagesFetched,
     long LogsFetched,
     long LogsAppended);
 
 public sealed class LogFetcher
 {
-    private readonly AppPaths _paths;
+    private readonly IUserLogEntryRepository _userLogRepo;
+    private readonly IImportRunRepository _importRunRepo;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly TornApiClient _client;
 
-    public LogFetcher(AppPaths paths, TornApiClient client)
+    public LogFetcher(IUserLogEntryRepository userLogRepo, IImportRunRepository importRunRepo, IUnitOfWork unitOfWork, TornApiClient client)
     {
-        _paths = paths ?? throw new ArgumentNullException(nameof(paths));
+        _userLogRepo = userLogRepo ?? throw new ArgumentNullException(nameof(userLogRepo));
+        _importRunRepo = importRunRepo ?? throw new ArgumentNullException(nameof(importRunRepo));
+        _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
     public async Task<FetchRunResult> RunAsync(
         string apiKey,
+        Guid anonymousId,
         FetchMode mode,
         FetchOptions options,
         CancellationToken ct,
@@ -46,111 +47,53 @@ public sealed class LogFetcher
         if (options is null)
             throw new ArgumentNullException(nameof(options));
 
-        Directory.CreateDirectory(_paths.DataDirectory);
-        Directory.CreateDirectory(_paths.QuarantineDirectory);
-
-        var databasePath = SqlitePaths.ResolveDatabasePath(_paths.DataDirectory);
-        var dbOptions = new DbContextOptionsBuilder<HappyGymStatsDbContext>()
-            .UseSqlite($"Data Source={databasePath}")
-            .Options;
-
-        await using var db = new HappyGymStatsDbContext(dbOptions);
-        await db.Database.MigrateAsync(ct);
-
-        var scan = JsonlLogStore.ScanAndQuarantine(_paths.LogsJsonlPath, _paths.QuarantineDirectory);
-        if (scan.MalformedLines > 0)
-        {
-            log?.Invoke($"Local JSONL store scan found {scan.MalformedLines} malformed line(s) (see quarantine directory). Continuing with best-effort dedupe.");
-        }
-
-        var existingIds = scan.ExistingIds;
-        foreach (var dbLogId in await db.RawUserLogs.AsNoTracking().Select(row => row.LogId).ToListAsync(ct))
-            existingIds.Add(dbLogId);
-
-        var checkpoint = CheckpointStore.TryRead(_paths.CheckpointPath)
-                         ?? await ReadCheckpointFromDatabaseAsync(db, ct)
-                         ?? new Checkpoint(
-                             NextUrl: null,
-                             LastLogId: scan.LastLogId,
-                             LastLogTimestamp: scan.LastLogTimestamp,
-                             LastLogTitle: scan.LastLogTitle,
-                             LastLogCategory: scan.LastLogCategory,
-                             TotalFetchedCount: 0,
-                             TotalAppendedCount: existingIds.Count,
-                             LastRunStartedAt: null,
-                             LastRunCompletedAt: null,
-                             LastRunOutcome: null,
-                             LastErrorMessage: null,
-                             LastErrorAt: null);
-
-        if (checkpoint.TotalAppendedCount < existingIds.Count)
-            checkpoint = checkpoint with { TotalAppendedCount = existingIds.Count };
-
-        checkpoint = checkpoint with
-        {
-            LastRunStartedAt = DateTimeOffset.UtcNow,
-            LastRunCompletedAt = null,
-            LastRunOutcome = "running",
-            LastErrorMessage = null,
-            LastErrorAt = null,
-        };
-
-        var importRun = new ImportRunEntity
-        {
-            StartedAtUtc = checkpoint.LastRunStartedAt ?? DateTimeOffset.UtcNow,
-            Outcome = "running",
-            ErrorMessage = null,
-            PagesFetched = 0,
-            LogsFetched = 0,
-            LogsAppended = 0,
-        };
-        db.ImportRuns.Add(importRun);
-        await SaveCheckpointAsync(db, checkpoint, ct);
-        await db.SaveChangesAsync(ct);
+        // Build a dedup set from existing entries for this player.
+        var existingIds = await _userLogRepo.GetExistingLogIdsAsync(anonymousId, ct);
 
         Uri? nextUrl;
+        ImportRunEntity importRun;
+        var now = DateTimeOffset.UtcNow;
+
         if (mode == FetchMode.Fresh)
         {
             nextUrl = options.FreshStartUrl;
-            checkpoint = checkpoint with { NextUrl = nextUrl.OriginalString };
+            importRun = new ImportRunEntity
+            {
+                AnonymousId = anonymousId,
+                StartedAtUtc = now,
+                Outcome = "running",
+                NextUrl = nextUrl.ToString(),
+            };
+            await _importRunRepo.CreateAsync(importRun, ct);
+            await _unitOfWork.SaveChangesAsync(ct);
         }
         else
         {
-            if (string.IsNullOrWhiteSpace(checkpoint.NextUrl))
+            // Resume: find latest incomplete run for this player that has a NextUrl.
+            var priorRun = await _importRunRepo.GetLatestIncompleteAsync(ct);
+
+            if (priorRun is null || string.IsNullOrWhiteSpace(priorRun.NextUrl))
             {
-                checkpoint = checkpoint with
-                {
-                    LastRunCompletedAt = DateTimeOffset.UtcNow,
-                    LastRunOutcome = "noop",
-                };
-                importRun.CompletedAtUtc = checkpoint.LastRunCompletedAt;
-                importRun.Outcome = "noop";
-                CheckpointStore.Write(_paths.CheckpointPath, checkpoint);
-                await SaveCheckpointAsync(db, checkpoint, ct);
-                await db.SaveChangesAsync(ct);
-                log?.Invoke("No resume cursor present in checkpoint. Nothing to resume.");
-                return new FetchRunResult(checkpoint, PagesFetched: 0, LogsFetched: 0, LogsAppended: 0);
+                log?.Invoke("No incomplete run with a resume cursor found. Nothing to resume.");
+                return new FetchRunResult(PagesFetched: 0, LogsFetched: 0, LogsAppended: 0);
             }
 
-            if (!Uri.TryCreate(checkpoint.NextUrl, UriKind.Absolute, out var parsed))
+            if (!Uri.TryCreate(priorRun.NextUrl, UriKind.Absolute, out var parsedNext))
             {
-                checkpoint = checkpoint with
-                {
-                    LastRunCompletedAt = DateTimeOffset.UtcNow,
-                    LastRunOutcome = "failed",
-                    LastErrorMessage = $"Checkpoint NextUrl is not a valid absolute URI: '{checkpoint.NextUrl}'.",
-                    LastErrorAt = DateTimeOffset.UtcNow,
-                };
-                importRun.CompletedAtUtc = checkpoint.LastRunCompletedAt;
-                importRun.Outcome = "failed";
-                importRun.ErrorMessage = checkpoint.LastErrorMessage;
-                CheckpointStore.Write(_paths.CheckpointPath, checkpoint);
-                await SaveCheckpointAsync(db, checkpoint, ct);
-                await db.SaveChangesAsync(ct);
-                throw new InvalidDataException(checkpoint.LastErrorMessage);
+                throw new InvalidDataException($"Resume NextUrl is not a valid absolute URI: '{priorRun.NextUrl}'.");
             }
 
-            nextUrl = parsed;
+            nextUrl = parsedNext;
+
+            importRun = new ImportRunEntity
+            {
+                AnonymousId = anonymousId,
+                StartedAtUtc = now,
+                Outcome = "running",
+                NextUrl = priorRun.NextUrl,
+            };
+            await _importRunRepo.CreateAsync(importRun, ct);
+            await _unitOfWork.SaveChangesAsync(ct);
         }
 
         var pagesFetched = 0;
@@ -177,54 +120,32 @@ public sealed class LogFetcher
                 pagesFetched++;
                 logsFetched += page.Logs.Count;
 
-                var newLogs = new List<UserLog>(page.Logs.Count);
-                UserLog? lastAppended = null;
+                var newEntries = new List<UserLogEntryEntity>(page.Logs.Count);
 
-                foreach (var logItem in page.Logs)
+                foreach (var entry in page.Logs)
                 {
-                    if (string.IsNullOrEmpty(logItem.Id))
+                    if (string.IsNullOrEmpty(entry.Id))
                         continue;
 
-                    if (!existingIds.Add(logItem.Id))
+                    if (!existingIds.Add(entry.Id))
                         continue;
 
-                    newLogs.Add(logItem);
-                    lastAppended = logItem;
+                    newEntries.Add(MapUserLogEntry(entry, anonymousId));
                 }
 
-                if (newLogs.Count > 0)
+                if (newEntries.Count > 0)
                 {
-                    JsonlLogStore.Append(_paths.LogsJsonlPath, newLogs.Select(row => row.Raw));
-                    db.RawUserLogs.AddRange(newLogs.Select(MapRawUserLog));
-                    await db.SaveChangesAsync(ct);
-                    logsAppended += newLogs.Count;
-
-                    if (lastAppended is not null)
-                    {
-                        checkpoint = checkpoint with
-                        {
-                            LastLogId = lastAppended.Id,
-                            LastLogTimestamp = SafeUnixSeconds(lastAppended.Timestamp),
-                            LastLogTitle = lastAppended.Title,
-                            LastLogCategory = lastAppended.Category,
-                        };
-                    }
+                    await _userLogRepo.AddRangeAsync(newEntries, ct);
+                    await _unitOfWork.SaveChangesAsync(ct);
+                    logsAppended += newEntries.Count;
                 }
 
-                checkpoint = checkpoint with
-                {
-                    NextUrl = page.NextUrl?.OriginalString,
-                    TotalFetchedCount = checkpoint.TotalFetchedCount + page.Logs.Count,
-                    TotalAppendedCount = checkpoint.TotalAppendedCount + newLogs.Count,
-                };
-
+                importRun.NextUrl = page.NextUrl?.OriginalString;
                 importRun.PagesFetched = pagesFetched;
-                importRun.LogsFetched = checked((int)Math.Min(int.MaxValue, logsFetched));
-                importRun.LogsAppended = checked((int)Math.Min(int.MaxValue, logsAppended));
-
-                CheckpointStore.Write(_paths.CheckpointPath, checkpoint);
-                await SaveCheckpointAsync(db, checkpoint, ct);
-                await db.SaveChangesAsync(ct);
+                importRun.LogsFetched = logsFetched;
+                importRun.LogsAppended = logsAppended;
+                await _importRunRepo.UpdateAsync(importRun, ct); // semantic no-op; entity is tracked
+                await _unitOfWork.SaveChangesAsync(ct);
 
                 if (page.Logs.Count == 0)
                 {
@@ -240,66 +161,42 @@ public sealed class LogFetcher
                     break;
                 }
 
-                log?.Invoke($"Page {pagesFetched}: fetched={page.Logs.Count}, appended={newLogs.Count}, next={(page.NextUrl is null ? "(none)" : "present")}");
+                log?.Invoke($"Page {pagesFetched}: fetched={page.Logs.Count}, appended={newEntries.Count}, next=present");
                 nextUrl = page.NextUrl;
             }
 
-            checkpoint = checkpoint with
-            {
-                LastRunCompletedAt = DateTimeOffset.UtcNow,
-                LastRunOutcome = "completed",
-            };
-
-            importRun.CompletedAtUtc = checkpoint.LastRunCompletedAt;
+            importRun.CompletedAtUtc = DateTimeOffset.UtcNow;
             importRun.Outcome = "completed";
+            importRun.NextUrl = null;
             importRun.PagesFetched = pagesFetched;
-            importRun.LogsFetched = checked((int)Math.Min(int.MaxValue, logsFetched));
-            importRun.LogsAppended = checked((int)Math.Min(int.MaxValue, logsAppended));
+            importRun.LogsFetched = logsFetched;
+            importRun.LogsAppended = logsAppended;
+            await _importRunRepo.UpdateAsync(importRun, ct);
+            await _unitOfWork.SaveChangesAsync(ct);
 
-            CheckpointStore.Write(_paths.CheckpointPath, checkpoint);
-            await SaveCheckpointAsync(db, checkpoint, ct);
-            await db.SaveChangesAsync(ct);
-            return new FetchRunResult(checkpoint, pagesFetched, logsFetched, logsAppended);
+            return new FetchRunResult(pagesFetched, logsFetched, logsAppended);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            checkpoint = checkpoint with
-            {
-                LastRunCompletedAt = DateTimeOffset.UtcNow,
-                LastRunOutcome = "cancelled",
-            };
-
-            importRun.CompletedAtUtc = checkpoint.LastRunCompletedAt;
+            importRun.CompletedAtUtc = DateTimeOffset.UtcNow;
             importRun.Outcome = "cancelled";
             importRun.PagesFetched = pagesFetched;
-            importRun.LogsFetched = checked((int)Math.Min(int.MaxValue, logsFetched));
-            importRun.LogsAppended = checked((int)Math.Min(int.MaxValue, logsAppended));
-
-            CheckpointStore.Write(_paths.CheckpointPath, checkpoint);
-            await SaveCheckpointAsync(db, checkpoint, ct);
-            await db.SaveChangesAsync(ct);
+            importRun.LogsFetched = logsFetched;
+            importRun.LogsAppended = logsAppended;
+            await _importRunRepo.UpdateAsync(importRun, ct);
+            await _unitOfWork.SaveChangesAsync(CancellationToken.None);
             throw;
         }
         catch (Exception ex)
         {
-            checkpoint = checkpoint with
-            {
-                LastRunCompletedAt = DateTimeOffset.UtcNow,
-                LastRunOutcome = "failed",
-                LastErrorMessage = ex.Message,
-                LastErrorAt = DateTimeOffset.UtcNow,
-            };
-
-            importRun.CompletedAtUtc = checkpoint.LastRunCompletedAt;
+            importRun.CompletedAtUtc = DateTimeOffset.UtcNow;
             importRun.Outcome = "failed";
             importRun.ErrorMessage = ex.Message;
             importRun.PagesFetched = pagesFetched;
-            importRun.LogsFetched = checked((int)Math.Min(int.MaxValue, logsFetched));
-            importRun.LogsAppended = checked((int)Math.Min(int.MaxValue, logsAppended));
-
-            CheckpointStore.Write(_paths.CheckpointPath, checkpoint);
-            await SaveCheckpointAsync(db, checkpoint, ct);
-            await db.SaveChangesAsync(ct);
+            importRun.LogsFetched = logsFetched;
+            importRun.LogsAppended = logsAppended;
+            await _importRunRepo.UpdateAsync(importRun, ct);
+            await _unitOfWork.SaveChangesAsync(CancellationToken.None);
             throw;
         }
     }
@@ -340,59 +237,55 @@ public sealed class LogFetcher
         }
     }
 
-    private static async Task<Checkpoint?> ReadCheckpointFromDatabaseAsync(HappyGymStatsDbContext db, CancellationToken ct)
+    private static UserLogEntryEntity MapUserLogEntry(UserLog entry, Guid anonymousId)
     {
-        var entity = await db.ImportCheckpoints.AsNoTracking().SingleOrDefaultAsync(row => row.Name == "default", ct);
-        if (entity is null)
-            return null;
+        var raw = entry.Raw;
+        JsonElement data = default;
+        var hasData = raw.ValueKind == JsonValueKind.Object && raw.TryGetProperty("data", out data);
 
-        return new Checkpoint(
-            entity.NextUrl,
-            entity.LastLogId,
-            entity.LastLogTimestamp,
-            entity.LastLogTitle,
-            entity.LastLogCategory,
-            entity.TotalFetchedCount,
-            entity.TotalAppendedCount,
-            entity.LastRunStartedAt,
-            entity.LastRunCompletedAt,
-            entity.LastRunOutcome,
-            entity.LastErrorMessage,
-            entity.LastErrorAt);
-    }
-
-    private static async Task SaveCheckpointAsync(HappyGymStatsDbContext db, Checkpoint checkpoint, CancellationToken ct)
-    {
-        var entity = await db.ImportCheckpoints.SingleOrDefaultAsync(row => row.Name == "default", ct);
-        if (entity is null)
+        return new UserLogEntryEntity
         {
-            entity = new ImportCheckpointEntity { Name = "default" };
-            db.ImportCheckpoints.Add(entity);
-        }
-
-        entity.NextUrl = checkpoint.NextUrl;
-        entity.LastLogId = checkpoint.LastLogId;
-        entity.LastLogTimestamp = checkpoint.LastLogTimestamp;
-        entity.LastLogTitle = checkpoint.LastLogTitle;
-        entity.LastLogCategory = checkpoint.LastLogCategory;
-        entity.TotalFetchedCount = checkpoint.TotalFetchedCount;
-        entity.TotalAppendedCount = checkpoint.TotalAppendedCount;
-        entity.LastRunStartedAt = checkpoint.LastRunStartedAt;
-        entity.LastRunCompletedAt = checkpoint.LastRunCompletedAt;
-        entity.LastRunOutcome = checkpoint.LastRunOutcome;
-        entity.LastErrorMessage = checkpoint.LastErrorMessage;
-        entity.LastErrorAt = checkpoint.LastErrorAt;
-    }
-
-    private static RawUserLogEntity MapRawUserLog(UserLog log)
-        => new()
-        {
-            LogId = log.Id,
-            OccurredAtUtc = SafeUnixSeconds(log.Timestamp) ?? DateTimeOffset.UnixEpoch,
-            Title = log.Title,
-            Category = log.Category,
-            RawJson = JsonSerializer.Serialize(log.Raw),
+            AnonymousId = anonymousId,
+            LogEntryId = entry.Id,
+            OccurredAtUtc = SafeUnixSeconds(entry.Timestamp) ?? DateTimeOffset.UnixEpoch,
+            LogTypeId = entry.LogTypeId ?? 0,
+            HappyBeforeApi = hasData ? TryGetInt(data, "happy_before") : null,
+            HappyUsed = hasData ? TryGetInt(data, "happy_used") : null,
+            HappyIncreased = hasData ? TryGetInt(data, "happy_increased") : null,
+            HappyDecreased = hasData ? TryGetInt(data, "happy_decreased") : null,
+            EnergyUsed = hasData ? TryGetDouble(data, "energy_used") : null,
+            StrengthBefore = hasData ? TryGetDouble(data, "strength_before") : null,
+            StrengthIncreased = hasData ? TryGetDouble(data, "strength_increased") : null,
+            DefenseBefore = hasData ? TryGetDouble(data, "defense_before") : null,
+            DefenseIncreased = hasData ? TryGetDouble(data, "defense_increased") : null,
+            SpeedBefore = hasData ? TryGetDouble(data, "speed_before") : null,
+            SpeedIncreased = hasData ? TryGetDouble(data, "speed_increased") : null,
+            DexterityBefore = hasData ? TryGetDouble(data, "dexterity_before") : null,
+            DexterityIncreased = hasData ? TryGetDouble(data, "dexterity_increased") : null,
+            MaxHappyBefore = hasData ? TryGetInt(data, "maximum_happy_before") : null,
+            MaxHappyAfter = hasData ? TryGetInt(data, "maximum_happy_after") : null,
         };
+    }
+
+    private static double? TryGetDouble(JsonElement obj, string key)
+    {
+        if (!obj.TryGetProperty(key, out var el)) return null;
+        return el.ValueKind switch
+        {
+            JsonValueKind.Number when el.TryGetDouble(out var d) => d,
+            JsonValueKind.String when double.TryParse(el.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var d) => d,
+            _ => null,
+        };
+    }
+
+    private static int? TryGetInt(JsonElement obj, string key)
+    {
+        if (!obj.TryGetProperty(key, out var el)) return null;
+        if (el.TryGetInt32(out var i)) return i;
+        if (el.TryGetDouble(out var d)) return (int)d;
+        if (el.ValueKind == JsonValueKind.String && double.TryParse(el.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var s)) return (int)s;
+        return null;
+    }
 
     private static DateTimeOffset? SafeUnixSeconds(long unixSeconds)
     {

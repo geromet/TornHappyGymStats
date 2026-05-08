@@ -1,15 +1,15 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using HappyGymStats.Api;
 using HappyGymStats.Core.Fetch;
 using HappyGymStats.Core.Reconstruction;
-using HappyGymStats.Core.Storage;
+using HappyGymStats.Core.Repositories;
+using HappyGymStats.Core.Surfaces;
 using HappyGymStats.Core.Torn;
 using HappyGymStats.Data;
 using HappyGymStats.Data.Entities;
+using HappyGymStats.Data.Repositories;
 using HappyGymStats.Data.Storage;
-using HappyGymStats.Legacy.Cli.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -19,14 +19,10 @@ namespace HappyGymStats.Tests;
 public sealed class DbPipelineIntegrationTests
 {
     [Fact]
-    public async Task Fetch_writes_raw_logs_checkpoint_and_run_state_into_sqlite()
+    public async Task Fetch_writes_user_log_entries_and_run_state_into_sqlite()
     {
         var tempDir = CreateTempDirectory();
-        var paths = new AppPaths(
-            DataDirectory: tempDir,
-            QuarantineDirectory: Path.Combine(tempDir, "quarantine"),
-            CheckpointPath: Path.Combine(tempDir, "checkpoint.json"),
-            LogsJsonlPath: Path.Combine(tempDir, "userlogs.jsonl"));
+        var dbPath = SqlitePaths.ResolveDatabasePath(tempDir);
 
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
@@ -37,8 +33,8 @@ public sealed class DbPipelineIntegrationTests
                     {
                       "id": "log-1",
                       "timestamp": 1777546189,
-                      "details": { "title": "Gym train", "category": "Gym" },
-                      "data": { "happy_used": 25 }
+                      "details": { "id": 5301, "title": "Gym train defense", "category": "Gym" },
+                      "data": { "happy_used": 25, "energy_used": 20, "defense_before": "7566.34", "defense_increased": "30.6" }
                     }
                   ],
                   "_metadata": { "links": { "prev": null } }
@@ -48,14 +44,29 @@ public sealed class DbPipelineIntegrationTests
                 "application/json")
         });
 
-        using var httpClient = new HttpClient(handler)
-        {
-            Timeout = TimeSpan.FromSeconds(5),
-        };
+        using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
 
-        var fetcher = new LogFetcher(paths, new TornApiClient(httpClient));
+        var services = new ServiceCollection();
+        services.AddDbContext<HappyGymStatsDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
+        services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<HappyGymStatsDbContext>());
+        services.AddScoped<IUserLogEntryRepository, UserLogEntryRepository>();
+        services.AddScoped<IImportRunRepository, ImportRunRepository>();
+        services.AddScoped<LogFetcher>();
+        services.AddSingleton(new TornApiClient(httpClient));
+        await using var provider = services.BuildServiceProvider();
+
+        using (var migrationScope = provider.CreateScope())
+        {
+            var migrationDb = migrationScope.ServiceProvider.GetRequiredService<HappyGymStatsDbContext>();
+            await migrationDb.Database.MigrateAsync();
+        }
+
+        using var scope = provider.CreateScope();
+        var fetcher = scope.ServiceProvider.GetRequiredService<LogFetcher>();
+        var testAnonymousId = new Guid("00000000-0000-0000-0000-00000000002a");
         var result = await fetcher.RunAsync(
             apiKey: "test-key",
+            anonymousId: testAnonymousId,
             mode: FetchMode.Fresh,
             options: FetchOptions.Default(new Uri("https://example.test/user/log?cat=25"), TimeSpan.Zero),
             ct: CancellationToken.None);
@@ -63,108 +74,26 @@ public sealed class DbPipelineIntegrationTests
         Assert.Equal(1, result.PagesFetched);
         Assert.Equal(1, result.LogsFetched);
         Assert.Equal(1, result.LogsAppended);
-        Assert.True(File.Exists(paths.LogsJsonlPath));
-        Assert.True(File.Exists(paths.CheckpointPath));
 
-        var dbPath = SqlitePaths.ResolveDatabasePath(paths.DataDirectory);
         var dbOptions = new DbContextOptionsBuilder<HappyGymStatsDbContext>()
             .UseSqlite($"Data Source={dbPath}")
             .Options;
 
         await using var db = new HappyGymStatsDbContext(dbOptions);
-        var rawRows = await db.RawUserLogs.AsNoTracking().ToListAsync();
-        Assert.Single(rawRows);
-        Assert.Equal("log-1", rawRows[0].LogId);
-
-        var checkpoint = await db.ImportCheckpoints.AsNoTracking().SingleAsync();
-        Assert.Equal("completed", checkpoint.LastRunOutcome);
-        Assert.Equal(1, checkpoint.TotalFetchedCount);
-        Assert.Equal(1, checkpoint.TotalAppendedCount);
+        var entries = await db.UserLogEntries.AsNoTracking().ToListAsync();
+        Assert.Single(entries);
+        Assert.Equal("log-1", entries[0].LogEntryId);
+        Assert.Equal(testAnonymousId, entries[0].AnonymousId);
+        Assert.Equal(5301, entries[0].LogTypeId);
+        Assert.Equal(25, entries[0].HappyUsed);
 
         var run = await db.ImportRuns.AsNoTracking().SingleAsync();
         Assert.Equal("completed", run.Outcome);
+        Assert.Equal(testAnonymousId, run.AnonymousId);
         Assert.Equal(1, run.PagesFetched);
         Assert.Equal(1, run.LogsFetched);
         Assert.Equal(1, run.LogsAppended);
-    }
-
-    [Fact]
-    public async Task Reconstruction_can_read_from_sqlite_when_legacy_jsonl_is_missing()
-    {
-        var fixture = DatasetPaths.Discover();
-        using var _ = fixture.UseRepoRootAsCurrentDirectory();
-
-        var tempDir = CreateTempDirectory();
-        var tempInputPaths = new AppPaths(
-            DataDirectory: tempDir,
-            QuarantineDirectory: Path.Combine(tempDir, "quarantine"),
-            CheckpointPath: Path.Combine(Path.GetDirectoryName(fixture.UserLogsJsonlPath)!, "checkpoint.json"),
-            LogsJsonlPath: fixture.UserLogsJsonlPath);
-
-        var dbPath = SqlitePaths.ResolveDatabasePath(tempDir);
-        var migrate = await LegacySqliteMigrator.RunAsync(tempInputPaths, dbPath, CancellationToken.None);
-        Assert.True(migrate.Success, migrate.ErrorMessage);
-
-        var runtimePaths = new AppPaths(
-            DataDirectory: tempDir,
-            QuarantineDirectory: Path.Combine(tempDir, "quarantine"),
-            CheckpointPath: Path.Combine(tempDir, "checkpoint.json"),
-            LogsJsonlPath: Path.Combine(tempDir, "missing-userlogs.jsonl"));
-
-        var runner = new ReconstructionRunner(runtimePaths);
-        var result = runner.Run(
-            currentHappy: 0,
-            anchorTimeUtc: DateTimeOffset.UtcNow,
-            ct: CancellationToken.None);
-
-        Assert.True(result.Success, result.ErrorMessage);
-        Assert.NotEmpty(result.DerivedGymTrains);
-        Assert.True(File.Exists(runtimePaths.DerivedGymTrainsJsonlPath));
-        Assert.True(File.Exists(runtimePaths.DerivedHappyEventsJsonlPath));
-
-        var dbOptions = new DbContextOptionsBuilder<HappyGymStatsDbContext>()
-            .UseSqlite($"Data Source={dbPath}")
-            .Options;
-
-        await using var db = new HappyGymStatsDbContext(dbOptions);
-        var derivedTrainsCount = await db.DerivedGymTrains.AsNoTracking().CountAsync();
-        Assert.True(derivedTrainsCount > 0);
-        Assert.True(await db.DerivedHappyEvents.AsNoTracking().AnyAsync());
-
-        var provenance = await db.ModifierProvenance
-            .AsNoTracking()
-            .OrderBy(p => p.DerivedGymTrainLogId)
-            .ThenBy(p => p.Scope)
-            .ToListAsync();
-
-        Assert.Equal(derivedTrainsCount * 3, provenance.Count);
-
-        Assert.All(
-            provenance.Where(p => p.Scope == HappyReconstructionModels.ModifierProvenanceScopes.Personal),
-            row =>
-            {
-                Assert.Equal(HappyReconstructionModels.ModifierProvenanceStatuses.Verified, row.VerificationStatus);
-                Assert.Equal(HappyReconstructionModels.ModifierProvenanceReasonCodes.SourceLog, row.VerificationReasonCode);
-                Assert.False(string.IsNullOrWhiteSpace(row.SubjectId));
-            });
-
-        Assert.All(
-            provenance.Where(p => p.Scope == HappyReconstructionModels.ModifierProvenanceScopes.Faction),
-            row =>
-            {
-                Assert.Equal(HappyReconstructionModels.ModifierProvenanceStatuses.Unresolved, row.VerificationStatus);
-                Assert.Equal(HappyReconstructionModels.ModifierProvenanceReasonCodes.MissingFactionRecord, row.VerificationReasonCode);
-                Assert.False(string.IsNullOrWhiteSpace(row.FactionId));
-            });
-
-        Assert.All(
-            provenance.Where(p => p.Scope == HappyReconstructionModels.ModifierProvenanceScopes.Company),
-            row =>
-            {
-                Assert.Equal(HappyReconstructionModels.ModifierProvenanceStatuses.Unresolved, row.VerificationStatus);
-                Assert.Equal(HappyReconstructionModels.ModifierProvenanceReasonCodes.MissingCompanyRecord, row.VerificationReasonCode);
-                Assert.False(string.IsNullOrWhiteSpace(row.CompanyId));
-            });
+        Assert.Null(run.NextUrl);
     }
 
     [Fact]
@@ -181,42 +110,48 @@ public sealed class DbPipelineIntegrationTests
         {
             await db.Database.EnsureCreatedAsync();
 
-            db.RawUserLogs.AddRange(
-                new RawUserLogEntity
+            db.UserLogEntries.AddRange(
+                new UserLogEntryEntity
                 {
-                    LogId = "log-verified",
+                    AnonymousId = Guid.Empty,
+                    LogEntryId = "log-verified",
                     OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
-                    RawJson = """{"details":{"category":"Gym"},"data":{"energy_used":10,"strength_before":1000,"strength_increased":12.5}}"""
+                    LogTypeId = 1,
+                    HappyUsed = 25,
+                    HappyBeforeTrain = 4200,
+                    EnergyUsed = 10,
+                    StrengthBefore = 1000,
+                    StrengthIncreased = 12.5,
                 },
-                new RawUserLogEntity
+                new UserLogEntryEntity
                 {
-                    LogId = "log-unresolved",
+                    AnonymousId = Guid.Empty,
+                    LogEntryId = "log-unresolved",
                     OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:05:00Z"),
-                    RawJson = """{"details":{"category":"Gym"},"data":{"energy_used":10,"speed_before":900,"speed_increased":8.0}}"""
+                    LogTypeId = 2,
+                    HappyUsed = 25,
+                    HappyBeforeTrain = 3900,
+                    EnergyUsed = 10,
+                    SpeedBefore = 900,
+                    SpeedIncreased = 8.0,
                 });
-
-            db.DerivedGymTrains.AddRange(
-                new DerivedGymTrainEntity { LogId = "log-verified", OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"), HappyBeforeTrain = 4200 },
-                new DerivedGymTrainEntity { LogId = "log-unresolved", OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:05:00Z"), HappyBeforeTrain = 3900 });
 
             db.ModifierProvenance.AddRange(
                 new ModifierProvenanceEntity
                 {
-                    DerivedGymTrainLogId = "log-verified",
-                    Scope = "personal",
-                    SubjectId = "user-1",
-                    VerificationStatus = "verified",
-                    VerificationReasonCode = "source-log",
-                    ValidFromUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z")
+                    AnonymousId = Guid.Empty,
+                    LogEntryId = "log-verified",
+                    Scope = (int)ModifierScope.Personal,
+                    SubjectId = 1,
+                    VerificationStatus = (int)VerificationStatus.Verified,
                 },
                 new ModifierProvenanceEntity
                 {
-                    DerivedGymTrainLogId = "log-unresolved",
-                    Scope = "faction",
-                    FactionId = "unknown-faction",
-                    VerificationStatus = "unresolved",
-                    VerificationReasonCode = "missing-faction-record",
-                    ValidFromUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z")
+                    AnonymousId = Guid.Empty,
+                    LogEntryId = "log-unresolved",
+                    Scope = (int)ModifierScope.Faction,
+                    FactionId = 9001,
+                    VerificationStatus = (int)VerificationStatus.Unresolved,
                 });
 
             await db.SaveChangesAsync();
@@ -224,6 +159,9 @@ public sealed class DbPipelineIntegrationTests
 
         var services = new ServiceCollection();
         services.AddDbContext<HappyGymStatsDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
+        services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<HappyGymStatsDbContext>());
+        services.AddScoped<IUserLogEntryRepository, UserLogEntryRepository>();
+        services.AddScoped<IModifierProvenanceRepository, ModifierProvenanceRepository>();
         await using var provider = services.BuildServiceProvider();
 
         var cacheDir = Path.Combine(tempDir, "surfaces");
@@ -244,16 +182,15 @@ public sealed class DbPipelineIntegrationTests
             .Select(arr => arr.EnumerateArray().Select(x => x.GetString()).Where(x => x is not null).Cast<string>().ToArray())
             .ToArray();
 
-        Assert.Equal(new[] { "source-log" }, reasons[0]);
-        Assert.Equal(new[] { "missing-faction-record" }, reasons[1]);
+        Assert.Equal(new[] { "personal-verified" }, reasons[0]);
+        Assert.Equal(new[] { "faction-unresolved" }, reasons[1]);
 
         var warnings = gymCloud.GetProperty("provenanceWarnings").EnumerateArray().ToArray();
         Assert.Single(warnings);
         Assert.Equal("log-unresolved", warnings[0].GetProperty("LogId").GetString());
         Assert.Equal("faction", warnings[0].GetProperty("Scope").GetString());
         Assert.Equal("unresolved", warnings[0].GetProperty("VerificationStatus").GetString());
-        Assert.Equal("missing-faction-record", warnings[0].GetProperty("ReasonCode").GetString());
-        Assert.Equal("/factions/unknown-faction", warnings[0].GetProperty("LinkTarget").GetString());
+        Assert.Equal("/factions/9001", warnings[0].GetProperty("LinkTarget").GetString());
         Assert.False(warnings[0].GetProperty("HasManualOverride").GetBoolean());
         Assert.Equal(JsonValueKind.Null, warnings[0].GetProperty("ManualOverrideSource").ValueKind);
         Assert.Equal(1, warnings[0].GetProperty("RowCount").GetInt32());
@@ -287,18 +224,17 @@ public sealed class DbPipelineIntegrationTests
         {
             await db.Database.EnsureCreatedAsync();
 
-            db.RawUserLogs.Add(new RawUserLogEntity
+            db.UserLogEntries.Add(new UserLogEntryEntity
             {
-                LogId = "log-no-provenance",
+                AnonymousId = Guid.Empty,
+                LogEntryId = "log-no-provenance",
                 OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
-                RawJson = """{"details":{"category":"Gym"},"data":{"energy_used":5,"dexterity_before":500,"dexterity_increased":5}}"""
-            });
-
-            db.DerivedGymTrains.Add(new DerivedGymTrainEntity
-            {
-                LogId = "log-no-provenance",
-                OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
-                HappyBeforeTrain = 2500
+                LogTypeId = 1,
+                HappyUsed = 10,
+                HappyBeforeTrain = 2500,
+                EnergyUsed = 5,
+                DexterityBefore = 500,
+                DexterityIncreased = 5,
             });
 
             await db.SaveChangesAsync();
@@ -306,6 +242,9 @@ public sealed class DbPipelineIntegrationTests
 
         var services = new ServiceCollection();
         services.AddDbContext<HappyGymStatsDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
+        services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<HappyGymStatsDbContext>());
+        services.AddScoped<IUserLogEntryRepository, UserLogEntryRepository>();
+        services.AddScoped<IModifierProvenanceRepository, ModifierProvenanceRepository>();
         await using var provider = services.BuildServiceProvider();
 
         var cacheDir = Path.Combine(tempDir, "surfaces");
@@ -350,34 +289,34 @@ public sealed class DbPipelineIntegrationTests
         {
             await db.Database.EnsureCreatedAsync();
 
-            db.RawUserLogs.Add(new RawUserLogEntity
+            db.UserLogEntries.Add(new UserLogEntryEntity
             {
-                LogId = "log-a",
+                AnonymousId = Guid.Empty,
+                LogEntryId = "log-a",
                 OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
-                RawJson = """{"details":{"category":"Gym"},"data":{"energy_used":5,"strength_before":500,"strength_increased":5}}"""
-            });
-
-            db.DerivedGymTrains.Add(new DerivedGymTrainEntity
-            {
-                LogId = "log-a",
-                OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
-                HappyBeforeTrain = 2500
+                LogTypeId = 1,
+                HappyUsed = 10,
+                HappyBeforeTrain = 2500,
+                EnergyUsed = 5,
+                StrengthBefore = 500,
+                StrengthIncreased = 5,
             });
 
             await db.SaveChangesAsync();
 
-            await db.Database.ExecuteSqlRawAsync("PRAGMA ignore_check_constraints = ON;");
+            // Insert one valid faction/unresolved row and one row with an out-of-range scope (99)
+            // that ScopeIntToString maps to "scope-99", which is not in KnownScopes and gets skipped.
             await db.Database.ExecuteSqlRawAsync(
-                "INSERT INTO ModifierProvenance (DerivedGymTrainLogId, Scope, SubjectId, FactionId, CompanyId, ValidFromUtc, VerificationStatus, VerificationReasonCode) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7});",
-                "log-a", "faction", null, "f1", null, DateTimeOffset.Parse("2026-01-01T00:00:00Z"), "unresolved", "missing-faction-record");
+                $"INSERT INTO ModifierProvenance (AnonymousId, LogEntryId, Scope, FactionId, VerificationStatus) VALUES ('{Guid.Empty}', 'log-a', 2, 9001, 2);");
             await db.Database.ExecuteSqlRawAsync(
-                "INSERT INTO ModifierProvenance (DerivedGymTrainLogId, Scope, SubjectId, FactionId, CompanyId, ValidFromUtc, VerificationStatus, VerificationReasonCode) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7});",
-                "log-a", "invalid-scope", null, null, null, DateTimeOffset.Parse("2026-01-01T00:00:00Z"), "unresolved", "bad-scope");
-            await db.Database.ExecuteSqlRawAsync("PRAGMA ignore_check_constraints = OFF;");
+                $"INSERT INTO ModifierProvenance (AnonymousId, LogEntryId, Scope, VerificationStatus) VALUES ('{Guid.Empty}', 'log-a', 99, 2);");
         }
 
         var services = new ServiceCollection();
         services.AddDbContext<HappyGymStatsDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
+        services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<HappyGymStatsDbContext>());
+        services.AddScoped<IUserLogEntryRepository, UserLogEntryRepository>();
+        services.AddScoped<IModifierProvenanceRepository, ModifierProvenanceRepository>();
         await using var provider = services.BuildServiceProvider();
 
         var cacheDir = Path.Combine(tempDir, "surfaces");
@@ -394,7 +333,6 @@ public sealed class DbPipelineIntegrationTests
                 LogId = w.GetProperty("LogId").GetString(),
                 Scope = w.GetProperty("Scope").GetString(),
                 Status = w.GetProperty("VerificationStatus").GetString(),
-                Reason = w.GetProperty("ReasonCode").GetString()
             })
             .ToArray();
 
@@ -402,7 +340,6 @@ public sealed class DbPipelineIntegrationTests
         Assert.Equal("log-a", warnings[0].LogId);
         Assert.Equal("faction", warnings[0].Scope);
         Assert.Equal("unresolved", warnings[0].Status);
-        Assert.Equal("missing-faction-record", warnings[0].Reason);
 
         var warningDiagnostics = json.RootElement.GetProperty("meta").GetProperty("provenanceWarningsDiagnostics");
         Assert.Equal(1, warningDiagnostics.GetProperty("warningCount").GetInt32());
@@ -423,28 +360,26 @@ public sealed class DbPipelineIntegrationTests
         {
             await db.Database.EnsureCreatedAsync();
 
-            db.RawUserLogs.Add(new RawUserLogEntity
+            db.UserLogEntries.Add(new UserLogEntryEntity
             {
-                LogId = "log-override",
+                AnonymousId = Guid.Empty,
+                LogEntryId = "log-override",
                 OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
-                RawJson = """{"details":{"category":"Gym"},"data":{"energy_used":5,"strength_before":500,"strength_increased":5}}"""
-            });
-
-            db.DerivedGymTrains.Add(new DerivedGymTrainEntity
-            {
-                LogId = "log-override",
-                OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
-                HappyBeforeTrain = 2500
+                LogTypeId = 1,
+                HappyUsed = 10,
+                HappyBeforeTrain = 2500,
+                EnergyUsed = 5,
+                StrengthBefore = 500,
+                StrengthIncreased = 5,
             });
 
             db.ModifierProvenance.Add(new ModifierProvenanceEntity
             {
-                DerivedGymTrainLogId = "log-override",
-                Scope = "faction",
-                FactionId = "unknown-faction",
-                VerificationStatus = "unresolved",
-                VerificationReasonCode = "missing-faction-record",
-                ValidFromUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z")
+                AnonymousId = Guid.Empty,
+                LogEntryId = "log-override",
+                Scope = (int)ModifierScope.Faction,
+                FactionId = 99999,
+                VerificationStatus = (int)VerificationStatus.Unresolved,
             });
 
             await db.SaveChangesAsync();
@@ -452,6 +387,8 @@ public sealed class DbPipelineIntegrationTests
 
         var services = new ServiceCollection();
         services.AddDbContext<HappyGymStatsDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
+        services.AddScoped<IUserLogEntryRepository, UserLogEntryRepository>();
+        services.AddScoped<IModifierProvenanceRepository, ModifierProvenanceRepository>();
         await using var provider = services.BuildServiceProvider();
 
         var cacheDir = Path.Combine(tempDir, "surfaces");
@@ -463,7 +400,7 @@ public sealed class DbPipelineIntegrationTests
               "overrides": [
                 {
                   "scope": "faction",
-                  "placeholderId": "unknown-faction",
+                  "placeholderId": "99999",
                   "resolvedId": "321",
                   "linkTarget": "/factions/321"
                 }

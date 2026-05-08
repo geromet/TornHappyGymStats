@@ -4,6 +4,7 @@ using HappyGymStats.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
@@ -15,292 +16,278 @@ namespace HappyGymStats.Data.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "8.0.26");
+            modelBuilder
+                .HasAnnotation("ProductVersion", "10.0.4")
+                .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
-            modelBuilder.Entity("HappyGymStats.Data.Entities.DerivedGymTrainEntity", b =>
+            NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.Entity("HappyGymStats.Data.Entities.AffiliationEventEntity", b =>
                 {
-                    b.Property<string>("LogId")
-                        .HasColumnType("TEXT");
+                    b.Property<Guid>("AnonymousId")
+                        .HasColumnType("uuid");
 
-                    b.Property<bool>("ClampedToMax")
-                        .HasColumnType("INTEGER");
+                    b.Property<string>("SourceLogEntryId")
+                        .HasColumnType("text");
 
-                    b.Property<int>("HappyAfterTrain")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("AffiliationId")
+                        .HasColumnType("integer");
 
-                    b.Property<int>("HappyBeforeTrain")
-                        .HasColumnType("INTEGER");
+                    b.Property<byte[]>("EncryptedAffiliationId")
+                        .HasColumnType("bytea");
 
-                    b.Property<int>("HappyUsed")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("LogTypeId")
+                        .HasColumnType("integer");
 
-                    b.Property<int?>("MaxHappyAtTimeUtc")
-                        .HasColumnType("INTEGER");
+                    b.Property<int?>("PositionAfter")
+                        .HasColumnType("integer");
 
-                    b.Property<DateTime>("OccurredAtUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<int?>("PositionBefore")
+                        .HasColumnType("integer");
 
-                    b.Property<int>("RegenHappyGained")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("Scope")
+                        .HasColumnType("integer");
 
-                    b.Property<long>("RegenTicksApplied")
-                        .HasColumnType("INTEGER");
+                    b.Property<int?>("SenderId")
+                        .HasColumnType("integer");
 
-                    b.HasKey("LogId");
+                    b.HasKey("AnonymousId", "SourceLogEntryId");
 
-                    b.HasIndex("OccurredAtUtc");
+                    b.HasIndex("AnonymousId", "Scope", "AffiliationId");
 
-                    b.ToTable("DerivedGymTrains");
+                    b.ToTable("AffiliationEvents");
                 });
 
-            modelBuilder.Entity("HappyGymStats.Data.Entities.DerivedHappyEventEntity", b =>
+            modelBuilder.Entity("HappyGymStats.Data.Entities.FactionIdMapEntity", b =>
                 {
-                    b.Property<string>("EventId")
-                        .HasColumnType("TEXT");
+                    b.Property<int>("AffiliationId")
+                        .HasColumnType("integer");
 
-                    b.Property<bool>("ClampedToMax")
-                        .HasColumnType("INTEGER");
+                    b.Property<Guid>("FactionAnonymousId")
+                        .HasColumnType("uuid");
 
-                    b.Property<int?>("Delta")
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("Scope")
+                        .HasColumnType("integer");
 
-                    b.Property<string>("EventType")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
+                    b.HasKey("AffiliationId");
 
-                    b.Property<int?>("HappyAfterEvent")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("HappyBeforeEvent")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("HappyUsed")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("MaxHappyAtTimeUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Note")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("OccurredAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("SortOrder")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("SourceLogId")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("EventId");
-
-                    b.HasIndex("EventType");
-
-                    b.HasIndex("OccurredAtUtc");
-
-                    b.HasIndex("SortOrder");
-
-                    b.HasIndex("SourceLogId");
-
-                    b.ToTable("DerivedHappyEvents");
-                });
-
-            modelBuilder.Entity("HappyGymStats.Data.Entities.ImportCheckpointEntity", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime?>("LastErrorAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("LastErrorMessage")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("LastLogCategory")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("LastLogId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("LastLogTimestamp")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("LastLogTitle")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("LastRunCompletedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("LastRunOutcome")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("LastRunStartedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("NextUrl")
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("TotalAppendedCount")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<long>("TotalFetchedCount")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Name")
+                    b.HasIndex("FactionAnonymousId")
                         .IsUnique();
 
-                    b.ToTable("ImportCheckpoints");
+                    b.ToTable("FactionIdMap");
+                });
+
+            modelBuilder.Entity("HappyGymStats.Data.Entities.FactionMembershipEntity", b =>
+                {
+                    b.Property<Guid>("FactionAnonymousId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MemberAnonymousId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("FactionAnonymousId", "MemberAnonymousId");
+
+                    b.HasIndex("MemberAnonymousId");
+
+                    b.ToTable("FactionMembership");
+                });
+
+            modelBuilder.Entity("HappyGymStats.Data.Entities.IdentityMapEntity", b =>
+                {
+                    b.Property<Guid>("AnonymousId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte[]>("EncryptedTornPlayerId")
+                        .HasColumnType("bytea");
+
+                    b.Property<DateTime?>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsProvisional")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("KeycloakSub")
+                        .HasColumnType("text");
+
+                    b.Property<byte[]>("PublicKey")
+                        .HasColumnType("bytea");
+
+                    b.HasKey("AnonymousId");
+
+                    b.HasIndex("KeycloakSub")
+                        .IsUnique()
+                        .HasFilter("\"KeycloakSub\" IS NOT NULL");
+
+                    b.ToTable("IdentityMap");
                 });
 
             modelBuilder.Entity("HappyGymStats.Data.Entities.ImportRunEntity", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<Guid?>("AnonymousId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ErrorMessage")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("text");
 
                     b.Property<long>("LogsAppended")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("bigint");
 
                     b.Property<long>("LogsFetched")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("NextUrl")
+                        .HasColumnType("text");
 
                     b.Property<string>("Outcome")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("text");
 
                     b.Property<int>("PagesFetched")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("StartedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
                     b.HasIndex("Outcome");
 
-                    b.HasIndex("StartedAtUtc");
+                    b.HasIndex("AnonymousId", "StartedAtUtc");
 
                     b.ToTable("ImportRuns");
                 });
 
-            modelBuilder.Entity("HappyGymStats.Data.Entities.ModifierProvenanceEntity", b =>
+            modelBuilder.Entity("HappyGymStats.Data.Entities.LogTypeEntity", b =>
                 {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                    b.Property<int>("LogTypeId")
+                        .HasColumnType("integer");
 
-                    b.Property<string>("CompanyId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("DerivedGymTrainLogId")
+                    b.Property<string>("LogTypeTitle")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("text");
 
-                    b.Property<string>("FactionId")
-                        .HasColumnType("TEXT");
+                    b.HasKey("LogTypeId");
 
-                    b.Property<string>("Scope")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("SubjectId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("ValidFromUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("ValidToUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("VerificationDetails")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("VerificationReasonCode")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("VerificationStatus")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("VerificationStatus");
-
-                    b.HasIndex("DerivedGymTrainLogId", "Scope")
-                        .IsUnique();
-
-                    b.HasIndex("Scope", "ValidFromUtc", "ValidToUtc");
-
-                    b.ToTable("ModifierProvenance", t =>
-                        {
-                            t.HasCheckConstraint("CK_ModifierProvenance_CompanyRequired", "Scope <> 'company' OR (CompanyId IS NOT NULL AND length(trim(CompanyId)) > 0)");
-
-                            t.HasCheckConstraint("CK_ModifierProvenance_FactionRequired", "Scope <> 'faction' OR (FactionId IS NOT NULL AND length(trim(FactionId)) > 0)");
-
-                            t.HasCheckConstraint("CK_ModifierProvenance_Scope", "Scope IN ('personal', 'faction', 'company')");
-
-                            t.HasCheckConstraint("CK_ModifierProvenance_SubjectRequired", "Scope <> 'personal' OR (SubjectId IS NOT NULL AND length(trim(SubjectId)) > 0)");
-
-                            t.HasCheckConstraint("CK_ModifierProvenance_VerificationStatus", "VerificationStatus IN ('verified', 'unresolved', 'unavailable')");
-                        });
+                    b.ToTable("LogTypes");
                 });
 
-            modelBuilder.Entity("HappyGymStats.Data.Entities.RawUserLogEntity", b =>
+            modelBuilder.Entity("HappyGymStats.Data.Entities.ModifierProvenanceEntity", b =>
                 {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                    b.Property<Guid>("AnonymousId")
+                        .HasColumnType("uuid");
 
-                    b.Property<string>("Category")
-                        .HasColumnType("TEXT");
+                    b.Property<string>("LogEntryId")
+                        .HasColumnType("text");
 
-                    b.Property<string>("LogId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
+                    b.Property<int>("Scope")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("FactionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SubjectId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("VerificationStatus")
+                        .HasColumnType("integer");
+
+                    b.HasKey("AnonymousId", "LogEntryId", "Scope");
+
+                    b.HasIndex("AnonymousId", "VerificationStatus");
+
+                    b.ToTable("ModifierProvenance");
+                });
+
+            modelBuilder.Entity("HappyGymStats.Data.Entities.UserLogEntryEntity", b =>
+                {
+                    b.Property<Guid>("AnonymousId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LogEntryId")
+                        .HasColumnType("text");
+
+                    b.Property<double?>("DefenseBefore")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("DefenseIncreased")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("DexterityBefore")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("DexterityIncreased")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("EnergyUsed")
+                        .HasColumnType("double precision");
+
+                    b.Property<int?>("HappyBeforeApi")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("HappyBeforeDelta")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("HappyBeforeTrain")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("HappyDecreased")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("HappyIncreased")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("HappyUsed")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LogTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaxHappyAfter")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaxHappyBefore")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("OccurredAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("RawJson")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
+                    b.Property<int?>("PropertyId")
+                        .HasColumnType("integer");
 
-                    b.Property<string>("Title")
-                        .HasColumnType("TEXT");
+                    b.Property<double?>("SpeedBefore")
+                        .HasColumnType("double precision");
 
-                    b.HasKey("Id");
+                    b.Property<double?>("SpeedIncreased")
+                        .HasColumnType("double precision");
 
-                    b.HasIndex("LogId")
-                        .IsUnique();
+                    b.Property<double?>("StrengthBefore")
+                        .HasColumnType("double precision");
 
-                    b.HasIndex("OccurredAtUtc");
+                    b.Property<double?>("StrengthIncreased")
+                        .HasColumnType("double precision");
 
-                    b.ToTable("RawUserLogs");
-                });
+                    b.HasKey("AnonymousId", "LogEntryId");
 
-            modelBuilder.Entity("HappyGymStats.Data.Entities.ModifierProvenanceEntity", b =>
-                {
-                    b.HasOne("HappyGymStats.Data.Entities.DerivedGymTrainEntity", "DerivedGymTrain")
-                        .WithMany()
-                        .HasForeignKey("DerivedGymTrainLogId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                    b.HasIndex("AnonymousId", "LogTypeId");
 
-                    b.Navigation("DerivedGymTrain");
+                    b.HasIndex("AnonymousId", "OccurredAtUtc");
+
+                    b.ToTable("UserLogEntries");
                 });
 #pragma warning restore 612, 618
         }

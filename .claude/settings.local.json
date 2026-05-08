@@ -2,7 +2,39 @@
   "permissions": {
     "allow": [
       "Bash(xargs cat *)",
-      "Bash(dotnet build *)"
+      "Bash(dotnet build *)",
+      "Bash(dotnet ef *)",
+      "Bash(dotnet --list-sdks)",
+      "Bash(dotnet --list-runtimes)",
+      "Bash(cat)",
+      "Read(//tmp/**)",
+      "Bash(sqlite3 *)",
+      "Bash(sed -n '95,125p' /home/anon/Projects/Repos/Geromet/Torn/HappyGymStats/src/HappyGymStats.Cli/Program.cs)",
+      "Bash(sed -n '355,385p' /home/anon/Projects/Repos/Geromet/Torn/HappyGymStats/src/HappyGymStats.Cli/Program.cs)",
+      "Bash(dotnet test *)",
+      "Bash(dotnet restore *)",
+      "Bash(dotnet nuget *)",
+      "Bash(dotnet workload list *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('targets:', list\\(d.get\\('targets',{}\\).keys\\(\\)\\)\\); print\\('restore:', d.get\\('project',{}\\).get\\('restore',{}\\).get\\('projectUniqueName',''\\)\\)\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); projects=d.get\\('projects',{}\\); print\\(list\\(projects.keys\\(\\)\\)[:3]\\)\")",
+      "Bash(flatpak info *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('version','?'\\), d.get\\('buildNumber','?'\\)\\)\")",
+      "Bash(sort -t/ -k8)",
+      "Bash(dotnet msbuild *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2\\)[:3000]\\)\")",
+      "Bash(grep -v \"^\\\\s*$\" /home/anon/.var/app/com.jetbrains.Rider/cache/JetBrains/Rider2026.1/log/RoslynWorker/HappyGymStats/backend.2026-05-03_1509.518.log)",
+      "Bash(dotnet sln *)",
+      "Read(//home/anon/.claude/plans/**)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(bash scripts/verify/build-and-test.sh)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(xargs ls *)",
+      "WebFetch(domain:auth.geromet.com)",
+      "Bash(dotnet add *)",
+      "Bash(dotnet tool *)",
+      "Bash(git commit *)",
+      "Bash(git push *)"
     ]
   }
 }

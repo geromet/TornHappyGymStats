@@ -3,6 +3,15 @@
 set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+readonly DEPLOY_CONFIG_PATH="${SCRIPT_DIR}/deploy-config.sh"
+
+if [[ ! -f "${DEPLOY_CONFIG_PATH}" ]]; then
+  echo "DEPLOY_CONFIG_MISSING path=${DEPLOY_CONFIG_PATH}" >&2
+  exit 1
+fi
+
+# shellcheck disable=SC1090
+source "${DEPLOY_CONFIG_PATH}"
 
 usage() {
   cat <<EOF
@@ -12,6 +21,10 @@ Targets:
   backend   Deploy API only
   frontend  Deploy web frontend only
   all       Deploy backend then frontend (default)
+
+Post-deploy smoke:
+  DEPLOY_RUN_SMOKE=1      Run scripts/verify/production-smoke.sh after target deploy finishes.
+  DEPLOY_SMOKE_MODE=remote  Smoke mode override (default: remote)
 EOF
 }
 
@@ -34,3 +47,7 @@ case "$TARGET" in
     ;;
   *) echo "Invalid --target: ${TARGET}" >&2; exit 1 ;;
 esac
+
+deploy_run_post_deploy_smoke_if_enabled
+
+echo "==> Deploy target '${TARGET}' complete"

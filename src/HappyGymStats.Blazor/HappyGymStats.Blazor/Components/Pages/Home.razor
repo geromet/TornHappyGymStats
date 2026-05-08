@@ -1,0 +1,391 @@
+@page "/"
+@rendermode InteractiveServer
+@inject SurfacesService SurfacesApi
+@inject IJSRuntime JS
+@inject ILogger<Home> Logger
+
+<PageTitle>Happy Gym Stats</PageTitle>
+
+@* ── Import panel ──────────────────────────────────────────────────────────── *@
+<MudCard Class="mb-4">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h5">Happy Gym Stats</MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+            <MudTextField @bind-Value="_apiKey"
+                          Label="Torn API Key"
+                          InputType="InputType.Password"
+                          Variant="Variant.Outlined"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Key"
+                          Style="flex: 1;"
+                          Disabled="@_importing" />
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="RunImportAsync"
+                       Disabled="@(_importing || string.IsNullOrWhiteSpace(_apiKey))">
+                Import + Refresh
+            </MudButton>
+        </MudStack>
+
+        @if (!string.IsNullOrEmpty(_statusMessage))
+        {
+            <MudAlert Severity="@_statusSeverity" Dense="true" Class="mb-3">@_statusMessage</MudAlert>
+        }
+
+        <MudSimpleTable Dense="true" Hover="true" Bordered="true" Style="font-size: 0.82rem;">
+            <thead>
+                <tr>
+                    <th>Data Storage</th>
+                    <th>Data Sharing</th>
+                    <th>Purpose of Use</th>
+                    <th>Key Storage &amp; Sharing</th>
+                    <th>Key Access Level</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Persistent-forever</td>
+                    <td>General public</td>
+                    <td>Non-malicious statistical analysis</td>
+                    <td>Not stored / Not shared. HTTPS only, kept in memory</td>
+                    <td>Full Access</td>
+                </tr>
+            </tbody>
+        </MudSimpleTable>
+    </MudCardContent>
+</MudCard>
+
+@* ── Charts & warnings ─────────────────────────────────────────────────────── *@
+@if (_loading)
+{
+    <MudCard Class="mb-4">
+        <MudCardContent Class="d-flex justify-center align-center pa-10">
+            <MudProgressCircular Indeterminate="true" Color="Color.Primary" Class="mr-4" />
+            <MudText Color="Color.Secondary">Loading surfaces data…</MudText>
+        </MudCardContent>
+    </MudCard>
+}
+else if (_loadError != null)
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4">@_loadError</MudAlert>
+}
+else if (_surfaces != null)
+{
+    <MudCard Class="mb-4">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h6">Gym trains point cloud (all rows)</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @_surfaces.Meta.GymPointCount points — synced @_surfaces.SyncedAtUtc.ToString("u")
+                </MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent Class="pa-0">
+            <div id="gym-cloud-chart" style="width: 100%; height: 620px;"></div>
+        </MudCardContent>
+    </MudCard>
+
+    <MudCard Class="mb-4">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h6">Happy events point cloud (all rows)</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @_surfaces.Meta.EventPointCount points
+                </MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent Class="pa-0">
+            <div id="events-cloud-chart" style="width: 100%; height: 620px;"></div>
+        </MudCardContent>
+    </MudCard>
+
+    @if (_surfaces.Series.GymCloud.ProvenanceWarnings.Length > 0)
+    {
+        @* ── Provenance warnings ───────────────────────────────────────────── *@
+        var allWarnings = _surfaces.Series.GymCloud.ProvenanceWarnings;
+        var shown = allWarnings.Take(MaxRenderedWarnings).ToArray();
+        var hidden = allWarnings.Length - shown.Length;
+
+        <MudCard Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Provenance warnings</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+                    Unresolved warnings: @allWarnings.Length
+                </MudAlert>
+
+                @if (hidden > 0)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                        Showing @MaxRenderedWarnings of @allWarnings.Length warnings — @hidden not shown.
+                    </MudAlert>
+                }
+
+                @foreach (var w in shown)
+                {
+                    var tornUrl = BuildTornUrl(w);
+                    <MudPaper Elevation="0" Class="pa-3 mb-2"
+                              Style="border: 1px solid var(--mud-palette-divider); border-radius: 4px;">
+                        <MudText Typo="Typo.body2">
+                            <strong>@FormatWarningTitle(w)</strong>
+                        </MudText>
+                        <MudText Typo="Typo.body2" Class="mt-1">
+                            Action: Resolve @w.Scope provenance by reviewing source profile
+                            @if (tornUrl != null)
+                            {
+                                <text> — <MudLink Href="@tornUrl" Target="_blank">view on Torn</MudLink></text>
+                            }
+                        </MudText>
+                        <MudText Typo="Typo.body2">
+                            Source: @w.Scope #@ExtractId(w.LinkTarget)
+                            @if (tornUrl != null)
+                            {
+                                <text> (<MudLink Href="@tornUrl" Target="_blank">open</MudLink>)</text>
+                            }
+                        </MudText>
+                        <MudText Typo="Typo.body2">
+                            Override: @(w.HasManualOverride ? $"Applied — {w.ManualOverrideSource}" : "None")
+                        </MudText>
+                    </MudPaper>
+                }
+            </MudCardContent>
+        </MudCard>
+    }
+}
+
+@code {
+    private const int MaxRenderedWarnings = 12;
+
+    private string? _apiKey;
+    private bool _importing;
+    private bool _loading = true;
+    private string? _loadError;
+    private string? _statusMessage;
+    private Severity _statusSeverity = Severity.Info;
+    private SurfacesDatasetDto? _surfaces;
+    private bool _chartsDrawn;
+
+    protected override async Task OnInitializedAsync()
+        => await LoadSurfacesAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_surfaces != null && !_chartsDrawn)
+        {
+            _chartsDrawn = true;
+            await DrawChartsAsync();
+        }
+    }
+
+    private async Task LoadSurfacesAsync()
+    {
+        _loading = true;
+        _loadError = null;
+        _chartsDrawn = false;
+
+        try
+        {
+            _surfaces = await SurfacesApi.GetLatestAsync();
+            if (_surfaces == null)
+                _loadError = "No surfaces data found. Run an import first.";
+        }
+        catch (ApiFailure failure)
+        {
+            _loadError = BuildLoadFailureMessage(failure);
+            Logger.LogError(failure,
+                "Failed to load surfaces data. Endpoint={Endpoint} Status={StatusCode} Category={Category}",
+                failure.Endpoint,
+                failure.StatusCode is null ? null : (int)failure.StatusCode,
+                failure.Category);
+        }
+        catch (Exception ex)
+        {
+            _loadError = "Failed to load surfaces data due to an unexpected error.";
+            Logger.LogError(ex, "Failed to load surfaces data");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task RunImportAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_apiKey)) return;
+
+        _importing = true;
+        _statusMessage = "Starting import…";
+        _statusSeverity = Severity.Info;
+        StateHasChanged();
+
+        try
+        {
+            var status = await SurfacesApi.StartImportAsync(_apiKey.Trim(), fresh: true);
+
+            if (status?.Outcome == "failed")
+            {
+                _statusMessage = $"Import failed: {status.ErrorMessage}";
+                _statusSeverity = Severity.Error;
+                return;
+            }
+
+            _statusMessage = "Import queued — reloading data in a moment…";
+            StateHasChanged();
+
+            await Task.Delay(4000);
+            await LoadSurfacesAsync();
+
+            _statusMessage = "Data refreshed.";
+            _statusSeverity = Severity.Success;
+        }
+        catch (ApiFailure failure)
+        {
+            _statusMessage = BuildImportFailureMessage(failure);
+            _statusSeverity = Severity.Error;
+            Logger.LogError(failure,
+                "Import failed. Endpoint={Endpoint} Status={StatusCode} Category={Category}",
+                failure.Endpoint,
+                failure.StatusCode is null ? null : (int)failure.StatusCode,
+                failure.Category);
+        }
+        catch (Exception ex)
+        {
+            _statusMessage = "Import failed due to an unexpected error.";
+            _statusSeverity = Severity.Error;
+            Logger.LogError(ex, "Import failed");
+        }
+        finally
+        {
+            _importing = false;
+        }
+    }
+
+    private async Task DrawChartsAsync()
+    {
+        if (_surfaces == null) return;
+        try
+        {
+            await JS.InvokeVoidAsync("plotlyInterop.render",
+                "gym-cloud-chart",
+                new[] { BuildGymTrace(_surfaces.Series.GymCloud) },
+                BuildLayout("Stat before train", "Happy before train", "Stat gained / energy"));
+
+            await JS.InvokeVoidAsync("plotlyInterop.render",
+                "events-cloud-chart",
+                new[] { BuildEventsTrace(_surfaces.Series.EventsCloud) },
+                BuildLayout("Happy before event", "Delta", "Happy after event"));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to draw charts");
+        }
+    }
+
+    private static object BuildGymTrace(GymCloudSeriesDto cloud)
+    {
+        var colors = cloud.Confidence
+            .Select(c => $"rgb({(int)(214 + (56 - 214) * c)},{(int)(64 + (201 - 64) * c)},{(int)(69 + (110 - 69) * c)})")
+            .ToArray();
+
+        var hoverText = Enumerable.Range(0, cloud.X.Length).Select(i =>
+        {
+            var conf = i < cloud.Confidence.Length ? (int)(cloud.Confidence[i] * 100) : 0;
+            var reasons = i < cloud.ConfidenceReasons.Length ? string.Join(", ", cloud.ConfidenceReasons[i]) : "";
+            var baseText = i < cloud.Text.Length ? cloud.Text[i] : "";
+            return $"{baseText}<br>Confidence: {conf}%<br>Evidence: {reasons}";
+        }).ToArray();
+
+        return new
+        {
+            type = "scatter3d",
+            mode = "markers",
+            x = cloud.X,
+            y = cloud.Y,
+            z = cloud.Z,
+            text = hoverText,
+            hovertemplate = "Stat before: %{x}<br>Happy before: %{y}<br>Gain / energy: %{z}<br>%{text}<extra></extra>",
+            marker = new { size = 3, opacity = 0.8, color = colors }
+        };
+    }
+
+    private static object BuildEventsTrace(EventsCloudSeriesDto cloud) => new
+    {
+        type = "scatter3d",
+        mode = "markers",
+        x = cloud.X,
+        y = cloud.Y,
+        z = cloud.Z,
+        text = cloud.Text,
+        hovertemplate = "Before: %{x}<br>Delta: %{y}<br>After: %{z}<br>%{text}<extra></extra>",
+        marker = new { size = 3, opacity = 0.75, color = "#58a6ff" }
+    };
+
+    private static object BuildLayout(string xTitle, string yTitle, string zTitle) => new
+    {
+        paper_bgcolor = "rgba(0,0,0,0)",
+        plot_bgcolor = "rgba(0,0,0,0)",
+        font = new { color = "#e8f1ff", family = "Roboto, sans-serif" },
+        scene = new
+        {
+            xaxis = new { title = xTitle, gridcolor = "#243457", zerolinecolor = "#243457" },
+            yaxis = new { title = yTitle, gridcolor = "#243457", zerolinecolor = "#243457" },
+            zaxis = new { title = zTitle, gridcolor = "#243457", zerolinecolor = "#243457" },
+            bgcolor = "rgba(0,0,0,0)"
+        },
+        margin = new { l = 0, r = 0, t = 0, b = 0 }
+    };
+
+    private static string BuildLoadFailureMessage(ApiFailure failure) => failure.Category switch
+    {
+        ApiFailureCategory.ApiUnavailable => "Could not load surfaces data: API is unavailable. Verify the API service is running on the configured boundary.",
+        ApiFailureCategory.BadGateway => "Could not load surfaces data: reverse proxy returned 502 Bad Gateway. Verify nginx upstream to the API boundary.",
+        ApiFailureCategory.NotFound => "No surfaces data found. Run an import first.",
+        ApiFailureCategory.Deserialization => "Could not load surfaces data: API response format was invalid.",
+        _ => $"Could not load surfaces data: {failure.SafeMessage}"
+    };
+
+    private static string BuildImportFailureMessage(ApiFailure failure) => failure.Category switch
+    {
+        ApiFailureCategory.ApiUnavailable => "Import failed: API is unavailable. Verify the API service is running.",
+        ApiFailureCategory.BadGateway => "Import failed: reverse proxy returned 502 Bad Gateway. Check nginx upstream.",
+        ApiFailureCategory.ImportFailure => "Import failed: backend rejected or could not process the import.",
+        ApiFailureCategory.Validation => "Import rejected: request validation failed.",
+        ApiFailureCategory.Deserialization => "Import failed: API response format was invalid.",
+        _ => $"Import failed: {failure.SafeMessage}"
+    };
+
+    private static string FormatWarningTitle(ProvenanceWarningDto w)
+    {
+        var id = ExtractId(w.LinkTarget);
+        var scope = w.Scope.Length > 0 ? char.ToUpper(w.Scope[0]) + w.Scope[1..] : w.Scope;
+        return $"{scope} #{id} — {w.VerificationStatus} ({w.RowCount} row{(w.RowCount != 1 ? "s" : "")})";
+    }
+
+    private static string? BuildTornUrl(ProvenanceWarningDto w)
+    {
+        var id = ExtractId(w.LinkTarget);
+        if (id == null) return null;
+        return w.Scope switch
+        {
+            "personal" => $"https://www.torn.com/profiles.php?XID={id}",
+            "faction"  => $"https://www.torn.com/factions.php?step=profile&ID={id}",
+            "company"  => $"https://www.torn.com/joblist.php#!p=corpinfo&ID={id}",
+            _          => null
+        };
+    }
+
+    private static string? ExtractId(string? linkTarget)
+    {
+        if (string.IsNullOrEmpty(linkTarget)) return null;
+        var parts = linkTarget.Split('/');
+        return parts.Length > 0 ? parts[^1] : null;
+    }
+}

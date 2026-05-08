@@ -1,4 +1,4 @@
-using HappyGymStats.Data.Storage;
+using HappyGymStats.Core.Storage;
 using Xunit;
 
 namespace HappyGymStats.Tests;
