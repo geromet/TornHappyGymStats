@@ -96,6 +96,8 @@ The setup script validates nginx config (`nginx -t`) before reload and does not 
 - `deploy-config.sh` controls sudo behavior (`DEPLOY_USE_SUDO`, `DEPLOY_SUDO_NON_INTERACTIVE`).
 - Service restarts and status checks use `systemctl`; missing privileges or missing units are hard failures in required checks.
 
+## Production smoke verification (S05)
+
 ## Production smoke command (canonical)
 
 ```bash
@@ -114,6 +116,48 @@ Result contract:
 
 - `RESULT required_failures=<n> optional_warnings=<n>`
 - non-zero exit when `required_failures > 0`
+- expected failure categories include `systemd-unavailable` and `docker-access-unavailable` when host capabilities or privileges are missing in the current execution context.
+
+### Known operator caveat: nginx check permission in remote smoke
+
+In some environments, remote smoke runs execute as a non-root SSH user. In that case the `nginx -t` check inside `scripts/verify/production-smoke.sh` can report a required failure caused by privilege denial (`Permission denied` on nginx config include files), even when nginx is actually healthy and routing correctly.
+
+When all service, port, and HTTP route checks pass but nginx check fails with privilege-denied output, validate nginx config directly on host:
+
+```bash
+sudo nginx -t
+```
+
+Treat the deployment as healthy only if this privileged nginx test passes.
+
+### Postgres credential mismatch recovery (API crash loop)
+
+Symptom pattern:
+
+- `happygymstats-api` repeatedly restarts with core-dump/ABRT
+- `journalctl -u happygymstats-api` shows:
+  - `Npgsql.PostgresException ... SqlState: 28P01`
+  - `password authentication failed for user ...`
+
+Recovery sequence:
+
+1. Confirm API connection-string username/password source in `/etc/happygymstats/api.env` (`ConnectionStrings__HappyGymStats=...`).
+2. Align the Postgres role password for the exact username used in that connection string.
+3. Restart API and verify loopback health.
+
+Containerized Postgres example (adapt username/container as needed):
+
+```bash
+sudo docker exec -i containers-postgres-1 bash -lc \
+  'psql -U "$POSTGRES_USER" -d "${POSTGRES_DB:-postgres}" -v ON_ERROR_STOP=1' <<'SQL'
+ALTER USER <api-db-username> WITH PASSWORD '<same-password-as-api-env>';
+SQL
+
+sudo systemctl restart happygymstats-api
+curl -sv http://127.0.0.1:5047/api/v1/torn/health
+```
+
+If loopback health is 200 after restart, downstream 502 errors on `torn.geromet.com` API routes should clear.
 
 ## `ASPNETCORE_URLS` verification warning
 
