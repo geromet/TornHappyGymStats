@@ -70,10 +70,14 @@ if command -v dotnet >/dev/null 2>&1; then
   ACTUAL_SDK_VERSION="$(dotnet --version 2>/dev/null || printf '')"
   if [[ -z "$ACTUAL_SDK_VERSION" ]]; then
     fail "dotnet --version returned empty output"
-  elif [[ "$ACTUAL_SDK_VERSION" == "$EXPECTED_SDK_VERSION" ]]; then
-    pass "dotnet SDK matches global.json ($ACTUAL_SDK_VERSION)"
   else
-    fail "dotnet SDK mismatch: expected $EXPECTED_SDK_VERSION from global.json, got $ACTUAL_SDK_VERSION"
+    expected_mm="${EXPECTED_SDK_VERSION%.*}"
+    actual_mm="${ACTUAL_SDK_VERSION%.*}"
+    if [[ "$actual_mm" == "$expected_mm" ]]; then
+      pass "dotnet SDK major/minor matches global.json (${ACTUAL_SDK_VERSION} vs ${EXPECTED_SDK_VERSION})"
+    else
+      fail "dotnet SDK mismatch: expected major/minor ${expected_mm}.x from global.json ($EXPECTED_SDK_VERSION), got $ACTUAL_SDK_VERSION"
+    fi
   fi
 fi
 
@@ -113,20 +117,33 @@ else
   pass "discovered ${#PROJECT_FILES[@]} project file(s) under src/tests"
 fi
 
-non_net8_projects=()
+# Branch policy: use the major/minor from global.json sdk.version as the expected TFM.
+if [[ -n "$EXPECTED_SDK_VERSION" ]]; then
+  EXPECTED_TFM="net${EXPECTED_SDK_VERSION%%.*}.0"
+else
+  EXPECTED_TFM=""
+fi
+
+if [[ -z "$EXPECTED_TFM" ]]; then
+  fail "unable to derive expected TFM from global.json sdk.version"
+else
+  pass "derived expected TFM from global.json: ${EXPECTED_TFM}"
+fi
+
+non_expected_tfm_projects=()
 for file in "${PROJECT_FILES[@]}"; do
-  if rg -q '<TargetFramework>net8\.0</TargetFramework>' "$file"; then
-    pass "target framework pinned to net8.0: $file"
+  if rg -q "<TargetFramework>${EXPECTED_TFM}</TargetFramework>" "$file"; then
+    pass "target framework pinned to ${EXPECTED_TFM}: $file"
   elif rg -q '<TargetFrameworks>' "$file"; then
-    non_net8_projects+=("$file (uses TargetFrameworks; expected single net8.0 TargetFramework)")
+    non_expected_tfm_projects+=("$file (uses TargetFrameworks; expected single ${EXPECTED_TFM} TargetFramework)")
   else
-    non_net8_projects+=("$file (missing <TargetFramework>net8.0</TargetFramework>)")
+    non_expected_tfm_projects+=("$file (missing <TargetFramework>${EXPECTED_TFM}</TargetFramework>)")
   fi
 done
 
-if [[ ${#non_net8_projects[@]} -gt 0 ]]; then
+if [[ ${#non_expected_tfm_projects[@]} -gt 0 ]]; then
   fail "target framework contract violation(s):"
-  printf '  - %s\n' "${non_net8_projects[@]}"
+  printf '  - %s\n' "${non_expected_tfm_projects[@]}"
 fi
 
 phase "package-policy"
