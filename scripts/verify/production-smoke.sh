@@ -431,7 +431,11 @@ check_nginx_config_required() {
   nginx_output="$(run_host_capture "nginx -t 2>&1" || true)"
 
   if [[ "${nginx_output}" =~ [Pp]ermission[[:space:]]denied ]]; then
-    fail "required" "nginx config: no-privilege (${nginx_output})"
+    if [[ "${SMOKE_MODE}" == "remote" ]]; then
+      warn "optional" "nginx config: no-privilege in remote mode (${nginx_output})"
+    else
+      fail "required" "nginx config: no-privilege (${nginx_output})"
+    fi
   elif [[ "${nginx_output}" =~ [Tt]est[[:space:]]is[[:space:]]successful|syntax[[:space:]]is[[:space:]]ok ]]; then
     pass "required" "nginx config: nginx -t passed"
   else
