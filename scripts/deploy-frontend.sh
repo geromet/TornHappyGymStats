@@ -1,51 +1,80 @@
 #!/usr/bin/env bash
-# deploy-frontend.sh — Publish and deploy the Blazor frontend to torn.geromet.com.
+# deploy-frontend.sh — Deploy web/ to torn.geromet.com host over Cloudflare Access SSH.
 set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-readonly BLAZOR_PROJECT="${ROOT_DIR}/src/HappyGymStats.Blazor/HappyGymStats.Blazor/HappyGymStats.Blazor.csproj"
-readonly PUBLISH_DIR="${ROOT_DIR}/dist/blazor"
+readonly DEPLOY_CONFIG_PATH="${SCRIPT_DIR}/deploy-config.sh"
+readonly WEB_DIR="${ROOT_DIR}/web"
+
+if [[ ! -f "${DEPLOY_CONFIG_PATH}" ]]; then
+  echo "DEPLOY_CONFIG_MISSING path=${DEPLOY_CONFIG_PATH}" >&2
+  exit 1
+fi
+
+# shellcheck disable=SC1090
+source "${DEPLOY_CONFIG_PATH}"
+
+: "${DEPLOY_FRONTEND_REMOTE_ROOT:=/var/www/torn-frontend}"
+: "${DEPLOY_FRONTEND_OWNER:=root}"
+: "${DEPLOY_FRONTEND_GROUP:=www-data}"
+
+readonly REMOTE_RELEASES_DIR="${DEPLOY_FRONTEND_REMOTE_ROOT}/releases"
+readonly REMOTE_CURRENT_DIR="${DEPLOY_FRONTEND_REMOTE_ROOT}/current"
+readonly REMOTE_STAGING_DIR="/tmp/torn-frontend-staging-${DEPLOY_SSH_USER}"
+readonly REMOTE_TS="$(date -u +%Y%m%dT%H%M%SZ)"
+readonly REMOTE_RELEASE_DIR="${REMOTE_RELEASES_DIR}/${REMOTE_TS}"
+
+usage() {
+  cat <<EOF
+Usage: bash scripts/deploy-frontend.sh
+
+Deploys local web/ assets to the remote host:
+  - uploads to timestamped release dir
+  - flips current symlink
+  - enforces frontend permissions
+
+Preconditions (machine-checkable):
+  - local web/ directory exists
+  - local tar/ssh/rsync commands exist
+  - remote rsync/find commands exist
+  - remote frontend root is writable (directly or via configured sudo)
+EOF
+}
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  echo "Usage: bash scripts/deploy-frontend.sh"
+  usage
+  deploy_print_common_connection_summary
   exit 0
 fi
 
-[[ -f "${ROOT_DIR}/.env.deploy" ]] && source "${ROOT_DIR}/.env.deploy"
-source "${SCRIPT_DIR}/deploy-config.sh"
+echo "==> Running frontend deploy preconditions"
+echo "==> Runtime contract: frontend is static assets (dotnet runtime not required on host)"
+deploy_precheck_require_local_dir "${WEB_DIR}" "missing_frontend_directory"
+deploy_precheck_require_local_command tar
+deploy_precheck_require_local_command ssh
+deploy_precheck_require_local_command rsync
+deploy_precheck_remote_sudo_access
+deploy_precheck_remote_command rsync
+deploy_precheck_remote_command find
+deploy_precheck_remote_root_ready "${DEPLOY_FRONTEND_REMOTE_ROOT}"
 
-readonly REMOTE_TS="$(date -u +%Y%m%dT%H%M%SZ)"
-readonly REMOTE_RELEASES_DIR="${DEPLOY_BLAZOR_REMOTE_ROOT}/releases"
-readonly REMOTE_CURRENT_DIR="${DEPLOY_BLAZOR_REMOTE_ROOT}/current"
-readonly REMOTE_STAGING_DIR="/tmp/happygymstats-blazor-staging-${DEPLOY_SSH_USER}"
-readonly REMOTE_RELEASE_DIR="${REMOTE_RELEASES_DIR}/${REMOTE_TS}"
+echo "==> Uploading frontend payload"
+tar -C "${WEB_DIR}" -cf - . | deploy_ssh_pipe "set -euo pipefail; mkdir -p '${REMOTE_STAGING_DIR}'; rm -rf '${REMOTE_STAGING_DIR}'/*; tar -xf - -C '${REMOTE_STAGING_DIR}'"
 
-echo "==> Publishing Blazor frontend"
-rm -rf "${PUBLISH_DIR}"
-dotnet publish "${BLAZOR_PROJECT}" -c "${DEPLOY_CONFIGURATION}" -r "${DEPLOY_RUNTIME}" --self-contained true -o "${PUBLISH_DIR}"
-
-echo "==> Uploading payload"
-tar -C "${PUBLISH_DIR}" -cf - . | ssh_cmd_pipe "set -euo pipefail
-  mkdir -p '${REMOTE_STAGING_DIR}'
-  rm -rf '${REMOTE_STAGING_DIR}'/*
-  tar -xf - -C '${REMOTE_STAGING_DIR}'"
-
-echo "==> Activating release"
-ssh_cmd_tty "set -euo pipefail
-  ${SUDO_CMD} mkdir -p '${REMOTE_RELEASES_DIR}' '${REMOTE_RELEASE_DIR}'
-  ${SUDO_CMD} rsync -a --delete '${REMOTE_STAGING_DIR}/' '${REMOTE_RELEASE_DIR}/'
-  if [[ -d '${REMOTE_CURRENT_DIR}' && ! -L '${REMOTE_CURRENT_DIR}' ]]; then ${SUDO_CMD} rm -rf '${REMOTE_CURRENT_DIR}'; fi
-  ${SUDO_CMD} ln -sfn '${REMOTE_RELEASE_DIR}' '${REMOTE_CURRENT_DIR}'
-  ${SUDO_CMD} chown -R '${DEPLOY_BLAZOR_OWNER}:${DEPLOY_BLAZOR_GROUP}' '${REMOTE_RELEASE_DIR}'
-  ${SUDO_CMD} find '${REMOTE_RELEASE_DIR}' -type d -exec chmod 755 {} \\;
-  ${SUDO_CMD} find '${REMOTE_RELEASE_DIR}' -type f -exec chmod 644 {} \\;
-  [[ -f '${REMOTE_RELEASE_DIR}/HappyGymStats.Blazor' ]] && ${SUDO_CMD} chmod 755 '${REMOTE_RELEASE_DIR}/HappyGymStats.Blazor'
+echo "==> Activating frontend release"
+deploy_ssh_tty "set -euo pipefail; \
+  ${DEPLOY_SUDO_CMD} mkdir -p '${REMOTE_RELEASES_DIR}' '${REMOTE_RELEASE_DIR}'; \
+  ${DEPLOY_SUDO_CMD} rsync -a --delete '${REMOTE_STAGING_DIR}/' '${REMOTE_RELEASE_DIR}/'; \
+  if [[ -d '${REMOTE_CURRENT_DIR}' && ! -L '${REMOTE_CURRENT_DIR}' ]]; then ${DEPLOY_SUDO_CMD} rm -rf '${REMOTE_CURRENT_DIR}'; fi; \
+  ${DEPLOY_SUDO_CMD} ln -sfn '${REMOTE_RELEASE_DIR}' '${REMOTE_CURRENT_DIR}'; \
+  ${DEPLOY_SUDO_CMD} chown -R '${DEPLOY_FRONTEND_OWNER}:${DEPLOY_FRONTEND_GROUP}' '${DEPLOY_FRONTEND_REMOTE_ROOT}'; \
+  ${DEPLOY_SUDO_CMD} find '${REMOTE_RELEASE_DIR}' -type d -exec chmod 755 {} \\;; \
+  ${DEPLOY_SUDO_CMD} find '${REMOTE_RELEASE_DIR}' -type f -exec chmod 644 {} \\;; \
   rm -rf '${REMOTE_STAGING_DIR}'"
 
-if [[ "${DEPLOY_BLAZOR_RESTART}" == "1" ]]; then
-  echo "==> Restarting ${DEPLOY_BLAZOR_SERVICE}"
-  ssh_cmd_tty "${SUDO_CMD} systemctl restart '${DEPLOY_BLAZOR_SERVICE}'"
-fi
-
-echo "==> Frontend deployment complete — ${REMOTE_RELEASE_DIR}"
+echo "==> Frontend release activation complete"
+echo "    Host: ${DEPLOY_SSH_HOST}"
+echo "    Release: ${REMOTE_RELEASE_DIR}"
+echo "    Current symlink: ${REMOTE_CURRENT_DIR}"
+deploy_print_post_deploy_smoke_next_step

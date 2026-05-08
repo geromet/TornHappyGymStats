@@ -1,136 +1,107 @@
 # Deployment
 
-## Main scripts
+This document is the operational contract for deploying and verifying the current runtime shape:
 
-Deploy all:
+- `happygymstats-api` (loopback `127.0.0.1:5047`)
+- `happygymstats-blazor` (loopback `127.0.0.1:5182`)
+- `happygymstats-adminpanel` (loopback `127.0.0.1:5048`)
+- nginx routes for `/api/*`, `/`, and `/admin/*`
+- optional Postgres/Keycloak container health visibility via smoke checks
 
-```bash
-bash scripts/deploy.sh --target all
-```
+## .NET runtime/publish contract (M003 S09)
 
-Deploy separately:
+- Repository projects currently target `net8.0`; build hosts should use the SDK pinned by root `global.json`.
+- Backend and AdminPanel deploy flows publish for `linux-x64` with `--self-contained true`.
+- Operational implication: target servers do not require a separately installed shared .NET/ASP.NET runtime for these self-contained services, but do require systemd/nginx/service wiring validated by smoke checks.
 
-```bash
-bash scripts/deploy-backend.sh
-bash scripts/deploy-frontend.sh
-```
+## Setup vs deploy (important split)
 
-## Backend
-- Publishes `src/HappyGymStats.Api`
-- Uploads to timestamped release directory
-- Flips `current` symlink
-- Restarts systemd service
-- Runs a remote precheck for required API runtime env contract names before publish/restart
+### One-time setup / bootstrap
 
-## API production runtime contract (required)
+- `bash scripts/setup-adminpanel-server.sh --help`
+- Installs/updates nginx admin route config (`infra/nginx-adminpanel.conf`) with explicit confirmation flags.
+- Use this for server bootstrapping and route setup changes, not routine deploys.
 
-Systemd unit: `infra/happygymstats-api.service`
+### Routine deploy
 
-Server-local env file (never committed): `/etc/happygymstats/api.env`
+- `bash scripts/deploy-backend.sh` (API)
+- `bash scripts/deploy-frontend.sh` (legacy static `web/` path, if still used)
+- `bash scripts/deploy-adminpanel.sh` (AdminPanel)
+- `bash scripts/deploy.sh --target all` (orchestrated entrypoint)
 
-Required keys (names only):
-- `ConnectionStrings__HappyGymStats` **or** `HAPPYGYMSTATS_CONNECTION_STRING`
+### Post-deploy verification
+
+- `bash scripts/verify/production-smoke.sh`
+- Remote: `SMOKE_MODE=remote bash scripts/verify/production-smoke.sh`
+
+## Required env files and secret policy
+
+- Deployment scripts source `scripts/deploy-config.sh`, which can read `.env.deploy` when present.
+- Production runtime env files (for systemd services) must be managed on host, outside git.
+- Never commit secret values. Reference env var names only.
+
+Critical API env var names:
+
+- `HAPPYGYMSTATS_CONNECTION_STRING`
+- `ConnectionStrings__HappyGymStats`
 - `ProvisionalToken__SigningKey`
 - `HAPPYGYMSTATS_SURFACES_CACHE_DIR`
-- `ASPNETCORE_ENVIRONMENT`
 - `ASPNETCORE_URLS`
+- `ASPNETCORE_ENVIRONMENT`
 
-### Contract alignment note
+## Service and release roots
 
-If nginx serves static surfaces from `/data/surfaces/` aliasing
-`/var/www/happygymstats/data/surfaces-cache/`, set:
+Current deploy scripts enforce timestamped release + `current` symlink activation:
 
-```dotenv
-HAPPYGYMSTATS_SURFACES_CACHE_DIR=/var/www/happygymstats/data/surfaces-cache
-```
+- API root: `/var/www/happygymstats`
+- AdminPanel root: `/var/www/happygymstats-adminpanel`
+- Legacy static frontend root: `/var/www/torn-frontend`
 
-This keeps API-generated surfaces and nginx static path aligned.
+Core units expected by smoke and deploy guards:
 
-### Missing-contract failure signals
+- `happygymstats-api`
+- `happygymstats-blazor`
+- `happygymstats-adminpanel`
 
-`bash scripts/deploy-backend.sh` fails fast with grep-able errors:
-- `DEPLOY_PRECHECK_FAIL: missing_env_file path=/etc/happygymstats/api.env`
-- `DEPLOY_PRECHECK_FAIL: missing_env_var ConnectionStrings__HappyGymStats_or_HAPPYGYMSTATS_CONNECTION_STRING`
-- `DEPLOY_PRECHECK_FAIL: missing_env_var <KEY>`
+## nginx routes and boundary checks
 
-No secret values are printed.
+The runtime route contract checked by smoke:
 
-## Frontend
-- Uploads `web/` to timestamped release directory
-- Flips `/var/www/torn-frontend/current`
+- `https://torn.geromet.com/api/v1/torn/health` → API loopback
+- `https://torn.geromet.com/api/v1/torn/surfaces/latest` → API surfaces endpoint (200 or structured 404)
+- `https://torn.geromet.com/` → Blazor home
+- `https://admin.geromet.com/admin/health` → AdminPanel health
+- `https://admin.geromet.com/admin/api/v1/import-runs` should return auth denial (401/403) when unauthenticated
 
-## Blazor server runtime API boundary
+## AdminPanel setup details
 
-Systemd unit: `infra/happygymstats-blazor.service`
-
-Server-side Blazor `HttpClient` calls execute on the Blazor host process, not in the browser. Because of that, production should call the API over loopback directly instead of routing through public Cloudflare/nginx.
-
-Required production key (name/value contract):
-- `ApiBaseUrl=http://127.0.0.1:5047`
-
-Development contract:
-- Keep `src/HappyGymStats.Blazor/HappyGymStats.Blazor/appsettings.Development.json` set to a local developer API URL (currently `https://localhost:7047`).
-- `Program.cs` now requires `ApiBaseUrl` (no `https://localhost:7001` fallback), so config drift fails fast and is visible.
-
-## Local S01 contract verifier
-
-Run this before production deploy/debug to prove S01 API contract drift locally:
+Dry-run validation (safe):
 
 ```bash
-bash scripts/verify/s01-api-production-contract.sh
+bash -n scripts/setup-adminpanel-server.sh
 ```
 
-The verifier is local-only by default (no remote network calls). It statically checks deploy precheck/health gate markers, runs `ApiEndpointTests`, and validates the launch-profile gotcha: when pinning `ASPNETCORE_URLS` in `dotnet run` verification scripts, include `--no-launch-profile` so launch settings do not override the URL.
+Mutating setup requires explicit confirmation flags:
 
-## Environment / override knobs
-See script headers and `--help` output for:
-- SSH host/user/key/proxy
-- remote roots
-- service name
-- sudo behavior
+```bash
+DEPLOY_INSTALL_ADMIN_NGINX=1 \
+  bash scripts/setup-adminpanel-server.sh --execute --confirm-remote-setup
+```
 
-## AdminPanel sudoers + setup boundary (S03)
+The setup script validates nginx config (`nginx -t`) before reload and does not mutate routes without explicit confirmation.
 
-<<<<<<< Updated upstream
-Source of truth: `infra/sudoers-happygymstats`
+## Sudo/systemd/admin expectations
 
-### Permanent (steady-state deploy)
-These permissions are expected to remain after bootstrap and support normal deploys:
-- release activation/file ownership operations (`rsync`, `mkdir`, `rm`, `ln`, `chown`, `chmod`, `find`)
-- service `restart` + `status` for:
-  - `happygymstats-api`
-  - `happygymstats-blazor`
-  - `happygymstats-adminpanel`
-
-### Bootstrap-only (one-time setup)
-These permissions exist to install and activate AdminPanel prerequisites:
-- `install` for writing service/sudoers artifacts with controlled mode/ownership
-- `visudo -cf /etc/sudoers.d/happygymstats` for sudoers syntax validation before activation
-- `systemctl daemon-reload`
-- `systemctl enable happygymstats-adminpanel`
-- `systemctl start happygymstats-adminpanel`
-- `systemctl status happygymstats-adminpanel` (also used in steady-state)
-
-### Explicit hard boundaries
-- No `NOPASSWD: ALL`
-- No shell escalation commands (`/bin/bash`, `/usr/bin/bash`, `sh -c`)
-- No wildcard service names; only `happygymstats-*` units explicitly listed above
-
-### Setup execution + health proof
-Run local static verification before attempting remote bootstrap:
-=======
-## Production smoke verification (S05)
+- Deploy scripts assume SSH access and (by default) sudo-enabled host operations.
+- `deploy-config.sh` controls sudo behavior (`DEPLOY_USE_SUDO`, `DEPLOY_SUDO_NON_INTERACTIVE`).
+- Service restarts and status checks use `systemctl`; missing privileges or missing units are hard failures in required checks.
 
 ## Production smoke command (canonical)
->>>>>>> Stashed changes
 
 ```bash
-bash scripts/verify/s03-adminpanel-setup.sh
+bash scripts/verify/production-smoke.sh
 ```
 
-<<<<<<< Updated upstream
-Remote bootstrap command (mutates remote server state):
-=======
 This command is read-only (`SCRIPT_MUTATES_SERVER_STATE=0`) and emits phase-based diagnostics:
 
 - framework
@@ -143,47 +114,23 @@ Result contract:
 
 - `RESULT required_failures=<n> optional_warnings=<n>`
 - non-zero exit when `required_failures > 0`
-- expected failure categories include `systemd-unavailable` and `docker-access-unavailable` for hosts without systemd/docker access in the current execution context.
 
 ## `ASPNETCORE_URLS` verification warning
 
 When running local verification flows that pin `ASPNETCORE_URLS`, always include `--no-launch-profile` for `dotnet run` so launch profile settings do not override your explicit URL binding. See `scripts/verify/s05-local-surfaces.sh` for the canonical pattern.
 
 ## Quick operator sequence
->>>>>>> Stashed changes
 
 ```bash
-bash scripts/setup-adminpanel-server.sh
+# 1) Deploy target (example: API)
+bash scripts/deploy-backend.sh
+
+# 2) Run smoke checks
+bash scripts/verify/production-smoke.sh
+
+# 3) If needed, run route/setup contract verifiers
+bash scripts/verify/s05-production-smoke-contract.sh
+bash scripts/verify/s06-deploy-script-contract.sh
 ```
 
-What mutates remotely:
-- `/etc/sudoers.d/happygymstats` install/refresh (after `visudo -cf`)
-- `/etc/systemd/system/happygymstats-adminpanel.service` install/refresh
-- `systemctl daemon-reload`, `enable`, and `start`/`restart` for `happygymstats-adminpanel`
-
-Agent safety requirement: obtain explicit user confirmation before running the non-dry-run setup command because it changes privileged server state.
-
-## AdminPanel nginx route ownership (S04)
-
-Decision: use a dedicated host, `admin.geromet.com`, for AdminPanel traffic, instead of mounting AdminPanel under `torn.geromet.com/admin/*` or `auth.geromet.com/admin/*`.
-
-Why this host ownership is preferred:
-- Avoids path collision with existing `torn.geromet.com` responsibilities (`/api/*`, static/frontend root, and Blazor SignalR/WebSocket behavior).
-- Keeps `auth.geromet.com` focused on Keycloak/OIDC concerns and avoids mixing identity-host responsibilities with AdminPanel app routing.
-- Gives nginx a single-purpose upstream boundary for AdminPanel (`127.0.0.1:5048`) with cleaner smoke checks and failure categorization.
-
-Route/auth boundary contract:
-- Public health endpoint: `https://admin.geromet.com/admin/health` should be reachable anonymously (2xx).
-- Protected AdminPanel APIs (for example `/admin/api/v1/...`) must remain auth-gated and reject unauthenticated requests (401/403 expected).
-- Do not log or print auth tokens in smoke checks; prefer unauthenticated negative assertions for protected routes.
-
-Infra assumptions to validate during nginx implementation:
-- DNS: Cloudflare record for `admin.geromet.com` points to the same VPS/origin as other hosts.
-- TLS: existing Cloudflare origin certificate (`/etc/ssl/cloudflare/origin.pem`) covers `admin.geromet.com` (wildcard `*.geromet.com` or equivalent SAN).
-- Origin reachability: AdminPanel systemd service remains loopback-bound at `127.0.0.1:5048`; nginx is the only external ingress path.
-
-## Production targets
-- `torn.geromet.com` static frontend + Blazor root
-- `torn.geromet.com/api/*` proxied to `127.0.0.1:5047`
-- `auth.geromet.com` Keycloak host
-- `admin.geromet.com/admin/*` proxied to `127.0.0.1:5048` (with anonymous health and auth-gated admin APIs)
+If smoke fails, use emitted failure category and service/route phase to diagnose before rerunning deploy.
