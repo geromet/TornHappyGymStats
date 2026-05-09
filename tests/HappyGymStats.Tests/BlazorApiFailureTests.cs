@@ -2,9 +2,9 @@ extern alias blazor;
 
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using ApiFailure = blazor::HappyGymStats.Blazor.Services.ApiFailure;
 using ApiFailureCategory = blazor::HappyGymStats.Blazor.Services.ApiFailureCategory;
-using ImportStatusDto = blazor::HappyGymStats.Blazor.Models.ImportStatusDto;
 using SurfacesService = blazor::HappyGymStats.Blazor.Services.SurfacesService;
 using Xunit;
 
@@ -67,37 +67,90 @@ public sealed class BlazorApiFailureTests
     }
 
     [Fact]
-    public async Task StartImport_classifies_400_as_validation_without_secret_leakage()
+    public async Task StartMyStatsImport_posts_to_me_endpoint_without_ownership_fields()
+    {
+        HttpRequestMessage? captured = null;
+        using var http = CreateHttpClient(request =>
+        {
+            captured = request;
+            return JsonResponse(HttpStatusCode.Accepted, SuccessImportStatusJson);
+        });
+        var sut = new SurfacesService(http);
+
+        var status = await sut.StartMyStatsImportAsync("super-secret-api-key", fresh: true);
+
+        Assert.NotNull(status);
+        Assert.NotNull(captured);
+        Assert.Equal(HttpMethod.Post, captured!.Method);
+        Assert.Equal("/api/v1/torn/import-jobs/me", captured.RequestUri!.AbsolutePath);
+
+        var body = await captured.Content!.ReadAsStringAsync();
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal("super-secret-api-key", json.RootElement.GetProperty("apiKey").GetString());
+        Assert.True(json.RootElement.TryGetProperty("fresh", out var freshNode));
+        Assert.True(freshNode.GetBoolean());
+        Assert.False(json.RootElement.TryGetProperty("anonymousId", out _));
+        Assert.False(json.RootElement.TryGetProperty("playerId", out _));
+        Assert.False(json.RootElement.TryGetProperty("owner", out _));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest, ApiFailureCategory.Validation)]
+    [InlineData(HttpStatusCode.UnprocessableEntity, ApiFailureCategory.Validation)]
+    [InlineData(HttpStatusCode.Unauthorized, ApiFailureCategory.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden, ApiFailureCategory.Forbidden)]
+    [InlineData(HttpStatusCode.NotFound, ApiFailureCategory.IdentitySetupRequired)]
+    [InlineData(HttpStatusCode.Conflict, ApiFailureCategory.IdentitySetupRequired)]
+    [InlineData(HttpStatusCode.BadGateway, ApiFailureCategory.BadGateway)]
+    public async Task StartMyStatsImport_classifies_http_failures_without_secret_leakage(HttpStatusCode statusCode, ApiFailureCategory expectedCategory)
     {
         const string secret = "super-secret-api-key";
 
-        using var http = CreateHttpClient(_ => new HttpResponseMessage(HttpStatusCode.BadRequest));
+        using var http = CreateHttpClient(_ => new HttpResponseMessage(statusCode));
         var sut = new SurfacesService(http);
 
-        var failure = await Assert.ThrowsAsync<ApiFailure>(() => sut.StartImportAsync(secret, fresh: true));
+        var failure = await Assert.ThrowsAsync<ApiFailure>(() => sut.StartMyStatsImportAsync(secret));
 
-        Assert.Equal(ApiFailureCategory.Validation, failure.Category);
-        Assert.Equal(HttpStatusCode.BadRequest, failure.StatusCode);
+        Assert.Equal(expectedCategory, failure.Category);
+        Assert.Equal(statusCode, failure.StatusCode);
+        Assert.Equal("/api/v1/torn/import-jobs/me", failure.Endpoint);
+        Assert.DoesNotContain(secret, failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(secret, failure.SafeMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StartMyStatsImport_classifies_invalid_json_as_deserialization_without_secret_leakage()
+    {
+        const string secret = "super-secret-api-key";
+
+        using var http = CreateHttpClient(_ =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"bad\":", Encoding.UTF8, "application/json")
+            });
+        var sut = new SurfacesService(http);
+
+        var failure = await Assert.ThrowsAsync<ApiFailure>(() => sut.StartMyStatsImportAsync(secret, fresh: false));
+
+        Assert.Equal(ApiFailureCategory.Deserialization, failure.Category);
+        Assert.Equal("/api/v1/torn/import-jobs/me", failure.Endpoint);
         Assert.DoesNotContain(secret, failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task StartImport_classifies_422_as_validation_without_secret_leakage()
+    public async Task StartMyStatsImport_classifies_failed_import_outcome()
     {
-        const string secret = "super-secret-api-key";
-
-        using var http = CreateHttpClient(_ => new HttpResponseMessage(HttpStatusCode.UnprocessableEntity));
+        using var http = CreateHttpClient(_ => JsonResponse(HttpStatusCode.OK, FailedImportStatusJson));
         var sut = new SurfacesService(http);
 
-        var failure = await Assert.ThrowsAsync<ApiFailure>(() => sut.StartImportAsync(secret, fresh: true));
+        var failure = await Assert.ThrowsAsync<ApiFailure>(() => sut.StartMyStatsImportAsync("safe-key"));
 
-        Assert.Equal(ApiFailureCategory.Validation, failure.Category);
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, failure.StatusCode);
-        Assert.DoesNotContain(secret, failure.Message, StringComparison.Ordinal);
+        Assert.Equal(ApiFailureCategory.ImportFailure, failure.Category);
+        Assert.Equal("/api/v1/torn/import-jobs/me", failure.Endpoint);
     }
 
     [Fact]
-    public async Task StartImport_successfully_returns_deserialized_status()
+    public async Task StartImport_successfully_returns_deserialized_status_for_global_path()
     {
         using var http = CreateHttpClient(_ => JsonResponse(HttpStatusCode.OK, SuccessImportStatusJson));
         var sut = new SurfacesService(http);
@@ -111,25 +164,6 @@ public sealed class BlazorApiFailureTests
     }
 
     [Fact]
-    public async Task StartImport_classifies_invalid_json_as_deserialization_without_secret_leakage()
-    {
-        const string secret = "super-secret-api-key";
-
-        using var http = CreateHttpClient(_ =>
-            new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent("{\"bad\":", Encoding.UTF8, "application/json")
-            });
-        var sut = new SurfacesService(http);
-
-        var failure = await Assert.ThrowsAsync<ApiFailure>(() => sut.StartImportAsync(secret, fresh: false));
-
-        Assert.Equal(ApiFailureCategory.Deserialization, failure.Category);
-        Assert.Equal("/api/v1/torn/import-jobs", failure.Endpoint);
-        Assert.DoesNotContain(secret, failure.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public async Task GetLatest_successfully_returns_deserialized_dataset()
     {
         using var http = CreateHttpClient(_ => JsonResponse(HttpStatusCode.OK, SuccessDatasetJson));
@@ -140,7 +174,6 @@ public sealed class BlazorApiFailureTests
         Assert.NotNull(dataset);
         Assert.Equal("surfaces", dataset!.Dataset);
         Assert.Equal(1, dataset.Meta.GymPointCount);
-        Assert.Equal(1, dataset.Meta.ProvenanceWarningsDiagnostics.WarningCount);
     }
 
     private static HttpClient CreateHttpClient(Func<HttpRequestMessage, HttpResponseMessage> responder)
@@ -173,6 +206,19 @@ public sealed class BlazorApiFailureTests
         }
         """;
 
+    private const string FailedImportStatusJson = """
+        {
+          "id": "job-124",
+          "outcome": "failed",
+          "startedAtUtc": "2025-01-01T00:00:00Z",
+          "completedAtUtc": "2025-01-01T00:01:00Z",
+          "pagesFetched": 1,
+          "logsFetched": 10,
+          "logsAppended": 0,
+          "errorMessage": "validation"
+        }
+        """;
+
     private const string SuccessDatasetJson = """
         {
           "dataset": "surfaces",
@@ -183,20 +229,7 @@ public sealed class BlazorApiFailureTests
               "x": [1],
               "y": [2],
               "z": [3],
-              "text": ["pt"],
-              "confidence": [0.9],
-              "confidenceReasons": [["reason"]],
-              "provenanceWarnings": [
-                {
-                  "logId": "log-1",
-                  "scope": "record",
-                  "verificationStatus": "warn",
-                  "linkTarget": "record:1",
-                  "rowCount": 1,
-                  "hasManualOverride": false,
-                  "manualOverrideSource": null
-                }
-              ]
+              "text": ["pt"]
             },
             "eventsCloud": {
               "x": [1],
@@ -208,16 +241,7 @@ public sealed class BlazorApiFailureTests
           "meta": {
             "gymPointCount": 1,
             "eventPointCount": 1,
-            "recordCount": 1,
-            "provenanceWarningsDiagnostics": {
-              "warningCount": 1,
-              "skippedMalformedRowCount": 0,
-              "overrideLoadedEntryCount": 0,
-              "overrideSkippedMalformedEntryCount": 0,
-              "overrideHitEntryCap": false,
-              "queryFailed": false,
-              "reason": "ok"
-            }
+            "recordCount": 1
           }
         }
         """;

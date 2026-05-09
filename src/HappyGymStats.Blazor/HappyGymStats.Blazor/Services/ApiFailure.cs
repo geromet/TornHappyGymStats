@@ -6,6 +6,9 @@ public enum ApiFailureCategory
 {
     ApiUnavailable,
     BadGateway,
+    Unauthorized,
+    Forbidden,
+    IdentitySetupRequired,
     NotFound,
     Validation,
     ImportFailure,
@@ -38,6 +41,10 @@ public sealed class ApiFailure : Exception
         var (category, safeMessage) = statusCode switch
         {
             HttpStatusCode.BadGateway => (ApiFailureCategory.BadGateway, "The API gateway returned 502 Bad Gateway."),
+            HttpStatusCode.Unauthorized => (ApiFailureCategory.Unauthorized, "Authentication is required or expired for this request."),
+            HttpStatusCode.Forbidden => (ApiFailureCategory.Forbidden, "The authenticated identity is not authorized for this resource."),
+            HttpStatusCode.Conflict => (ApiFailureCategory.IdentitySetupRequired, "Your account setup is incomplete for personal stats import."),
+            HttpStatusCode.NotFound when endpoint.Contains("/import-jobs/me", StringComparison.Ordinal) => (ApiFailureCategory.IdentitySetupRequired, "Your account setup is incomplete for personal stats import."),
             HttpStatusCode.NotFound => (ApiFailureCategory.NotFound, "Requested data was not found."),
             HttpStatusCode.BadRequest => (ApiFailureCategory.Validation, "The request was rejected as invalid."),
             HttpStatusCode.UnprocessableEntity => (ApiFailureCategory.Validation, "The request failed validation."),

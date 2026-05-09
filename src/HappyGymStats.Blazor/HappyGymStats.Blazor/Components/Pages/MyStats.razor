@@ -15,9 +15,32 @@
         </CardHeaderContent>
     </MudCardHeader>
     <MudCardContent>
-        <MudText Typo="Typo.body2" Color="Color.Secondary">
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
             Your personal gym train point cloud sourced from authenticated claim-bound stats.
         </MudText>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+            <MudTextField @bind-Value="_apiKey"
+                          Label="Torn API Key"
+                          InputType="InputType.Password"
+                          Variant="Variant.Outlined"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Key"
+                          Style="flex: 1;"
+                          Disabled="@_importing" />
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="RunImportAsync"
+                       Disabled="@(_importing || string.IsNullOrWhiteSpace(_apiKey))">
+                @(_importing ? "Importing..." : "Import + Refresh")
+            </MudButton>
+        </MudStack>
+
+        @if (!string.IsNullOrEmpty(_importStatusMessage))
+        {
+            <MudAlert Severity="@_importStatusSeverity" Dense="true">@_importStatusMessage</MudAlert>
+        }
     </MudCardContent>
 </MudCard>
 
@@ -56,6 +79,10 @@ else if (_surfaces != null)
 }
 
 @code {
+    private string? _apiKey;
+    private bool _importing;
+    private string? _importStatusMessage;
+    private Severity _importStatusSeverity = Severity.Info;
     private bool _loading = true;
     private string? _loadError;
     private MyStatsDatasetDto? _surfaces;
@@ -101,6 +128,61 @@ else if (_surfaces != null)
         finally
         {
             _loading = false;
+        }
+    }
+
+    private async Task RunImportAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_apiKey))
+        {
+            _importStatusMessage = "Import requires a Torn API key.";
+            _importStatusSeverity = Severity.Warning;
+            return;
+        }
+
+        _importing = true;
+        _importStatusMessage = "Queueing personal stats import...";
+        _importStatusSeverity = Severity.Info;
+        StateHasChanged();
+
+        try
+        {
+            var status = await SurfacesApi.StartMyStatsImportAsync(_apiKey.Trim(), fresh: true);
+            _apiKey = null;
+
+            if (status is { Outcome: "failed" })
+            {
+                _importStatusMessage = string.IsNullOrWhiteSpace(status.ErrorMessage)
+                    ? "Import failed due to backend validation or processing."
+                    : $"Import failed: {status.ErrorMessage}";
+                _importStatusSeverity = Severity.Error;
+                return;
+            }
+
+            _importStatusMessage = "Import queued — reloading personal stats...";
+            _importStatusSeverity = Severity.Success;
+
+            await LoadSurfacesAsync();
+        }
+        catch (ApiFailure failure)
+        {
+            _importStatusMessage = BuildImportFailureMessage(failure);
+            _importStatusSeverity = Severity.Error;
+            Logger.LogError(failure,
+                "Personal stats import failed. Endpoint={Endpoint} Status={StatusCode} Category={Category}",
+                failure.Endpoint,
+                failure.StatusCode is null ? null : (int)failure.StatusCode,
+                failure.Category);
+        }
+        catch (Exception ex)
+        {
+            _importStatusMessage = "Import failed due to an unexpected error.";
+            _importStatusSeverity = Severity.Error;
+            Logger.LogError(ex, "Personal stats import failed");
+        }
+        finally
+        {
+            _importing = false;
         }
     }
 
@@ -156,5 +238,18 @@ else if (_surfaces != null)
         ApiFailureCategory.NotFound => "No personal gym stats found yet. Import data first.",
         ApiFailureCategory.Deserialization => "Could not load your stats: API response format was invalid.",
         _ => $"Could not load your stats: {failure.SafeMessage}"
+    };
+
+    private static string BuildImportFailureMessage(ApiFailure failure) => failure.Category switch
+    {
+        ApiFailureCategory.Unauthorized => "Import rejected: your session is not authenticated. Sign in again.",
+        ApiFailureCategory.Forbidden => "Import rejected: your authenticated account does not match the requested owner.",
+        ApiFailureCategory.IdentitySetupRequired => "Import blocked: connect your account identity map before importing personal stats.",
+        ApiFailureCategory.Validation => "Import rejected: request validation failed.",
+        ApiFailureCategory.BadGateway => "Import failed: reverse proxy returned 502 Bad Gateway. Check API upstream.",
+        ApiFailureCategory.ApiUnavailable => "Import failed: API service is unavailable.",
+        ApiFailureCategory.Deserialization => "Import failed: API response format was invalid.",
+        ApiFailureCategory.ImportFailure => "Import failed: backend rejected or could not process the import.",
+        _ => $"Import failed: {failure.SafeMessage}"
     };
 }
