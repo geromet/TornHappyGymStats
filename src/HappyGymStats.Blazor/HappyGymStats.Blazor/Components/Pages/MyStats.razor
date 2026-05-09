@@ -1,0 +1,160 @@
+@page "/my-stats"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@inject SurfacesService SurfacesApi
+@inject IJSRuntime JS
+@inject ILogger<MyStats> Logger
+
+<PageTitle>My stats · Happy Gym Stats</PageTitle>
+
+<MudCard Class="mb-4">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h5">My stats</MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Your personal gym train point cloud sourced from authenticated claim-bound stats.
+        </MudText>
+    </MudCardContent>
+</MudCard>
+
+@if (_loading)
+{
+    <MudCard Class="mb-4">
+        <MudCardContent Class="d-flex justify-center align-center pa-10">
+            <MudProgressCircular Indeterminate="true" Color="Color.Primary" Class="mr-4" />
+            <MudText Color="Color.Secondary">Loading your stats…</MudText>
+        </MudCardContent>
+    </MudCard>
+}
+else if (_loadError != null)
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4">@_loadError</MudAlert>
+}
+else if (_surfaces != null)
+{
+    <MudCard Class="mb-4">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Style="width:100%">
+                    <div>
+                        <MudText Typo="Typo.h6">My gym trains point cloud</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @_surfaces.Meta.GymPointCount points
+                        </MudText>
+                    </div>
+                </MudStack>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent Class="pa-0">
+            <div id="my-gym-cloud-chart" style="width: 100%; height: 760px;"></div>
+        </MudCardContent>
+    </MudCard>
+}
+
+@code {
+    private bool _loading = true;
+    private string? _loadError;
+    private MyStatsDatasetDto? _surfaces;
+    private bool _chartsDrawn;
+
+    protected override async Task OnInitializedAsync() => await LoadSurfacesAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_surfaces != null && !_chartsDrawn)
+        {
+            _chartsDrawn = true;
+            await DrawChartsAsync();
+        }
+    }
+
+    private async Task LoadSurfacesAsync()
+    {
+        _loading = true;
+        _loadError = null;
+        _chartsDrawn = false;
+
+        try
+        {
+            _surfaces = await SurfacesApi.GetMyStatsAsync();
+            if (_surfaces == null)
+                _loadError = "No personal gym stats found yet. Import data first.";
+        }
+        catch (ApiFailure failure)
+        {
+            _loadError = BuildLoadFailureMessage(failure);
+            Logger.LogError(failure,
+                "Failed to load personal stats data. Endpoint={Endpoint} Status={StatusCode} Category={Category}",
+                failure.Endpoint,
+                failure.StatusCode is null ? null : (int)failure.StatusCode,
+                failure.Category);
+        }
+        catch (Exception ex)
+        {
+            _loadError = "Failed to load personal stats data due to an unexpected error.";
+            Logger.LogError(ex, "Failed to load personal stats data");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task DrawChartsAsync()
+    {
+        if (_surfaces == null) return;
+        try
+        {
+            await JS.InvokeVoidAsync("plotlyInterop.render",
+                "my-gym-cloud-chart",
+                new[] { BuildGymTrace(_surfaces.Series.GymCloud) },
+                BuildLayout("Stat before train", "Happy before train", "Stat gained / energy"));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to draw personal stats chart");
+        }
+    }
+
+    private static object BuildGymTrace(GymCloudSeriesDto cloud) => new
+    {
+        type = "scatter3d",
+        mode = "markers",
+        x = cloud.X,
+        y = cloud.Y,
+        z = cloud.Z,
+        hovertemplate = "Stat before: %{x}<br>Happy before: %{y}<br>Gain / energy: %{z}<extra></extra>",
+        marker = new { size = 6, opacity = 0.88, color = "#58a6ff" }
+    };
+
+    private static object BuildLayout(string xTitle, string yTitle, string zTitle) => new
+    {
+        paper_bgcolor = "rgba(0,0,0,0)",
+        plot_bgcolor = "rgba(0,0,0,0)",
+        font = new { color = "#e8f1ff", family = "Roboto, sans-serif" },
+        scene = new
+        {
+            aspectmode = "manual",
+            aspectratio = new { x = 1.35, y = 1.35, z = 1.2 },
+            xaxis = new { title = xTitle, gridcolor = "#243457", zerolinecolor = "#243457" },
+            yaxis = new { title = yTitle, gridcolor = "#243457", zerolinecolor = "#243457" },
+            zaxis = new { title = zTitle, gridcolor = "#243457", zerolinecolor = "#243457" },
+            bgcolor = "rgba(0,0,0,0)"
+        },
+        margin = new { l = 0, r = 0, t = 0, b = 0 }
+    };
+
+    private static string BuildLoadFailureMessage(ApiFailure failure) => failure.Category switch
+    {
+        ApiFailureCategory.ApiUnavailable => "Could not load your stats: API is unavailable. Verify the API service is running on the configured boundary.",
+        ApiFailureCategory.BadGateway => "Could not load your stats: reverse proxy returned 502 Bad Gateway. Verify nginx upstream to the API boundary.",
+        ApiFailureCategory.Validation => "Could not load your stats: request was rejected. Sign in again and verify account claims.",
+        ApiFailureCategory.NotFound => "No personal gym stats found yet. Import data first.",
+        ApiFailureCategory.Deserialization => "Could not load your stats: API response format was invalid.",
+        _ => $"Could not load your stats: {failure.SafeMessage}"
+    };
+}
