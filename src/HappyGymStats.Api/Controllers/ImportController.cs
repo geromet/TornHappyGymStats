@@ -1,8 +1,11 @@
+using System.Security.Claims;
 using HappyGymStats.Api.Infrastructure;
 using HappyGymStats.Core.Import;
 using HappyGymStats.Core.Repositories;
 using HappyGymStats.Data.Entities;
+using HappyGymStats.Identity.Authentication;
 using HappyGymStats.Identity.Provisional;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HappyGymStats.Api.Controllers;
@@ -14,17 +17,20 @@ public sealed class ImportController : ApiControllerBase
     private readonly IIdentityMapRepository _identityMapRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IProvisionalTokenService _provisionalTokenService;
+    private readonly ILogger<ImportController> _logger;
 
     public ImportController(
         ImportOrchestrator importService,
         IIdentityMapRepository identityMapRepo,
         IUnitOfWork unitOfWork,
-        IProvisionalTokenService provisionalTokenService)
+        IProvisionalTokenService provisionalTokenService,
+        ILogger<ImportController> logger)
     {
         _importService = importService;
         _identityMapRepo = identityMapRepo;
         _unitOfWork = unitOfWork;
         _provisionalTokenService = provisionalTokenService;
+        _logger = logger;
     }
 
     [HttpPost]
@@ -36,6 +42,57 @@ public sealed class ImportController : ApiControllerBase
 
         var status = _importService.Enqueue(apiKey, request?.Fresh ?? false);
         var statusCode = status.IsTerminal ? StatusCodes.Status200OK : StatusCodes.Status202Accepted;
+
+        return StatusCode(statusCode, ToDto(status));
+    }
+
+    [HttpPost("me")]
+    [Authorize(Roles = Roles.User)]
+    public async Task<IActionResult> StartMyImport(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ImportRequest? request,
+        CancellationToken ct)
+    {
+        var apiKey = request?.ApiKey?.Trim();
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return ValidationError("apiKey is required.", new { field = "apiKey" });
+
+        var anonymousIdClaim = User.FindFirstValue(Claims.AnonymousId);
+        if (!Guid.TryParse(anonymousIdClaim, out var callerAnonymousId))
+        {
+            _logger.LogWarning("Authenticated import rejected: endpoint={Endpoint} code={Code}", "/api/v1/torn/import-jobs/me", "invalid_anonymous_id_claim");
+            return ApiError(StatusCodes.Status401Unauthorized, "unauthorized", "Could not resolve caller identity.");
+        }
+
+        var callerSub = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(callerSub))
+        {
+            _logger.LogWarning("Authenticated import rejected: endpoint={Endpoint} code={Code} anonymousId={AnonymousId}", "/api/v1/torn/import-jobs/me", "missing_subject_claim", callerAnonymousId);
+            return ApiError(StatusCodes.Status401Unauthorized, "unauthorized", "Could not resolve caller identity.");
+        }
+
+        var map = await _identityMapRepo.GetByAnonymousIdAsync(callerAnonymousId, ct);
+        if (map is null)
+        {
+            _logger.LogWarning("Authenticated import rejected: endpoint={Endpoint} code={Code} anonymousId={AnonymousId}", "/api/v1/torn/import-jobs/me", "identity_map_missing", callerAnonymousId);
+            return ApiError(StatusCodes.Status409Conflict, "identity_setup_required", "Identity map record is missing. Re-link your account and try again.");
+        }
+
+        if (!string.Equals(map.KeycloakSub, callerSub, StringComparison.Ordinal))
+        {
+            _logger.LogWarning("Authenticated import rejected: endpoint={Endpoint} code={Code} anonymousId={AnonymousId}", "/api/v1/torn/import-jobs/me", "identity_map_subject_mismatch", callerAnonymousId);
+            return ApiError(StatusCodes.Status403Forbidden, "forbidden", "Caller identity does not match the mapped owner.");
+        }
+
+        var status = _importService.EnqueueForAnonymousId(apiKey, callerAnonymousId, map.PublicKey);
+        var statusCode = status.IsTerminal ? StatusCodes.Status200OK : StatusCodes.Status202Accepted;
+
+        _logger.LogInformation(
+            "Authenticated import accepted: endpoint={Endpoint} statusCode={StatusCode} jobId={JobId} anonymousId={AnonymousId} outcome={Outcome}",
+            "/api/v1/torn/import-jobs/me",
+            statusCode,
+            status.Id,
+            callerAnonymousId,
+            status.Outcome);
 
         return StatusCode(statusCode, ToDto(status));
     }
