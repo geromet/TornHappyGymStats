@@ -92,6 +92,14 @@ Blazor and AdminPanel service names and routes are part of the deployment contra
 
 If you have those projects in a separate checkout, run them there with pinned `ASPNETCORE_URLS` and `--no-launch-profile` (same warning as API). If you do not have local source, validate the contract via smoke checks (below).
 
+## My stats operator gate (M004)
+
+Before approving My stats for milestone closure, run the operator runbook:
+
+- [docs/M004-MY-STATS-OPERATOR-GATE.md](M004-MY-STATS-OPERATOR-GATE.md)
+
+The runbook covers Keycloak/identity-map readiness, signed-out/signed-in checks for `/api/v1/torn/surfaces/me` and `/api/v1/torn/import-jobs/me`, safe failure-state handling, and sanitized UAT evidence rules (no committed secrets, tokens, or Torn API keys).
+
 ## Local verification scripts and commands
 
 ### API + surfaces contract (local)
