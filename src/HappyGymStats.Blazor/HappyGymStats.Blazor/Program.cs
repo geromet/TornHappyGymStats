@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Microsoft.AspNetCore.HttpOverrides;
+using System.Net;
 using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -62,6 +64,8 @@ builder.Services
         options.TokenValidationParameters.NameClaimType = "preferred_username";
         options.TokenValidationParameters.RoleClaimType = "roles";
 
+        options.CallbackPath = "/signin-oidc";
+        options.SignedOutCallbackPath = "/signout-callback-oidc";
         options.SignedOutRedirectUri = "/";
         options.Events.OnRemoteFailure = context =>
         {
@@ -80,6 +84,16 @@ var apiBaseUrl = builder.Configuration["ApiBaseUrl"]
 builder.Services.AddHttpClient<SurfacesService>(client =>
     client.BaseAddress = new Uri(apiBaseUrl));
 
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor |
+        ForwardedHeaders.XForwardedProto |
+        ForwardedHeaders.XForwardedHost;
+
+    options.KnownProxies.Add(IPAddress.Parse("127.0.0.1"));
+});
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -91,6 +105,7 @@ else
 }
 
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
