@@ -14,7 +14,13 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddMudServices();
 builder.Services.AddCascadingAuthenticationState();
-builder.Services.AddAuthorization();
+
+// Policy scaffold for future RBAC rollout.
+// Inactive by default until pages/endpoints explicitly opt-in via [Authorize(Policy = "RequireRole")].
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("RequireRole", policy => policy.RequireRole("hgs-user"));
+});
 
 var keycloakSection = builder.Configuration.GetSection("Keycloak");
 var keycloakAuthority = keycloakSection["Authority"]

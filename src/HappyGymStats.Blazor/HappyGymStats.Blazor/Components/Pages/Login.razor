@@ -1,6 +1,7 @@
 @page "/login"
 @inject NavigationManager Navigation
 @using Microsoft.AspNetCore.Components
+@using System.Security.Claims
 
 <PageTitle>Login · Happy Gym Stats</PageTitle>
 
@@ -19,12 +20,30 @@
 
     <AuthorizeView>
         <Authorized Context="authState">
+            @{ var snapshot = BuildSnapshot(authState.User); }
+
             <MudAlert Severity="Severity.Success" Dense="true" Class="mb-4">
                 Signed in as @(authState.User.Identity?.Name ?? "unknown user").
             </MudAlert>
 
-            <MudStack Spacing="2" Style="max-width:640px;">
+            <MudStack Spacing="2" Style="max-width:760px;">
                 <MudText Typo="Typo.body2">You are authenticated via Keycloak.</MudText>
+
+                <MudSimpleTable Dense="true" Hover="true">
+                    <thead>
+                        <tr>
+                            <th>Claim</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><strong>preferred_username</strong></td><td>@snapshot.PreferredUsername</td></tr>
+                        <tr><td><strong>sub</strong></td><td>@snapshot.Subject</td></tr>
+                        <tr><td><strong>email</strong></td><td>@snapshot.Email</td></tr>
+                        <tr><td><strong>roles count</strong></td><td>@snapshot.RoleCount</td></tr>
+                    </tbody>
+                </MudSimpleTable>
+
                 <MudButton Variant="Variant.Filled"
                            Color="Color.Error"
                            StartIcon="@Icons.Material.Filled.Logout"
@@ -94,4 +113,31 @@
 
         return "/";
     }
+
+    private static LoginClaimSnapshot BuildSnapshot(ClaimsPrincipal user)
+    {
+        static string FirstOrDefault(ClaimsPrincipal principal, params string[] claimTypes)
+        {
+            foreach (var type in claimTypes)
+            {
+                var value = principal.Claims.FirstOrDefault(c => string.Equals(c.Type, type, StringComparison.Ordinal))?.Value;
+                if (!string.IsNullOrWhiteSpace(value)) return value;
+            }
+            return "(not provided)";
+        }
+
+        var roleCount = user.Claims.Count(c => c.Type is ClaimTypes.Role or "role" or "roles");
+
+        return new LoginClaimSnapshot(
+            FirstOrDefault(user, "preferred_username", ClaimTypes.Name),
+            FirstOrDefault(user, "sub", ClaimTypes.NameIdentifier),
+            FirstOrDefault(user, "email", ClaimTypes.Email),
+            roleCount);
+    }
+
+    private sealed record LoginClaimSnapshot(
+        string PreferredUsername,
+        string Subject,
+        string Email,
+        int RoleCount);
 }
