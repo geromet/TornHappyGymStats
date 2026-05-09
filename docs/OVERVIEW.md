@@ -55,6 +55,6 @@ The following remain as compatibility/interchange surfaces, not the primary arch
 
 - **JSONL/raw log artifacts** used during import/reconstruction workflows.
 - **SQLite-backed local/dev paths** still used by the API default configuration and local verification scripts.
-- **`web/` static artifacts** (notably `web/data/surfaces/*.json`) used as generated interchange outputs and local verification targets.
+- **Local surfaces cache artifacts** (notably `web/data/surfaces/*.json`) used as generated interchange outputs and local verification targets.
 
 Treat these as migration-compatible data interchange and local-operability paths. The canonical contract for planning work is the import/reconstruct/surfaces pipeline plus the runtime boundaries above.

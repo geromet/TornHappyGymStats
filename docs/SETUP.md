@@ -103,7 +103,7 @@ bash scripts/verify/s05-local-surfaces.sh
 This script:
 1. Starts API with deterministic loopback URL.
 2. Enqueues an import.
-3. Verifies `web/data/surfaces/meta.json` and `latest.json` shape.
+3. Verifies local surfaces cache `meta.json` and `latest.json` shape.
 
 ### Production-shape smoke contract (local or remote)
 
