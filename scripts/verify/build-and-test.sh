@@ -17,6 +17,9 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   exit 0
 fi
 
+echo "==> verify: no raw player-id log templates"
+bash scripts/verify/no-raw-playerid-log-templates.sh
+
 echo "==> dotnet build"
 dotnet build
 
