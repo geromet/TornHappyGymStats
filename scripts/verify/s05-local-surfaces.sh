@@ -21,7 +21,7 @@ Runs a deterministic local pre-frontend check for S05:
   1) starts the API locally
   2) validates API key env precondition
   3) enqueues an import job
-  4) waits for web/data/surfaces/meta.json + latest.json
+  4) waits for local surfaces cache meta.json + latest.json
   5) validates required JSON keys: version, series.gymCloud
 
 Required env:

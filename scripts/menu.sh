@@ -13,7 +13,7 @@ Usage:
 What this menu runs:
   - Publish API artifacts (scripts/publish.sh)
   - Deploy backend (scripts/deploy-backend.sh)
-  - Deploy frontend (scripts/deploy-frontend.sh)
+  - Deploy frontend (scripts/deploy-frontend.sh, Blazor)
   - Verify scripts (scripts/verify/*)
 EOF
 }
@@ -46,16 +46,7 @@ publish_menu() {
 }
 
 deploy_frontend_menu() {
-  echo "Frontend deploy mode:"
-  select mode in "validate" "trigger" "back"; do
-    case "$mode" in
-      validate|trigger)
-        bash "${SCRIPT_DIR}/deploy-frontend.sh" --mode "$mode"
-        break ;;
-      back) break ;;
-      *) echo "Invalid option" ;;
-    esac
-  done
+  bash "${SCRIPT_DIR}/deploy-frontend.sh"
 }
 
 verify_menu() {

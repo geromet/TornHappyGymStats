@@ -24,7 +24,7 @@ HappyGymStats is a Torn telemetry pipeline with a production ASP.NET API, a Blaz
 - `src/HappyGymStats.Core` — fetch and reconstruction logic
 - `src/HappyGymStats.Data` — EF Core data layer (Postgres + provider integration)
 - `src/HappyGymStats.Cli` — CLI workflows and local utilities
-- `web/` — legacy static frontend artifacts (historical/legacy path)
+- `web/data/surfaces/` — generated local surfaces cache artifacts used by API/local verification scripts
 - `tests/` — unit/integration/web verification suites
 
 ## License

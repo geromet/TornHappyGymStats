@@ -19,7 +19,6 @@ source "${DEPLOY_CONFIG_PATH}"
 : "${LAYOUT_API_ROOT:=/var/www/happygymstats}"
 : "${LAYOUT_BLAZOR_ROOT:=/var/www/happygymstats-blazor}"
 : "${LAYOUT_ADMIN_ROOT:=/var/www/happygymstats-adminpanel}"
-: "${LAYOUT_FRONTEND_ROOT:=/var/www/torn-frontend}"
 
 : "${LAYOUT_API_SERVICE:=happygymstats-api}"
 : "${LAYOUT_BLAZOR_SERVICE:=happygymstats-blazor}"
@@ -40,7 +39,6 @@ Environment overrides:
   LAYOUT_API_ROOT        (default: ${LAYOUT_API_ROOT})
   LAYOUT_BLAZOR_ROOT     (default: ${LAYOUT_BLAZOR_ROOT})
   LAYOUT_ADMIN_ROOT      (default: ${LAYOUT_ADMIN_ROOT})
-  LAYOUT_FRONTEND_ROOT   (default: ${LAYOUT_FRONTEND_ROOT})
 
   LAYOUT_API_SERVICE     (default: ${LAYOUT_API_SERVICE})
   LAYOUT_BLAZOR_SERVICE  (default: ${LAYOUT_BLAZOR_SERVICE})
@@ -151,6 +149,10 @@ printf 'RESULT required_failures=%s optional_warnings=%s\n' "$failures" "$warnin
 
 if (( failures > 0 )); then
   exit 1
+fi
+
+exit 0
+
 fi
 
 exit 0

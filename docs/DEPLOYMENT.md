@@ -25,7 +25,7 @@ This document is the operational contract for deploying and verifying the curren
 ### Routine deploy
 
 - `bash scripts/deploy-backend.sh` (API)
-- `bash scripts/deploy-frontend.sh` (legacy static `web/` path, if still used)
+- `bash scripts/deploy-frontend.sh` (Blazor frontend)
 - `bash scripts/deploy-adminpanel.sh` (AdminPanel)
 - `bash scripts/deploy.sh --target all` (orchestrated entrypoint)
 
@@ -54,8 +54,8 @@ Critical API env var names:
 Current deploy scripts enforce timestamped release + `current` symlink activation:
 
 - API root: `/var/www/happygymstats`
+- Blazor root: `/var/www/happygymstats-blazor`
 - AdminPanel root: `/var/www/happygymstats-adminpanel`
-- Legacy static frontend root: `/var/www/torn-frontend`
 
 Core units expected by smoke and deploy guards:
 
@@ -178,3 +178,4 @@ bash scripts/verify/s06-deploy-script-contract.sh
 ```
 
 If smoke fails, use emitted failure category and service/route phase to diagnose before rerunning deploy.
+running deploy.

@@ -3,7 +3,6 @@ namespace HappyGymStats.Blazor.Models;
 public sealed record SurfacesDatasetDto(
     string Dataset,
     string Version,
-    DateTimeOffset SyncedAtUtc,
     SurfacesSeriesDto Series,
     SurfacesDatasetMetaDto Meta);
 
@@ -14,41 +13,17 @@ public sealed record SurfacesSeriesDto(
 public sealed record GymCloudSeriesDto(
     double[] X,
     double[] Y,
-    double[] Z,
-    string[] Text,
-    double[] Confidence,
-    string[][] ConfidenceReasons,
-    ProvenanceWarningDto[] ProvenanceWarnings);
+    double[] Z);
 
 public sealed record EventsCloudSeriesDto(
     double[] X,
     double[] Y,
-    double[] Z,
-    string[] Text);
-
-public sealed record ProvenanceWarningDto(
-    string LogId,
-    string Scope,
-    string VerificationStatus,
-    string LinkTarget,
-    int RowCount,
-    bool HasManualOverride,
-    string? ManualOverrideSource);
+    double[] Z);
 
 public sealed record SurfacesDatasetMetaDto(
     int GymPointCount,
     int EventPointCount,
-    int RecordCount,
-    ProvenanceDiagnosticsDto ProvenanceWarningsDiagnostics);
-
-public sealed record ProvenanceDiagnosticsDto(
-    int WarningCount,
-    int SkippedMalformedRowCount,
-    int OverrideLoadedEntryCount,
-    int OverrideSkippedMalformedEntryCount,
-    bool OverrideHitEntryCap,
-    bool QueryFailed,
-    string Reason);
+    int RecordCount);
 
 public sealed record ImportStatusDto(
     string Id,

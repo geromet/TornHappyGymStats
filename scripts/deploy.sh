@@ -19,7 +19,7 @@ Usage: bash scripts/deploy.sh [--target backend|frontend|all]
 
 Targets:
   backend   Deploy API only
-  frontend  Deploy web frontend only
+  frontend  Deploy Blazor frontend only
   all       Deploy backend then frontend (default)
 
 Post-deploy smoke:
