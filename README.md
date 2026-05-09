@@ -14,6 +14,7 @@ HappyGymStats is a Torn telemetry pipeline with a production ASP.NET API, a Blaz
 
 ## Minimal verification commands
 
+- `bash scripts/verify/m004-my-stats-final-gate.sh`
 - `bash scripts/verify/production-smoke.sh`
 - `bash scripts/verify/s05-local-surfaces.sh`
 
