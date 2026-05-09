@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@inject NavigationManager Navigation
 
 <MudThemeProvider Theme="_theme" IsDarkMode="true" />
 <MudPopoverProvider />
@@ -11,6 +12,23 @@
                        OnClick="ToggleDrawer" />
         <MudText Typo="Typo.h6" Class="ml-2">Happy Gym Stats</MudText>
         <MudSpacer />
+        <AuthorizeView>
+            <Authorized Context="authState">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mr-2">
+                    <MudChip T="string" Color="Color.Success" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.VerifiedUser">
+                        @(authState.User.Identity?.Name ?? "signed in")
+                    </MudChip>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Inherit" OnClick="SignOut">
+                        Sign out
+                    </MudButton>
+                </MudStack>
+            </Authorized>
+            <NotAuthorized>
+                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Inherit" StartIcon="@Icons.Material.Filled.Login" OnClick="SignIn">
+                    Sign in
+                </MudButton>
+            </NotAuthorized>
+        </AuthorizeView>
         <MudLink Href="https://www.torn.com" Target="_blank" Color="Color.Inherit">
             <MudText Typo="Typo.caption">Torn City</MudText>
         </MudLink>
@@ -21,12 +39,35 @@
             <MudText Typo="Typo.subtitle1" Class="mt-1">Happy Gym Stats</MudText>
         </MudDrawerHeader>
         <MudNavMenu>
-            <MudNavLink Href="/" Icon="@Icons.Material.Filled.BarChart" Match="NavLinkMatch.All">
-                Dashboard
+            <MudNavLink Href="/" Icon="@Icons.Material.Filled.Home" Match="NavLinkMatch.All">Home</MudNavLink>
+            <MudNavLink Href="/login" Icon="@Icons.Material.Filled.Login">Login</MudNavLink>
+            <MudNavLink Href="/player-account" Icon="@Icons.Material.Filled.Person">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <span>Player account</span>
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" />
+                </MudStack>
             </MudNavLink>
-            <MudNavLink Href="/security" Icon="@Icons.Material.Filled.Key">
-                Security
+            <MudNavLink Href="/faction" Icon="@Icons.Material.Filled.Groups">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <span>Faction</span>
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" />
+                </MudStack>
             </MudNavLink>
+            <MudNavLink Href="/logs" Icon="@Icons.Material.Filled.ReceiptLong">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <span>Logs</span>
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" />
+                </MudStack>
+            </MudNavLink>
+            <MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Settings">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <span>Settings</span>
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" />
+                </MudStack>
+            </MudNavLink>
+            <MudNavLink Href="/terms" Icon="@Icons.Material.Filled.Gavel">Terms of use</MudNavLink>
+            <MudNavLink Href="/privacy" Icon="@Icons.Material.Filled.PrivacyTip">Privacy</MudNavLink>
+            <MudNavLink Href="/security" Icon="@Icons.Material.Filled.Key">Security</MudNavLink>
         </MudNavMenu>
     </MudDrawer>
 
@@ -47,6 +88,18 @@
     private bool _drawerOpen;
 
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+
+    private void SignIn()
+    {
+        var current = Navigation.ToBaseRelativePath(Navigation.Uri);
+        var returnUrl = Uri.EscapeDataString(string.IsNullOrWhiteSpace(current) ? "/" : $"/{current}");
+        Navigation.NavigateTo($"/auth/login?returnUrl={returnUrl}", forceLoad: true);
+    }
+
+    private void SignOut()
+    {
+        Navigation.NavigateTo("/auth/logout?returnUrl=%2F", forceLoad: true);
+    }
 
     private static readonly MudTheme _theme = new()
     {

@@ -1,0 +1,143 @@
+@page "/login"
+@inject NavigationManager Navigation
+@using Microsoft.AspNetCore.Components
+@using System.Security.Claims
+
+<PageTitle>Login · Happy Gym Stats</PageTitle>
+
+<MudPaper Class="pa-6">
+    <MudText Typo="Typo.h4" GutterBottom="true">Login</MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+        Authenticate with Keycloak (realm: torn).
+    </MudText>
+
+    @if (!string.IsNullOrWhiteSpace(AuthError))
+    {
+        <MudAlert Severity="Severity.Error" Dense="true" Class="mb-4">
+            Sign-in failed: @AuthError
+        </MudAlert>
+    }
+
+    <AuthorizeView>
+        <Authorized Context="authState">
+            @{ var snapshot = BuildSnapshot(authState.User); }
+
+            <MudAlert Severity="Severity.Success" Dense="true" Class="mb-4">
+                Signed in as @(authState.User.Identity?.Name ?? "unknown user").
+            </MudAlert>
+
+            <MudStack Spacing="2" Style="max-width:760px;">
+                <MudText Typo="Typo.body2">You are authenticated via Keycloak.</MudText>
+
+                <MudSimpleTable Dense="true" Hover="true">
+                    <thead>
+                        <tr>
+                            <th>Claim</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><strong>preferred_username</strong></td><td>@snapshot.PreferredUsername</td></tr>
+                        <tr><td><strong>sub</strong></td><td>@snapshot.Subject</td></tr>
+                        <tr><td><strong>email</strong></td><td>@snapshot.Email</td></tr>
+                        <tr><td><strong>roles count</strong></td><td>@snapshot.RoleCount</td></tr>
+                    </tbody>
+                </MudSimpleTable>
+
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.Logout"
+                           OnClick="SignOut">
+                    Sign out
+                </MudButton>
+            </MudStack>
+        </Authorized>
+        <NotAuthorized>
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+                You are currently signed out.
+            </MudAlert>
+
+            <MudStack Spacing="2" Style="max-width:640px;">
+                <MudText Typo="Typo.body2">Client: happygymstats-web</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    Return destination: @_resolvedReturnUrl
+                </MudText>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@(_redirecting ? Icons.Material.Filled.HourglassTop : Icons.Material.Filled.Login)"
+                           Disabled="@_redirecting"
+                           OnClick="SignIn">
+                    @(_redirecting ? "Redirecting to Keycloak..." : "Sign in with Keycloak")
+                </MudButton>
+            </MudStack>
+        </NotAuthorized>
+    </AuthorizeView>
+</MudPaper>
+
+@code {
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery(Name = "authError")]
+    public string? AuthError { get; set; }
+
+    private bool _redirecting;
+    private string _resolvedReturnUrl = "/";
+
+    protected override void OnParametersSet()
+    {
+        _resolvedReturnUrl = SanitizeLocalReturnUrl(ReturnUrl);
+    }
+
+    private void SignIn()
+    {
+        _redirecting = true;
+        var returnUrl = Uri.EscapeDataString(_resolvedReturnUrl);
+        Navigation.NavigateTo($"/auth/login?returnUrl={returnUrl}", forceLoad: true);
+    }
+
+    private void SignOut()
+    {
+        Navigation.NavigateTo("/auth/logout?returnUrl=%2F", forceLoad: true);
+    }
+
+    private static string SanitizeLocalReturnUrl(string? returnUrl)
+    {
+        if (string.IsNullOrWhiteSpace(returnUrl)) return "/";
+
+        if (Uri.TryCreate(returnUrl, UriKind.Relative, out var parsed)
+            && parsed.OriginalString.StartsWith('/'))
+        {
+            return parsed.OriginalString;
+        }
+
+        return "/";
+    }
+
+    private static LoginClaimSnapshot BuildSnapshot(ClaimsPrincipal user)
+    {
+        static string FirstOrDefault(ClaimsPrincipal principal, params string[] claimTypes)
+        {
+            foreach (var type in claimTypes)
+            {
+                var value = principal.Claims.FirstOrDefault(c => string.Equals(c.Type, type, StringComparison.Ordinal))?.Value;
+                if (!string.IsNullOrWhiteSpace(value)) return value;
+            }
+            return "(not provided)";
+        }
+
+        var roleCount = user.Claims.Count(c => c.Type is ClaimTypes.Role or "role" or "roles");
+
+        return new LoginClaimSnapshot(
+            FirstOrDefault(user, "preferred_username", ClaimTypes.Name),
+            FirstOrDefault(user, "sub", ClaimTypes.NameIdentifier),
+            FirstOrDefault(user, "email", ClaimTypes.Email),
+            roleCount);
+    }
+
+    private sealed record LoginClaimSnapshot(
+        string PreferredUsername,
+        string Subject,
+        string Email,
+        int RoleCount);
+}
