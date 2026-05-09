@@ -2,19 +2,17 @@ using HappyGymStats.Data;
 using HappyGymStats.Data.Entities;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using System.Linq;
 using Xunit;
 
 namespace HappyGymStats.Tests;
 
 /// <summary>
-/// Fast schema-contract tests for the SQLite test provider only.
-/// Production startup/migration/provider behavior is validated in Postgres integration tests.
+/// Fast schema-contract tests for the SQLite provider.
 /// </summary>
 public sealed class SqliteHappyGymStatsDbContextTests
 {
     [Fact]
-    public async Task EnsureCreated_creates_initial_sqlite_schema()
+    public async Task EnsureCreated_creates_current_sqlite_schema()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -30,34 +28,18 @@ public sealed class SqliteHappyGymStatsDbContextTests
             .SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'table' ORDER BY name")
             .ToListAsync();
 
-        Assert.Contains("RawUserLogs", tableNames);
-        Assert.Contains("ImportCheckpoints", tableNames);
+        Assert.Contains("IdentityMap", tableNames);
         Assert.Contains("ImportRuns", tableNames);
-        Assert.Contains("DerivedGymTrains", tableNames);
-        Assert.Contains("DerivedHappyEvents", tableNames);
         Assert.Contains("ModifierProvenance", tableNames);
-
-        var provenanceColumns = await db.Database
-            .SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('ModifierProvenance') ORDER BY name")
-            .ToListAsync();
-
-        Assert.Contains("Scope", provenanceColumns);
-        Assert.Contains("VerificationStatus", provenanceColumns);
-        Assert.Contains("VerificationReasonCode", provenanceColumns);
-        Assert.Contains("ValidFromUtc", provenanceColumns);
-        Assert.Contains("ValidToUtc", provenanceColumns);
-
-        var provenanceIndexes = await db.Database
-            .SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'index' AND tbl_name = 'ModifierProvenance' ORDER BY name")
-            .ToListAsync();
-
-        Assert.Contains("IX_ModifierProvenance_DerivedGymTrainLogId_Scope", provenanceIndexes);
-        Assert.Contains("IX_ModifierProvenance_Scope_ValidFromUtc_ValidToUtc", provenanceIndexes);
-        Assert.Contains("IX_ModifierProvenance_VerificationStatus", provenanceIndexes);
+        Assert.Contains("AffiliationEvents", tableNames);
+        Assert.Contains("FactionIdMap", tableNames);
+        Assert.Contains("FactionMembership", tableNames);
+        Assert.Contains("UserLogEntries", tableNames);
+        Assert.Contains("LogTypes", tableNames);
     }
 
     [Fact]
-    public async Task Sqlite_raw_user_logs_enforce_unique_torn_log_ids()
+    public async Task Sqlite_user_log_entries_enforce_composite_primary_key()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -69,27 +51,31 @@ public sealed class SqliteHappyGymStatsDbContextTests
         await using var db = new HappyGymStatsDbContext(options);
         await db.Database.EnsureCreatedAsync();
 
-        db.RawUserLogs.Add(new RawUserLogEntity
+        var anonymousId = Guid.NewGuid();
+
+        db.UserLogEntries.Add(new UserLogEntryEntity
         {
-            LogId = "same-log-id",
-            OccurredAtUtc = DateTimeOffset.UnixEpoch,
-            RawJson = "{}",
+            AnonymousId = anonymousId,
+            LogEntryId = "log-1",
+            OccurredAtUtc = DateTimeOffset.UtcNow,
+            LogTypeId = 1
         });
 
         await db.SaveChangesAsync();
 
-        db.RawUserLogs.Add(new RawUserLogEntity
+        db.UserLogEntries.Add(new UserLogEntryEntity
         {
-            LogId = "same-log-id",
-            OccurredAtUtc = DateTimeOffset.UnixEpoch.AddMinutes(1),
-            RawJson = "{}",
+            AnonymousId = anonymousId,
+            LogEntryId = "log-1",
+            OccurredAtUtc = DateTimeOffset.UtcNow.AddMinutes(1),
+            LogTypeId = 2
         });
 
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
     }
 
     [Fact]
-    public async Task Sqlite_modifier_provenance_rejects_invalid_status_or_missing_scope_identifier()
+    public async Task Sqlite_modifier_provenance_enforces_composite_primary_key()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -101,50 +87,33 @@ public sealed class SqliteHappyGymStatsDbContextTests
         await using var db = new HappyGymStatsDbContext(options);
         await db.Database.EnsureCreatedAsync();
 
-        db.DerivedGymTrains.Add(new DerivedGymTrainEntity
+        var anonymousId = Guid.NewGuid();
+
+        db.ModifierProvenance.Add(new ModifierProvenanceEntity
         {
-            LogId = "train-1",
-            OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
-            HappyBeforeTrain = 100,
-            HappyAfterTrain = 110,
-            HappyUsed = 10,
-            RegenTicksApplied = 0,
-            RegenHappyGained = 0,
-            ClampedToMax = false,
+            AnonymousId = anonymousId,
+            LogEntryId = "log-1",
+            Scope = 1,
+            SubjectId = 123,
+            VerificationStatus = 1
         });
+
         await db.SaveChangesAsync();
 
         db.ModifierProvenance.Add(new ModifierProvenanceEntity
         {
-            DerivedGymTrainLogId = "train-1",
-            Scope = "personal",
-            SubjectId = "", // invalid: empty for personal
-            ValidFromUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
-            ValidToUtc = DateTimeOffset.Parse("2026-01-01T01:00:00Z"),
-            VerificationStatus = "verified",
-            VerificationReasonCode = "ok",
-        });
-
-        await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
-
-        db.ChangeTracker.Clear();
-
-        db.ModifierProvenance.Add(new ModifierProvenanceEntity
-        {
-            DerivedGymTrainLogId = "train-1",
-            Scope = "faction",
-            FactionId = "f123",
-            ValidFromUtc = DateTimeOffset.Parse("2026-01-01T01:00:00Z"),
-            ValidToUtc = DateTimeOffset.Parse("2026-01-01T02:00:00Z"),
-            VerificationStatus = "bad-status",
-            VerificationReasonCode = "malformed",
+            AnonymousId = anonymousId,
+            LogEntryId = "log-1",
+            Scope = 1,
+            SubjectId = 456,
+            VerificationStatus = 2
         });
 
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
     }
 
     [Fact]
-    public async Task Sqlite_modifier_provenance_allows_adjacent_time_windows()
+    public async Task Sqlite_modifier_provenance_allows_distinct_scope_for_same_log()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -156,63 +125,32 @@ public sealed class SqliteHappyGymStatsDbContextTests
         await using var db = new HappyGymStatsDbContext(options);
         await db.Database.EnsureCreatedAsync();
 
-        db.DerivedGymTrains.AddRange(
-            new DerivedGymTrainEntity
-            {
-                LogId = "train-a",
-                OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
-                HappyBeforeTrain = 100,
-                HappyAfterTrain = 110,
-                HappyUsed = 10,
-                RegenTicksApplied = 0,
-                RegenHappyGained = 0,
-                ClampedToMax = false,
-            },
-            new DerivedGymTrainEntity
-            {
-                LogId = "train-b",
-                OccurredAtUtc = DateTimeOffset.Parse("2026-01-01T02:00:00Z"),
-                HappyBeforeTrain = 110,
-                HappyAfterTrain = 120,
-                HappyUsed = 10,
-                RegenTicksApplied = 0,
-                RegenHappyGained = 0,
-                ClampedToMax = false,
-            });
+        var anonymousId = Guid.NewGuid();
 
-        await db.SaveChangesAsync();
-
-        var boundary = DateTimeOffset.Parse("2026-01-01T01:00:00Z");
         db.ModifierProvenance.AddRange(
             new ModifierProvenanceEntity
             {
-                DerivedGymTrainLogId = "train-a",
-                Scope = "personal",
-                SubjectId = "u1",
-                ValidFromUtc = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
-                ValidToUtc = boundary,
-                VerificationStatus = "verified",
-                VerificationReasonCode = "source-log",
+                AnonymousId = anonymousId,
+                LogEntryId = "log-1",
+                Scope = 1,
+                SubjectId = 123,
+                VerificationStatus = 1
             },
             new ModifierProvenanceEntity
             {
-                DerivedGymTrainLogId = "train-b",
-                Scope = "personal",
-                SubjectId = "u1",
-                ValidFromUtc = boundary,
-                ValidToUtc = DateTimeOffset.Parse("2026-01-01T02:00:00Z"),
-                VerificationStatus = "unresolved",
-                VerificationReasonCode = "missing-faction",
+                AnonymousId = anonymousId,
+                LogEntryId = "log-1",
+                Scope = 2,
+                FactionId = 999,
+                VerificationStatus = 2
             });
 
         await db.SaveChangesAsync();
 
         var rows = await db.ModifierProvenance
-            .Where(p => p.Scope == "personal")
-            .OrderBy(p => p.ValidFromUtc)
+            .Where(x => x.AnonymousId == anonymousId && x.LogEntryId == "log-1")
             .ToListAsync();
 
         Assert.Equal(2, rows.Count);
-        Assert.Equal(rows[0].ValidToUtc, rows[1].ValidFromUtc);
     }
 }

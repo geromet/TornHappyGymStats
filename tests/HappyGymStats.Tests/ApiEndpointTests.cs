@@ -18,6 +18,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Reflection;
 using Xunit;
 
 namespace HappyGymStats.Tests;
@@ -408,22 +409,18 @@ public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTest
 
                 services.AddSingleton(_connection);
                 services.AddDbContext<HappyGymStatsDbContext>(options => options.UseSqlite(_connection));
+
+                services.AddAuthentication(options =>
+                {
+                    options.DefaultAuthenticateScheme = TestAuthHandler.SchemeName;
+                    options.DefaultChallengeScheme = TestAuthHandler.SchemeName;
+                }).AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });
             });
         }
 
         public HttpClient CreateAuthenticatedClient(string? anonymousIdClaim, string keycloakSub = "test-sub")
         {
-            var authedFactory = WithWebHostBuilder(builder =>
-                builder.ConfigureServices(services =>
-                {
-                    services.AddAuthentication(options =>
-                    {
-                        options.DefaultAuthenticateScheme = TestAuthHandler.SchemeName;
-                        options.DefaultChallengeScheme = TestAuthHandler.SchemeName;
-                    }).AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });
-                }));
-
-            var client = authedFactory.CreateClient();
+            var client = CreateClient();
             if (anonymousIdClaim is not null)
                 client.DefaultRequestHeaders.Add(TestAuthHandler.AnonymousIdHeader, anonymousIdClaim);
 
@@ -440,6 +437,11 @@ public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTest
             db.ImportRuns.RemoveRange(db.ImportRuns);
             db.IdentityMap.RemoveRange(db.IdentityMap);
             db.SaveChanges();
+
+            var orchestrator = scope.ServiceProvider.GetRequiredService<HappyGymStats.Core.Import.ImportOrchestrator>();
+            var latestField = typeof(HappyGymStats.Core.Import.ImportOrchestrator)
+                .GetField("_latest", BindingFlags.Instance | BindingFlags.NonPublic);
+            latestField?.SetValue(orchestrator, null);
         }
 
         public async Task SeedUserLogEntriesAsync(params UserLogEntryEntity[] rows)
