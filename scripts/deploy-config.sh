@@ -49,7 +49,17 @@ deploy_compute_sudo_cmd() {
 
 DEPLOY_SUDO_CMD="$(deploy_compute_sudo_cmd)"
 
-DEPLOY_SSH_OPTS=(-i "${DEPLOY_SSH_KEY}" -o "ProxyCommand=${DEPLOY_PROXY_COMMAND}")
+: "${DEPLOY_SSH_CONTROL_DIR:=${TMPDIR:-/tmp}/happygymstats-deploy-ssh}"
+mkdir -p "${DEPLOY_SSH_CONTROL_DIR}"
+readonly DEPLOY_SSH_CONTROL_PATH="${DEPLOY_SSH_CONTROL_DIR}/%r@%h:%p"
+
+DEPLOY_SSH_OPTS=(
+  -i "${DEPLOY_SSH_KEY}"
+  -o "ProxyCommand=${DEPLOY_PROXY_COMMAND}"
+  -o "ControlMaster=auto"
+  -o "ControlPath=${DEPLOY_SSH_CONTROL_PATH}"
+  -o "ControlPersist=10m"
+)
 
 deploy_ssh_tty() {
   ssh -tt "${DEPLOY_SSH_OPTS[@]}" "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}" "$@"
@@ -58,6 +68,11 @@ deploy_ssh_tty() {
 deploy_ssh_pipe() {
   ssh -T "${DEPLOY_SSH_OPTS[@]}" "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}" "$@"
 }
+
+deploy_ssh_control_close() {
+  ssh -O exit -o "ControlPath=${DEPLOY_SSH_CONTROL_PATH}" "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}" >/dev/null 2>&1 || true
+}
+trap deploy_ssh_control_close EXIT
 
 deploy_print_common_connection_summary() {
   local key_state="unset"
@@ -140,10 +155,18 @@ deploy_precheck_remote_path_writable() {
   local category="${2:-missing_remote_write_privilege}"
 
   if ! deploy_ssh_tty "set -euo pipefail; if [[ -e '${path}' ]]; then test -w '${path}'; else test -w \"\$(dirname '${path}')\"; fi" >/dev/null 2>&1; then
-    if [[ -n "${DEPLOY_SUDO_CMD}" ]]; then
-      deploy_ssh_tty "set -euo pipefail; ${DEPLOY_SUDO_CMD} test -w '${path}' || ${DEPLOY_SUDO_CMD} test -w \"\$(dirname '${path}')\"" >/dev/null 2>&1 || deploy_precheck_fail "${category}" "path=${path}"
-    else
+    if [[ -z "${DEPLOY_SUDO_CMD}" ]]; then
       deploy_precheck_fail "${category}" "path=${path}"
+    elif [[ "${DEPLOY_SUDO_NON_INTERACTIVE}" == "1" ]]; then
+      # Automation mode: passwordless sudo is expected, so verify it non-interactively
+      # rather than hanging on a password prompt nothing will ever answer.
+      deploy_ssh_tty "set -euo pipefail; sudo -n test -w '${path}' || sudo -n test -w \"\$(dirname '${path}')\"" >/dev/null 2>&1 || deploy_precheck_fail "${category}" "path=${path} hint=passwordless_sudo_required"
+    else
+      # Interactive mode: sudo intentionally requires a password on this host, and this is
+      # just a precheck, not the mutating step. Don't block here on a prompt we'd have to
+      # show twice — trust the real deploy actions later (mkdir/rsync/chown) to prompt
+      # visibly and fail loudly if write access genuinely isn't there.
+      echo "==> Skipping write precheck for ${path} (requires interactive sudo; will confirm during deploy)"
     fi
   fi
 }
