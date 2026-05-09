@@ -107,7 +107,6 @@ public sealed class ImportOrchestrator : BackgroundService
             var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
             var tornPlayerId = await tornClient.GetPlayerIdAsync(request.ApiKey, stoppingToken).ConfigureAwait(false);
-            _logger.LogInformation("Import job {JobId} API key validated for Torn player {TornPlayerId}", request.JobId, tornPlayerId);
 
             var mode = request.Fresh ? FetchMode.Fresh : FetchMode.Resume;
 
@@ -115,7 +114,7 @@ public sealed class ImportOrchestrator : BackgroundService
                 ? request.AnonymousId
                 : await importRunRepo.ResolveAnonymousIdAsync(stoppingToken).ConfigureAwait(false) ?? Guid.NewGuid();
 
-            _logger.LogInformation("Import job {JobId} using AnonymousId {AnonymousId}", request.JobId, anonymousId);
+            _logger.LogInformation("Import job {JobId} API key validated for AnonymousId {AnonymousId}", request.JobId, anonymousId);
 
             if (request.PublicKey is not null)
             {
