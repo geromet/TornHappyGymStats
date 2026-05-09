@@ -30,7 +30,7 @@ public sealed class SurfacesController : ApiControllerBase
         => await ServeLatestFile(ct);
 
     [HttpGet("me")]
-    [Authorize]
+    [Authorize(Roles = Roles.User)]
     public async Task<IActionResult> GetMine(CancellationToken ct)
     {
         var claimValue = User.FindFirstValue(Claims.AnonymousId);
