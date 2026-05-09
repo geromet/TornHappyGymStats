@@ -1,6 +1,11 @@
-using HappyGymStats.Api.Infrastructure;
-using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using System.Text.Json.Nodes;
+using HappyGymStats.Api.Infrastructure;
+using HappyGymStats.Core.Reconstruction;
+using HappyGymStats.Core.Repositories;
+using HappyGymStats.Identity.Authentication;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 
 namespace HappyGymStats.Api.Controllers;
 
@@ -8,8 +13,13 @@ namespace HappyGymStats.Api.Controllers;
 public sealed class SurfacesController : ApiControllerBase
 {
     private readonly string _cacheDirectory;
+    private readonly IUserLogEntryRepository _userLogRepo;
 
-    public SurfacesController(SurfacesConfig config) => _cacheDirectory = config.CacheDirectory;
+    public SurfacesController(SurfacesConfig config, IUserLogEntryRepository userLogRepo)
+    {
+        _cacheDirectory = config.CacheDirectory;
+        _userLogRepo = userLogRepo;
+    }
 
     [HttpGet("meta")]
     public async Task<IActionResult> GetMeta(CancellationToken ct)
@@ -18,6 +28,45 @@ public sealed class SurfacesController : ApiControllerBase
     [HttpGet("latest")]
     public async Task<IActionResult> GetLatest(CancellationToken ct)
         => await ServeLatestFile(ct);
+
+    [HttpGet("me")]
+    [Authorize]
+    public async Task<IActionResult> GetMine(CancellationToken ct)
+    {
+        var claimValue = User.FindFirstValue(Claims.AnonymousId);
+        if (!Guid.TryParse(claimValue, out var callerAnonymousId))
+            return ApiError(StatusCodes.Status401Unauthorized, "unauthorized", "anonymous_id claim is missing or invalid.");
+
+        var gymLogs = await _userLogRepo.GetGymLogEntriesAsync(callerAnonymousId, ct);
+        var surfaces = SurfaceSeriesBuilder.Build(gymLogs, new Dictionary<string, IReadOnlyList<SurfaceSeriesBuilder.ModifierProvenance>>());
+
+        return Ok(new
+        {
+            dataset = "surfaces",
+            version = "caller-scoped-v1",
+            meta = new
+            {
+                gymPointCount = surfaces.GymX.Length,
+                eventPointCount = 0,
+                recordCount = surfaces.GymX.Length,
+            },
+            series = new
+            {
+                gymCloud = new
+                {
+                    x = surfaces.GymX,
+                    y = surfaces.GymY,
+                    z = surfaces.GymZ,
+                },
+                eventsCloud = new
+                {
+                    x = Array.Empty<int>(),
+                    y = Array.Empty<int>(),
+                    z = Array.Empty<int>(),
+                },
+            },
+        });
+    }
 
     private async Task<IActionResult> ServeLatestFile(CancellationToken ct)
     {

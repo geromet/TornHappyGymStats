@@ -7,6 +7,7 @@ namespace HappyGymStats.Blazor.Services;
 public sealed class SurfacesService(HttpClient http)
 {
     private const string LatestEndpoint = "/api/v1/torn/surfaces/latest";
+    private const string MyStatsEndpoint = "/api/v1/torn/surfaces/me";
     private const string ImportEndpoint = "/api/v1/torn/import-jobs";
 
     public async Task<SurfacesDatasetDto?> GetLatestAsync(CancellationToken ct = default)
@@ -16,6 +17,15 @@ public sealed class SurfacesService(HttpClient http)
         EnsureSuccessOrThrow(response, LatestEndpoint);
 
         return await ReadJsonOrThrowAsync<SurfacesDatasetDto>(response, LatestEndpoint, ct);
+    }
+
+    public async Task<MyStatsDatasetDto?> GetMyStatsAsync(CancellationToken ct = default)
+    {
+        var response = await http.GetAsync(MyStatsEndpoint, ct);
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
+        EnsureSuccessOrThrow(response, MyStatsEndpoint);
+
+        return await ReadJsonOrThrowAsync<MyStatsDatasetDto>(response, MyStatsEndpoint, ct);
     }
 
     public async Task<ImportStatusDto?> StartImportAsync(string apiKey, bool fresh, CancellationToken ct = default)

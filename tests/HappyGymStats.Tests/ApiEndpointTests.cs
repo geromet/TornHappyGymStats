@@ -1,10 +1,13 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Claims;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using HappyGymStats.Api;
 using HappyGymStats.Core.Models;
 using HappyGymStats.Data;
 using HappyGymStats.Data.Entities;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
@@ -12,6 +15,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace HappyGymStats.Tests;
@@ -192,6 +197,74 @@ public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTest
     }
 
     [Fact]
+    public async Task Surfaces_me_returns_unauthorized_when_anonymous_id_claim_missing_or_invalid()
+    {
+        using var clientWithoutClaim = _factory.CreateAuthenticatedClient(null);
+        var missingClaimResponse = await clientWithoutClaim.GetAsync("/api/v1/torn/surfaces/me");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, missingClaimResponse.StatusCode);
+        var missingClaimPayload = await missingClaimResponse.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
+        Assert.NotNull(missingClaimPayload);
+        Assert.Equal("unauthorized", missingClaimPayload.Error.Code);
+
+        using var clientWithInvalidClaim = _factory.CreateAuthenticatedClient("not-a-guid");
+        var invalidClaimResponse = await clientWithInvalidClaim.GetAsync("/api/v1/torn/surfaces/me");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, invalidClaimResponse.StatusCode);
+        var invalidClaimPayload = await invalidClaimResponse.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
+        Assert.NotNull(invalidClaimPayload);
+        Assert.Equal("unauthorized", invalidClaimPayload.Error.Code);
+    }
+
+    [Fact]
+    public async Task Surfaces_me_returns_only_caller_scoped_gym_points()
+    {
+        var callerAnonymousId = Guid.NewGuid();
+        var otherAnonymousId = Guid.NewGuid();
+
+        await _factory.SeedUserLogEntriesAsync(
+            new UserLogEntryEntity
+            {
+                AnonymousId = callerAnonymousId,
+                LogEntryId = "caller-train",
+                OccurredAtUtc = new DateTimeOffset(2026, 05, 01, 12, 00, 00, TimeSpan.Zero),
+                LogTypeId = 1,
+                HappyBeforeTrain = 600,
+                HappyUsed = 50,
+                EnergyUsed = 10,
+                StrengthBefore = 2000,
+                StrengthIncreased = 25,
+            },
+            new UserLogEntryEntity
+            {
+                AnonymousId = otherAnonymousId,
+                LogEntryId = "other-train",
+                OccurredAtUtc = new DateTimeOffset(2026, 05, 01, 13, 00, 00, TimeSpan.Zero),
+                LogTypeId = 1,
+                HappyBeforeTrain = 650,
+                HappyUsed = 50,
+                EnergyUsed = 10,
+                StrengthBefore = 3000,
+                StrengthIncreased = 30,
+            });
+
+        using var client = _factory.CreateAuthenticatedClient(callerAnonymousId.ToString());
+        var response = await client.GetAsync("/api/v1/torn/surfaces/me");
+
+        response.EnsureSuccessStatusCode();
+
+        using var payloadDoc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = payloadDoc.RootElement;
+
+        Assert.Equal("surfaces", root.GetProperty("dataset").GetString());
+        Assert.Equal(1, root.GetProperty("meta").GetProperty("gymPointCount").GetInt32());
+
+        var gymX = root.GetProperty("series").GetProperty("gymCloud").GetProperty("x");
+        Assert.Single(gymX.EnumerateArray());
+        Assert.Equal(2000, gymX[0].GetDouble());
+    }
+
+    [Fact]
     public async Task Import_requires_api_key()
     {
         using var client = _factory.CreateClient();
@@ -260,6 +333,25 @@ public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTest
             });
         }
 
+        public HttpClient CreateAuthenticatedClient(string? anonymousIdClaim)
+        {
+            var authedFactory = WithWebHostBuilder(builder =>
+                builder.ConfigureServices(services =>
+                {
+                    services.AddAuthentication(options =>
+                    {
+                        options.DefaultAuthenticateScheme = TestAuthHandler.SchemeName;
+                        options.DefaultChallengeScheme = TestAuthHandler.SchemeName;
+                    }).AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });
+                }));
+
+            var client = authedFactory.CreateClient();
+            if (anonymousIdClaim is not null)
+                client.DefaultRequestHeaders.Add(TestAuthHandler.AnonymousIdHeader, anonymousIdClaim);
+
+            return client;
+        }
+
         public void ResetDatabase()
         {
             using var scope = Services.CreateScope();
@@ -294,6 +386,40 @@ public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTest
             base.Dispose(disposing);
             if (disposing)
                 _connection?.Dispose();
+        }
+    }
+
+    private sealed class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions>
+    {
+        public const string SchemeName = "Test";
+        public const string AnonymousIdHeader = "X-Test-AnonymousId";
+
+        public TestAuthHandler(
+            IOptionsMonitor<AuthenticationSchemeOptions> options,
+            ILoggerFactory logger,
+            UrlEncoder encoder)
+            : base(options, logger, encoder)
+        {
+        }
+
+        protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+        {
+            var claims = new List<Claim>
+            {
+                new(ClaimTypes.NameIdentifier, "test-sub"),
+                new(ClaimTypes.Name, "test-user"),
+            };
+
+            if (Request.Headers.TryGetValue(AnonymousIdHeader, out var anonymousIdHeader)
+                && !string.IsNullOrWhiteSpace(anonymousIdHeader.ToString()))
+            {
+                claims.Add(new Claim(HappyGymStats.Identity.Authentication.Claims.AnonymousId, anonymousIdHeader.ToString()));
+            }
+
+            var identity = new ClaimsIdentity(claims, SchemeName);
+            var principal = new ClaimsPrincipal(identity);
+            var ticket = new AuthenticationTicket(principal, SchemeName);
+            return Task.FromResult(AuthenticateResult.Success(ticket));
         }
     }
 }
