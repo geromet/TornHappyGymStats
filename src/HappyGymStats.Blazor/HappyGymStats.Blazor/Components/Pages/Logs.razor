@@ -1,0 +1,22 @@
+@page "/logs"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>Logs · Happy Gym Stats</PageTitle>
+
+<MudPaper Class="pa-6">
+    <MudText Typo="Typo.h4" GutterBottom="true">Logs</MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+        Operational and import execution logs.
+    </MudText>
+
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+        Initial scaffold: connect to log/import-run endpoints in next iteration.
+    </MudAlert>
+
+    <ul>
+        <li>[init] Logs page scaffold created.</li>
+        <li>[todo] Add filters: severity, source, time range.</li>
+        <li>[todo] Add correlation by import run ID.</li>
+    </ul>
+</MudPaper>

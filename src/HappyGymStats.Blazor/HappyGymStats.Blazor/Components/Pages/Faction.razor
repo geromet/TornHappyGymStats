@@ -1,0 +1,33 @@
+@page "/faction"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>Faction · Happy Gym Stats</PageTitle>
+
+<MudPaper Class="pa-6">
+    <MudText Typo="Typo.h4" GutterBottom="true">Faction</MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+        Faction-level performance overview and data quality posture.
+    </MudText>
+
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudCard>
+                <MudCardHeader><MudText Typo="Typo.h6">Faction summary</MudText></MudCardHeader>
+                <MudCardContent><MudText Typo="Typo.body2">Name, ID, member count, and leadership.</MudText></MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudCard>
+                <MudCardHeader><MudText Typo="Typo.h6">Training rollup</MudText></MudCardHeader>
+                <MudCardContent><MudText Typo="Typo.body2">Aggregated gym trends and gain velocity.</MudText></MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudCard>
+                <MudCardHeader><MudText Typo="Typo.h6">Provenance warnings</MudText></MudCardHeader>
+                <MudCardContent><MudText Typo="Typo.body2">Unresolved mapping warnings by source scope.</MudText></MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+</MudPaper>

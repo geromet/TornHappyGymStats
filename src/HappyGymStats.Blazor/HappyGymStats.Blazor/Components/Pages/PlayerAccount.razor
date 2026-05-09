@@ -1,0 +1,172 @@
+@page "/player-account"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using System.Security.Claims
+
+<PageTitle>Player Account · Happy Gym Stats</PageTitle>
+
+<MudPaper Class="pa-6">
+    <MudText Typo="Typo.h4" GutterBottom="true">Player account</MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+        Authenticated identity and claim-level account introspection.
+    </MudText>
+
+    <AuthorizeView>
+        <Authorized Context="authState">
+            @{ var claimSnapshot = BuildClaimSnapshot(authState.User); }
+
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudCard>
+                        <MudCardHeader><MudText Typo="Typo.h6">Identity</MudText></MudCardHeader>
+                        <MudCardContent>
+                            <MudSimpleTable Dense="true" Hover="true">
+                                <thead>
+                                    <tr>
+                                        <th>Field</th>
+                                        <th>Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var item in claimSnapshot.IdentityRows)
+                                    {
+                                        <tr>
+                                            <td><strong>@item.Field</strong></td>
+                                            <td>@item.Value</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+
+                <MudItem xs="12" md="6">
+                    <MudCard Class="mb-4">
+                        <MudCardHeader><MudText Typo="Typo.h6">Roles & groups</MudText></MudCardHeader>
+                        <MudCardContent>
+                            @if (!claimSnapshot.Roles.Any() && !claimSnapshot.Groups.Any())
+                            {
+                                <MudAlert Severity="Severity.Info" Dense="true">
+                                    No roles/groups claims found yet. This is expected until Keycloak roles or groups are configured.
+                                </MudAlert>
+                            }
+                            else
+                            {
+                                <MudStack Spacing="2">
+                                    <div>
+                                        <MudText Typo="Typo.subtitle2">Roles</MudText>
+                                        @if (claimSnapshot.Roles.Any())
+                                        {
+                                            <MudChipSet T="string">
+                                                @foreach (var role in claimSnapshot.Roles)
+                                                {
+                                                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Primary">@role</MudChip>
+                                                }
+                                            </MudChipSet>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.body2" Color="Color.Secondary">None</MudText>
+                                        }
+                                    </div>
+                                    <div>
+                                        <MudText Typo="Typo.subtitle2">Groups</MudText>
+                                        @if (claimSnapshot.Groups.Any())
+                                        {
+                                            <MudChipSet T="string">
+                                                @foreach (var group in claimSnapshot.Groups)
+                                                {
+                                                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Secondary">@group</MudChip>
+                                                }
+                                            </MudChipSet>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.body2" Color="Color.Secondary">None</MudText>
+                                        }
+                                    </div>
+                                </MudStack>
+                            }
+                        </MudCardContent>
+                    </MudCard>
+
+                    <MudCard>
+                        <MudCardHeader><MudText Typo="Typo.h6">Claim diagnostics</MudText></MudCardHeader>
+                        <MudCardContent>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                                Raw claims are shown to validate identity mapping before role-based authorization is enforced.
+                            </MudText>
+                            <MudSimpleTable Dense="true" Hover="true">
+                                <thead>
+                                    <tr>
+                                        <th>Type</th>
+                                        <th>Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var claim in claimSnapshot.Claims)
+                                    {
+                                        <tr>
+                                            <td>@claim.Type</td>
+                                            <td>@claim.Value</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            </MudGrid>
+        </Authorized>
+        <NotAuthorized>
+            <MudAlert Severity="Severity.Warning">You must be signed in to view player account details.</MudAlert>
+        </NotAuthorized>
+    </AuthorizeView>
+</MudPaper>
+
+@code {
+    private static ClaimSnapshot BuildClaimSnapshot(ClaimsPrincipal user)
+    {
+        var claims = user.Claims
+            .OrderBy(c => c.Type, StringComparer.Ordinal)
+            .ThenBy(c => c.Value, StringComparer.Ordinal)
+            .ToList();
+
+        var roles = claims
+            .Where(c => c.Type is ClaimTypes.Role or "role" or "roles")
+            .Select(c => c.Value)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(v => v, StringComparer.Ordinal)
+            .ToList();
+
+        var groups = claims
+            .Where(c => c.Type is "group" or "groups")
+            .Select(c => c.Value)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(v => v, StringComparer.Ordinal)
+            .ToList();
+
+        var identityRows = new List<(string Field, string Value)>
+        {
+            ("Authenticated", user.Identity?.IsAuthenticated == true ? "Yes" : "No"),
+            ("Identity name", user.Identity?.Name ?? "(not provided)"),
+            ("Preferred username", FindFirst(user, "preferred_username") ?? "(not provided)"),
+            ("Subject (sub)", FindFirst(user, "sub") ?? "(not provided)"),
+            ("Email", FindFirst(user, ClaimTypes.Email) ?? FindFirst(user, "email") ?? "(not provided)"),
+            ("Issuer", claims.Select(c => c.Issuer).FirstOrDefault(i => !string.IsNullOrWhiteSpace(i)) ?? "(not provided)"),
+            ("Total claims", claims.Count.ToString())
+        };
+
+        return new ClaimSnapshot(identityRows, roles, groups, claims);
+    }
+
+    private static string? FindFirst(ClaimsPrincipal user, string claimType)
+        => user.Claims.FirstOrDefault(c => string.Equals(c.Type, claimType, StringComparison.Ordinal))?.Value;
+
+    private sealed record ClaimSnapshot(
+        IReadOnlyList<(string Field, string Value)> IdentityRows,
+        IReadOnlyList<string> Roles,
+        IReadOnlyList<string> Groups,
+        IReadOnlyList<Claim> Claims);
+}

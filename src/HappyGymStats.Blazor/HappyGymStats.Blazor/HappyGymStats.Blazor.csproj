@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\HappyGymStats.Blazor.Client\HappyGymStats.Blazor.Client.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.7" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.7" />
     <PackageReference Include="MudBlazor" Version="8.*" />
   </ItemGroup>
