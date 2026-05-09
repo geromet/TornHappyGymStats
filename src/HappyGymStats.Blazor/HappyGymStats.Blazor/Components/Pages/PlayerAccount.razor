@@ -1,0 +1,39 @@
+@page "/player-account"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>Player Account · Happy Gym Stats</PageTitle>
+
+<MudPaper Class="pa-6">
+    <MudText Typo="Typo.h4" GutterBottom="true">Player account</MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+        Account identity, faction linkage, and security posture.
+    </MudText>
+
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudCard>
+                <MudCardHeader><MudText Typo="Typo.h6">Identity</MudText></MudCardHeader>
+                <MudCardContent>
+                    <MudText Typo="Typo.body2">Username, player ID, and account status.</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudCard>
+                <MudCardHeader><MudText Typo="Typo.h6">Connected providers</MudText></MudCardHeader>
+                <MudCardContent>
+                    <MudText Typo="Typo.body2">Keycloak user binding and API access linkage.</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudCard>
+                <MudCardHeader><MudText Typo="Typo.h6">Session & security</MudText></MudCardHeader>
+                <MudCardContent>
+                    <MudText Typo="Typo.body2">Recent activity, session state, and revoke actions.</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
