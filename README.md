@@ -4,6 +4,7 @@ HappyGymStats is a Torn telemetry pipeline with a production ASP.NET API, a Blaz
 
 ## Quick links
 
+- Live Project: [HappyGymStats](https://torn.geromet.com/)
 - Project overview: [docs/OVERVIEW.md](docs/OVERVIEW.md)
 - Local setup/run: [docs/SETUP.md](docs/SETUP.md)
 - Deployment: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
