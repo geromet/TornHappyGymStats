@@ -54,6 +54,7 @@ public static class Program
         {
             client.BaseAddress = new Uri("https://api.torn.com/");
         });
+        builder.Services.AddHttpClient<IWarPollerNotifier, WarPollerNotifier>();
 
         builder.Services.AddDbContext<HappyGymStatsDbContext>(options =>
             options.UseNpgsql(connectionString));

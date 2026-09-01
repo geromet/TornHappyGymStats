@@ -290,6 +290,7 @@ public sealed class WarPollerServiceTests
             persistence.ImportRunRepository,
             persistence.UnitOfWork,
             options ?? new WarPollerOptions { ScopeKey = ScopeKey, ApiKey = ApiKey, FactionId = FactionId, PollIntervalSeconds = 30, FailureBackoffSeconds = 60, MaxFailureBackoffSeconds = 300 },
+            new NoOpWarPollerNotifier(),
             clock,
             NullLogger<WarPollerService>.Instance);
 
@@ -379,6 +380,11 @@ public sealed class WarPollerServiceTests
             Requests.Add(request);
             return _responder(request, cancellationToken);
         }
+    }
+
+    private sealed class NoOpWarPollerNotifier : IWarPollerNotifier
+    {
+        public Task NotifyWarStateUpdatedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class CancellingUnitOfWork(HappyGymStatsDbContext dbContext, CancellationTokenSource cancellationSource, int cancelAfterSaveCall) : IUnitOfWork

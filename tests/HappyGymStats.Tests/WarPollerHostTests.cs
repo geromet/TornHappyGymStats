@@ -47,6 +47,7 @@ public sealed class WarPollerHostTests
 
         Assert.Contains("Host.CreateApplicationBuilder", programSource, StringComparison.Ordinal);
         Assert.Contains("AddHttpClient<TornApiClient>", programSource, StringComparison.Ordinal);
+        Assert.Contains("AddHttpClient<IWarPollerNotifier, WarPollerNotifier>", programSource, StringComparison.Ordinal);
         Assert.DoesNotContain("new TornApiClient(", programSource, StringComparison.Ordinal);
         Assert.DoesNotContain("WebApplication", programSource, StringComparison.Ordinal);
         Assert.DoesNotContain("Kestrel", programSource, StringComparison.Ordinal);
@@ -114,6 +115,7 @@ public sealed class WarPollerHostTests
                 MaxFailureBackoffSeconds = 300,
                 StaleThresholdSeconds = 600
             },
+            new NoOpWarPollerNotifier(),
             clock,
             NullLogger<WarPollerService>.Instance);
 
@@ -198,6 +200,11 @@ public sealed class WarPollerHostTests
         }
 
         throw new InvalidOperationException("Could not locate repository root from test output directory.");
+    }
+
+    private sealed class NoOpWarPollerNotifier : IWarPollerNotifier
+    {
+        public Task NotifyWarStateUpdatedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class BlockingWarPollerClock(DateTimeOffset now) : IWarPollerClock

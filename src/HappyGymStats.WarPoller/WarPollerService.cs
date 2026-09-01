@@ -1,4 +1,6 @@
 using System.IO;
+using System.Net;
+using System.Net.Http;
 using System.Text.RegularExpressions;
 using HappyGymStats.Core.Repositories;
 using HappyGymStats.Core.Torn;
@@ -7,6 +9,57 @@ using HappyGymStats.Data.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace HappyGymStats.WarPoller;
+
+public interface IWarPollerNotifier
+{
+    Task NotifyWarStateUpdatedAsync(CancellationToken cancellationToken);
+}
+
+public sealed class WarPollerNotifier(
+    HttpClient httpClient,
+    WarPollerOptions options,
+    ILogger<WarPollerNotifier> logger) : IWarPollerNotifier
+{
+    private readonly HttpClient _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+    private readonly WarPollerOptions _options = options ?? throw new ArgumentNullException(nameof(options));
+    private readonly ILogger<WarPollerNotifier> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+    public async Task NotifyWarStateUpdatedAsync(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_options.HubNotifyUrl))
+        {
+            return;
+        }
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(_options.HubNotifyTimeoutSeconds));
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, _options.HubNotifyUrl);
+        using var response = await _httpClient.SendAsync(request, timeoutCts.Token);
+
+        if (response.StatusCode != HttpStatusCode.Accepted)
+        {
+            throw new HttpRequestException(
+                $"War hub notify endpoint returned unexpected status code {(int)response.StatusCode}.",
+                null,
+                response.StatusCode);
+        }
+
+        _logger.LogDebug(
+            "War poller hub notify succeeded for endpoint {HubNotifyUrl}.",
+            DescribeEndpoint(_options.HubNotifyUrl));
+    }
+
+    private static string DescribeEndpoint(string? url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            return "invalid";
+        }
+
+        return uri.GetLeftPart(UriPartial.Path);
+    }
+}
 
 public sealed class WarPollerService
 {
@@ -17,6 +70,7 @@ public sealed class WarPollerService
     private readonly IWarStateRepository _warStateRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly WarPollerOptions _options;
+    private readonly IWarPollerNotifier _warPollerNotifier;
     private readonly IWarPollerClock _clock;
     private readonly ILogger<WarPollerService> _logger;
 
@@ -26,6 +80,7 @@ public sealed class WarPollerService
         IImportRunRepository importRunRepository,
         IUnitOfWork unitOfWork,
         WarPollerOptions options,
+        IWarPollerNotifier warPollerNotifier,
         IWarPollerClock clock,
         ILogger<WarPollerService> logger)
     {
@@ -34,6 +89,7 @@ public sealed class WarPollerService
         ArgumentNullException.ThrowIfNull(importRunRepository);
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _warPollerNotifier = warPollerNotifier ?? throw new ArgumentNullException(nameof(warPollerNotifier));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
@@ -109,6 +165,8 @@ public sealed class WarPollerService
                     staleAfterUtc: noWarCompletedAtUtc.AddSeconds(_options.PollIntervalSeconds),
                     failureBackoffSeconds: _options.FailureBackoffSeconds));
 
+                await TryNotifyHubAsync(cancellationToken);
+
                 _logger.LogInformation("War poller found no active war for scope {ScopeKey} faction {FactionId}.", _options.ScopeKey, _options.FactionId);
                 return new WarPollerTickResult("succeeded", null, TimeSpan.FromSeconds(_options.PollIntervalSeconds), false);
             }
@@ -135,6 +193,8 @@ public sealed class WarPollerService
                 activeWarId: resolution.WarId,
                 staleAfterUtc: completedAtUtc.AddSeconds(_options.PollIntervalSeconds),
                 failureBackoffSeconds: _options.FailureBackoffSeconds));
+
+            await TryNotifyHubAsync(cancellationToken);
 
             _logger.LogInformation("War poller persisted active war {WarId} for scope {ScopeKey}.", resolution.WarId, _options.ScopeKey);
             return new WarPollerTickResult("succeeded", resolution.WarId, TimeSpan.FromSeconds(_options.PollIntervalSeconds), true);
@@ -363,6 +423,62 @@ public sealed class WarPollerService
     {
         await _warStateRepository.UpsertHeartbeatAsync(heartbeat, CancellationToken.None);
         await _unitOfWork.SaveChangesAsync(CancellationToken.None);
+    }
+
+    private async Task TryNotifyHubAsync(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_options.HubNotifyUrl))
+        {
+            return;
+        }
+
+        try
+        {
+            await _warPollerNotifier.NotifyWarStateUpdatedAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                "War poller hub notify timed out for scope {ScopeKey} endpoint {HubNotifyUrl} after {TimeoutSeconds}s.",
+                _options.ScopeKey,
+                DescribeHubNotifyEndpoint(),
+                _options.HubNotifyTimeoutSeconds);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogDebug(
+                "War poller hub notify skipped during cancellation for scope {ScopeKey} endpoint {HubNotifyUrl}.",
+                _options.ScopeKey,
+                DescribeHubNotifyEndpoint());
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(
+                "War poller hub notify failed for scope {ScopeKey} endpoint {HubNotifyUrl}. StatusCode={StatusCode} Error={Error}",
+                _options.ScopeKey,
+                DescribeHubNotifyEndpoint(),
+                ex.StatusCode?.ToString() ?? "unknown",
+                BuildSanitizedErrorMessage(ex));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                "War poller hub notify failed unexpectedly for scope {ScopeKey} endpoint {HubNotifyUrl}. ExceptionType={ExceptionType} Error={Error}",
+                _options.ScopeKey,
+                DescribeHubNotifyEndpoint(),
+                ex.GetType().Name,
+                BuildSanitizedErrorMessage(ex));
+        }
+    }
+
+    private string DescribeHubNotifyEndpoint()
+    {
+        if (!Uri.TryCreate(_options.HubNotifyUrl, UriKind.Absolute, out var uri))
+        {
+            return "invalid";
+        }
+
+        return uri.GetLeftPart(UriPartial.Path);
     }
 
     private TimeSpan ComputeFailureBackoff(int retryCount)
