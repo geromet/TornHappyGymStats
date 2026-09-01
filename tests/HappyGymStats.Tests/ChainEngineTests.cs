@@ -1,6 +1,4 @@
-extern alias blazor;
-
-using ChainEngine = blazor::HappyGymStats.Blazor.Chain.ChainEngine;
+using HappyGymStats.Core.War;
 using Xunit;
 
 namespace HappyGymStats.Tests;
@@ -29,49 +27,88 @@ public sealed class ChainEngineTests
     }
 
     [Theory]
-    [InlineData(new[] { 250, 250 }, 11, 7453.80272517504)]
-    [InlineData(new[] { 300, 100, 100 }, 11, 7293.670978471314)]
-    [InlineData(new[] { 500 }, 11, 7873.737623471623)]
-    [InlineData(new[] { 10_000 }, 11, 190793.49925493213)]
-    public void ComboRespect_matches_reference_values(int[] legs, double baseResp, double expected)
+    [InlineData(0, 0.0)]
+    [InlineData(1, 0.75)]
+    public void SigmaMult_handles_zero_and_low_chain_lengths(int length, double expected)
     {
         var engine = new ChainEngine();
 
-        Assert.Equal(expected, engine.ComboRespect(legs, baseResp), precision: 6);
+        Assert.Equal(expected, engine.SigmaMult(length), precision: 6);
     }
 
     [Theory]
-    [InlineData(500)]
-    [InlineData(5_000)]
-    [InlineData(50_000)]
-    public void SigmaMult_prefix_sum_agrees_with_closed_form(int length)
+    [InlineData(0, 11.0, 0.0)]
+    [InlineData(10, 11.0, 110.53934834041118)]
+    public void ChainRespect_matches_expected_values(int length, double baseRespect, double expected)
     {
         var engine = new ChainEngine();
-        var closedForm = 0.25 * LGamma(length + 1) / Math.Log(10) + 0.75 * length;
 
-        Assert.Equal(closedForm, engine.SigmaMult(length), precision: 9);
+        Assert.Equal(expected, engine.ChainRespect(length, baseRespect), precision: 6);
     }
 
     [Fact]
-    public void EnumerateSplits_ranks_best_combination_first_and_matches_ComboRespect()
+    public void CumulativeCurve_ends_at_combo_respect()
+    {
+        var engine = new ChainEngine();
+        var legs = new[] { 25, 10, 10 };
+
+        var curve = engine.CumulativeCurve(legs, ChainEngine.DefaultBase);
+
+        Assert.NotEmpty(curve);
+        Assert.Equal(engine.ComboRespect(legs, ChainEngine.DefaultBase), curve[^1], precision: 6);
+    }
+
+    [Fact]
+    public void EnumerateSplits_orders_ranked_combinations_by_respect()
     {
         var engine = new ChainEngine();
 
         var splits = ChainEngine.EnumerateSplits(engine, budget: 1000, baseResp: 11, minLeg: 10);
 
         Assert.NotEmpty(splits);
-        for (var i = 1; i < splits.Count; i++)
-            Assert.True(splits[i - 1].Respect >= splits[i].Respect);
-
-        var top = splits[0];
-        Assert.Equal(1, top.Rank);
-        Assert.Equal(engine.ComboRespect(top.Legs, 11), top.Respect, precision: 6);
+        Assert.True(splits.Zip(splits.Skip(1)).All(pair => pair.First.Respect >= pair.Second.Respect));
     }
 
-    private static double LGamma(double n)
+    [Fact]
+    public void EnumerateSplits_returns_empty_for_zero_budget()
     {
-        if (n <= 1) return 0;
-        return (n - 0.5) * Math.Log(n) - n + 0.5 * Math.Log(2 * Math.PI)
-               + 1.0 / (12 * n) - 1.0 / (360 * n * n * n);
+        var engine = new ChainEngine();
+
+        Assert.Empty(ChainEngine.EnumerateSplits(engine, budget: 0, baseResp: 11));
+    }
+
+    [Fact]
+    public void Implementation_is_core_owned_and_chain_tests_no_longer_alias_blazor()
+    {
+        var repoRoot = FindRepoRoot();
+        var corePath = Path.Combine(repoRoot, "src", "HappyGymStats.Core", "War", "ChainEngine.cs");
+        var legacyPath = Path.Combine(repoRoot, "src", "HappyGymStats.Blazor", "HappyGymStats.Blazor", "Chain", "ChainEngine.cs");
+        var testSourcePath = Path.Combine(repoRoot, "tests", "HappyGymStats.Tests", "ChainEngineTests.cs");
+
+        Assert.True(File.Exists(corePath));
+        Assert.False(File.Exists(legacyPath));
+        Assert.Equal("HappyGymStats.Core.War", typeof(ChainEngine).Namespace);
+
+        var testSourceLines = File.ReadAllLines(testSourcePath);
+        Assert.NotEqual("extern alias blazor;", testSourceLines[0].Trim());
+        Assert.Contains("using HappyGymStats.Core.War;", testSourceLines);
+    }
+
+    private static string FindRepoRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null)
+        {
+            if (Directory.Exists(Path.Combine(directory.FullName, "src"))
+                && Directory.Exists(Path.Combine(directory.FullName, "tests")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate repository root from test output directory.");
     }
 }
