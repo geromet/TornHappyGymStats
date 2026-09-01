@@ -15,26 +15,22 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
         value => value.HasValue ? value.Value.UtcDateTime : null,
         value => value.HasValue ? new DateTimeOffset(DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)) : null);
 
-    public HappyGymStatsDbContext(DbContextOptions<HappyGymStatsDbContext> options)
-        : base(options)
+    public HappyGymStatsDbContext(DbContextOptions<HappyGymStatsDbContext> options) : base(options)
     {
     }
 
     public DbSet<IdentityMapEntity> IdentityMap => Set<IdentityMapEntity>();
-
     public DbSet<ImportRunEntity> ImportRuns => Set<ImportRunEntity>();
-
     public DbSet<ModifierProvenanceEntity> ModifierProvenance => Set<ModifierProvenanceEntity>();
-
     public DbSet<AffiliationEventEntity> AffiliationEvents => Set<AffiliationEventEntity>();
-
     public DbSet<FactionIdMapEntity> FactionIdMap => Set<FactionIdMapEntity>();
-
     public DbSet<FactionMembershipEntity> FactionMembership => Set<FactionMembershipEntity>();
-
     public DbSet<UserLogEntryEntity> UserLogEntries => Set<UserLogEntryEntity>();
-
     public DbSet<LogTypeEntity> LogTypes => Set<LogTypeEntity>();
+    public DbSet<WarCurrentEntity> WarCurrent => Set<WarCurrentEntity>();
+    public DbSet<WarRosterSnapshotEntity> WarRosterSnapshots => Set<WarRosterSnapshotEntity>();
+    public DbSet<WarScoreSampleEntity> WarScoreSamples => Set<WarScoreSampleEntity>();
+    public DbSet<WarPollerHeartbeatEntity> WarPollerHeartbeats => Set<WarPollerHeartbeatEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -103,6 +99,57 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
             entity.HasKey(e => e.LogTypeId);
             entity.Property(e => e.LogTypeId).ValueGeneratedNever();
             entity.Property(e => e.LogTypeTitle).IsRequired();
+        });
+
+        modelBuilder.Entity<WarCurrentEntity>(entity =>
+        {
+            entity.ToTable("WarCurrent");
+            entity.HasKey(e => e.ScopeKey);
+            entity.Property(e => e.ScopeKey).HasMaxLength(64);
+            entity.Property(e => e.FactionName).HasMaxLength(128);
+            entity.Property(e => e.OpponentFactionName).HasMaxLength(128);
+            entity.Property(e => e.StartedAtUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
+            entity.Property(e => e.EndsAtUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
+            entity.Property(e => e.ObservedAtUtc).HasConversion(UtcDateTimeOffsetConverter);
+            entity.HasIndex(e => e.WarId).IsUnique()
+                .HasFilter("\"WarId\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<WarRosterSnapshotEntity>(entity =>
+        {
+            entity.ToTable("WarRosterSnapshots");
+            entity.HasKey(e => new { e.WarId, e.FactionId, e.MemberId });
+            entity.Property(e => e.FactionName).HasMaxLength(128);
+            entity.Property(e => e.MemberName).HasMaxLength(128);
+            entity.Property(e => e.StatusState).HasMaxLength(64);
+            entity.Property(e => e.StatusUntilUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
+            entity.Property(e => e.CapturedAtUtc).HasConversion(UtcDateTimeOffsetConverter);
+            entity.HasIndex(e => new { e.WarId, e.CapturedAtUtc });
+        });
+
+        modelBuilder.Entity<WarScoreSampleEntity>(entity =>
+        {
+            entity.ToTable("WarScoreSamples");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.FactionName).HasMaxLength(128);
+            entity.Property(e => e.OpponentFactionName).HasMaxLength(128);
+            entity.Property(e => e.SampledAtUtc).HasConversion(UtcDateTimeOffsetConverter);
+            entity.HasIndex(e => new { e.WarId, e.SampledAtUtc });
+        });
+
+        modelBuilder.Entity<WarPollerHeartbeatEntity>(entity =>
+        {
+            entity.ToTable("WarPollerHeartbeats");
+            entity.HasKey(e => e.ScopeKey);
+            entity.Property(e => e.ScopeKey).HasMaxLength(64);
+            entity.Property(e => e.Phase).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.LastError).HasMaxLength(1024);
+            entity.Property(e => e.UpdatedAtUtc).HasConversion(UtcDateTimeOffsetConverter);
+            entity.Property(e => e.PollStartedAtUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
+            entity.Property(e => e.PollCompletedAtUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
+            entity.Property(e => e.StaleAfterUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
+            entity.HasIndex(e => e.ActiveWarId);
+            entity.HasIndex(e => new { e.Phase, e.UpdatedAtUtc });
         });
     }
 }
