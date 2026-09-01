@@ -16,6 +16,8 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddMudServices();
 builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddTransient<AccessTokenForwardingHandler>();
 
 // Policy scaffold for future RBAC rollout.
 // Inactive by default until pages/endpoints explicitly opt-in via [Authorize(Policy = "RequireRole")].
@@ -83,6 +85,10 @@ var apiBaseUrl = builder.Configuration["ApiBaseUrl"]
 // In production we intentionally target API loopback (127.0.0.1:5047) to avoid external proxy/CDN hops.
 builder.Services.AddHttpClient<SurfacesService>(client =>
     client.BaseAddress = new Uri(apiBaseUrl));
+
+builder.Services.AddHttpClient<WarBoardService>(client =>
+        client.BaseAddress = new Uri(apiBaseUrl))
+    .AddHttpMessageHandler<AccessTokenForwardingHandler>();
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {

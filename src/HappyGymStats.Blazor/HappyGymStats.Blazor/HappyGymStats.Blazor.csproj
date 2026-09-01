@@ -12,6 +12,7 @@
     <ProjectReference Include="..\..\HappyGymStats.Core\HappyGymStats.Core.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.11" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.11" />
     <PackageReference Include="MudBlazor" Version="8.*" />
   </ItemGroup>
 

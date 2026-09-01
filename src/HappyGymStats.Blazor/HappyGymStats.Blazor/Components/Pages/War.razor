@@ -1,0 +1,272 @@
+@page "/war"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@implements IDisposable
+@inject WarBoardService WarBoard
+
+<PageTitle>War board · Happy Gym Stats</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <div>
+            <MudText Typo="Typo.h4">War board</MudText>
+            <MudText Typo="Typo.body1" Color="Color.Secondary">
+                Live roster, score, chain, coverage ratio, hole alerts, and stale-health visibility from the repository-backed public war state.
+            </MudText>
+        </div>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="RefreshAsync" Disabled="@WarBoard.IsLoading">
+            Refresh
+        </MudButton>
+    </MudStack>
+
+    @if (WarBoard.IsLoading && WarBoard.CurrentState is null && WarBoard.CurrentFailure is null)
+    {
+        <MudAlert Severity="Severity.Info" Dense="true">Loading current war state...</MudAlert>
+    }
+
+    @if (WarBoard.CurrentFailure is not null)
+    {
+        <MudAlert Severity="Severity.Error" Dense="true" Variant="Variant.Filled">
+            <strong>War board unavailable.</strong> @WarBoard.CurrentFailure.SafeMessage
+        </MudAlert>
+    }
+
+    @if (WarBoard.HasStaleData)
+    {
+        <MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Filled" Class="war-board-banner">
+            <strong>Stale data.</strong> Review heartbeat, warnings, and hub connection status before acting on roster gaps.
+        </MudAlert>
+    }
+
+    @if (WarBoard.CurrentState is { } state)
+    {
+        <MudGrid>
+            <MudItem xs="12" md="3">
+                <MudCard Class="war-summary-card">
+                    <MudCardContent>
+                        <MudText Typo="Typo.overline">Coverage ratio</MudText>
+                        <MudText Typo="Typo.h5">@FormatPercent(state.CoverageRatio)</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@state.MemberCount fighters across @state.FactionCount rosters</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudCard Class="war-summary-card">
+                    <MudCardContent>
+                        <MudText Typo="Typo.overline">Hole alerts</MudText>
+                        <MudText Typo="Typo.h5">@state.HoleCount</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Critical/high/medium/low severity board gaps</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudCard Class="war-summary-card">
+                    <MudCardContent>
+                        <MudText Typo="Typo.overline">Hub connection</MudText>
+                        <MudText Typo="Typo.h5">@WarBoard.ConnectionState</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Data source: @WarBoard.DataSource</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudCard Class="war-summary-card">
+                    <MudCardContent>
+                        <MudText Typo="Typo.overline">Heartbeat</MudText>
+                        <MudText Typo="Typo.h5">@(state.Heartbeat.Phase ?? "unknown")</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Updated @FormatTimestamp(state.Heartbeat.UpdatedAtUtc)</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+
+        <MudGrid>
+            <MudItem xs="12" lg="8">
+                <MudGrid>
+                    @foreach (var faction in state.Factions)
+                    {
+                        <MudItem xs="12" xl="6">
+                            <MudCard Class="war-faction-card">
+                                <MudCardHeader>
+                                    <CardHeaderContent>
+                                        <MudText Typo="Typo.h6">@faction.FactionName</MudText>
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">Faction ID @faction.FactionId</MudText>
+                                    </CardHeaderContent>
+                                </MudCardHeader>
+                                <MudCardContent>
+                                    <MudGrid Class="mb-3">
+                                        <MudItem xs="6">
+                                            <MudText Typo="Typo.overline">Score</MudText>
+                                            <MudText Typo="Typo.h5">@faction.Score</MudText>
+                                        </MudItem>
+                                        <MudItem xs="6">
+                                            <MudText Typo="Typo.overline">Chain</MudText>
+                                            <MudText Typo="Typo.h5">@faction.Chain</MudText>
+                                        </MudItem>
+                                        <MudItem xs="6">
+                                            <MudText Typo="Typo.overline">ETA</MudText>
+                                            <MudText Typo="Typo.body1">@FormatEta(faction.Eta)</MudText>
+                                        </MudItem>
+                                        <MudItem xs="6">
+                                            <MudText Typo="Typo.overline">Attacks to finish</MudText>
+                                            <MudText Typo="Typo.body1">@FormatAttacksToFinish(faction.AttacksToFinish)</MudText>
+                                        </MudItem>
+                                        <MudItem xs="6">
+                                            <MudText Typo="Typo.overline">Coverage ratio</MudText>
+                                            <MudText Typo="Typo.body1">@FormatPercent(faction.CoverageRatio)</MudText>
+                                        </MudItem>
+                                        <MudItem xs="6">
+                                            <MudText Typo="Typo.overline">Availability</MudText>
+                                            <MudText Typo="Typo.body1">@faction.AvailableMemberCount ready · @faction.HospitalizedMemberCount hospital · @faction.UnavailableMemberCount unavailable</MudText>
+                                        </MudItem>
+                                    </MudGrid>
+
+                                    <MudTable Dense="true" Hover="true" Breakpoint="Breakpoint.Md" Items="@faction.Members">
+                                        <HeaderContent>
+                                            <MudTh>Member</MudTh>
+                                            <MudTh>Availability</MudTh>
+                                            <MudTh>Hospital countdown</MudTh>
+                                            <MudTh>Score</MudTh>
+                                            <MudTh>Chain</MudTh>
+                                            <MudTh>Attacks</MudTh>
+                                        </HeaderContent>
+                                        <RowTemplate>
+                                            <MudTd DataLabel="Member">@context.MemberName</MudTd>
+                                            <MudTd DataLabel="Availability">
+                                                <MudChip T="string" Size="Size.Small" Color="@(context.IsIdleAttacker ? Color.Warning : Color.Default)">
+                                                    @context.Availability
+                                                </MudChip>
+                                            </MudTd>
+                                            <MudTd DataLabel="Hospital countdown">@FormatHospitalCountdown(context.HospitalCountdownSeconds)</MudTd>
+                                            <MudTd DataLabel="Score">@context.Score</MudTd>
+                                            <MudTd DataLabel="Chain">@context.Chain</MudTd>
+                                            <MudTd DataLabel="Attacks">@context.Attacks</MudTd>
+                                        </RowTemplate>
+                                    </MudTable>
+                                </MudCardContent>
+                            </MudCard>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudItem>
+
+            <MudItem xs="12" lg="4">
+                <MudCard Class="war-hole-panel">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">Hole alerts</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Idle attackers and open targets ranked by severity.</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (state.Holes.Count == 0)
+                        {
+                            <MudAlert Severity="Severity.Success" Dense="true">No current hole alerts.</MudAlert>
+                        }
+                        else
+                        {
+                            <MudList T="string" Dense="true">
+                                @foreach (var hole in state.Holes)
+                                {
+                                    <MudListItem T="string" Class="@GetHoleClass(hole.Severity)">
+                                        <MudStack Spacing="0">
+                                            <MudText Typo="Typo.subtitle2">@hole.Severity · @hole.Kind</MudText>
+                                            <MudText Typo="Typo.body2">@hole.MemberName (@hole.FactionName)</MudText>
+                                            <MudText Typo="Typo.caption">@hole.Reason</MudText>
+                                        </MudStack>
+                                    </MudListItem>
+                                }
+                            </MudList>
+                        }
+                    </MudCardContent>
+                </MudCard>
+
+                @if (state.Warnings.Count > 0)
+                {
+                    <MudCard Class="mt-3">
+                        <MudCardHeader><MudText Typo="Typo.h6">Warnings</MudText></MudCardHeader>
+                        <MudCardContent>
+                            <MudList T="string" Dense="true">
+                                @foreach (var warning in state.Warnings)
+                                {
+                                    <MudListItem T="string">@warning</MudListItem>
+                                }
+                            </MudList>
+                        </MudCardContent>
+                    </MudCard>
+                }
+
+                @if (state.Errors.Count > 0 || !string.IsNullOrWhiteSpace(WarBoard.ConnectionError))
+                {
+                    <MudCard Class="mt-3">
+                        <MudCardHeader><MudText Typo="Typo.h6">Errors</MudText></MudCardHeader>
+                        <MudCardContent>
+                            <MudList T="string" Dense="true">
+                                @foreach (var error in state.Errors)
+                                {
+                                    <MudListItem T="string">@error</MudListItem>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(WarBoard.ConnectionError))
+                                {
+                                    <MudListItem T="string">@WarBoard.ConnectionError</MudListItem>
+                                }
+                            </MudList>
+                        </MudCardContent>
+                    </MudCard>
+                }
+            </MudItem>
+        </MudGrid>
+    }
+</MudStack>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        WarBoard.StateChanged += HandleBoardStateChanged;
+        await WarBoard.InitializeAsync();
+    }
+
+    public void Dispose()
+    {
+        WarBoard.StateChanged -= HandleBoardStateChanged;
+    }
+
+    private Task RefreshAsync() => WarBoard.RefreshAsync();
+
+    private void HandleBoardStateChanged() => InvokeAsync(StateHasChanged);
+
+    private static string FormatPercent(decimal value) => $"{value:P1}";
+
+    private static string FormatTimestamp(DateTimeOffset? value) => value?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "unknown";
+
+    private static string FormatHospitalCountdown(int seconds) =>
+        seconds <= 0
+            ? "Ready now"
+            : $"Hospital in {TimeSpan.FromSeconds(seconds):hh\\:mm\\:ss}";
+
+    private static string FormatEta(WarEtaDto eta)
+    {
+        if (!eta.IsAvailable)
+        {
+            return eta.Diagnostic ?? "Unavailable";
+        }
+
+        return eta.SecondsUntilWin is int seconds
+            ? $"ETA {TimeSpan.FromSeconds(seconds):hh\\:mm\\:ss}"
+            : "ETA pending";
+    }
+
+    private static string FormatAttacksToFinish(WarAttacksToFinishDto attacks)
+    {
+        if (!attacks.IsAvailable)
+        {
+            return attacks.Diagnostic ?? "Unavailable";
+        }
+
+        return attacks.RequiredAttacks is int count
+            ? count.ToString()
+            : "Pending";
+    }
+
+    private static string GetHoleClass(string severity) => $"war-hole war-hole-{severity.ToLowerInvariant()}";
+}
