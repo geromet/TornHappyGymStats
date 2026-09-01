@@ -30,6 +30,13 @@ public sealed record WarDerivedState
     public DateTimeOffset? ScoreWindowStartedAtUtc { get; init; }
     public DateTimeOffset? ScoreWindowEndedAtUtc { get; init; }
     public int ScoreSampleCount { get; init; }
+    public string? HeartbeatPhase { get; init; }
+    public DateTimeOffset? HeartbeatUpdatedAtUtc { get; init; }
+    public DateTimeOffset? HeartbeatPollStartedAtUtc { get; init; }
+    public DateTimeOffset? HeartbeatPollCompletedAtUtc { get; init; }
+    public DateTimeOffset? HeartbeatStaleAfterUtc { get; init; }
+    public bool IsHeartbeatStale { get; init; }
+    public string? HeartbeatLastError { get; init; }
     public decimal CoverageRatio { get; init; }
     public IReadOnlyList<WarDerivedFactionState> Factions { get; init; } = [];
     public IReadOnlyList<WarHoleRecord> Holes { get; init; } = [];
