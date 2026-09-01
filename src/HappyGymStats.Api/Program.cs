@@ -7,9 +7,11 @@ using HappyGymStats.Identity.Provisional;
 using HappyGymStats.Core.Import;
 using HappyGymStats.Core.Reconstruction;
 using HappyGymStats.Core.Repositories;
+using HappyGymStats.Api.Hubs;
 using HappyGymStats.Core.Services;
 using HappyGymStats.Core.Surfaces;
 using HappyGymStats.Core.Torn;
+using HappyGymStats.Core.War;
 using HappyGymStats.Data;
 using HappyGymStats.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -30,6 +32,7 @@ builder.Services.AddCors(options =>
         .WithMethods("GET", "POST")));
 
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
 
 var connectionString = AppConfiguration.ResolveConnectionString(builder.Configuration);
 var surfacesCacheDirectory = AppConfiguration.ResolveSurfacesCacheDirectory(builder.Configuration, builder.Environment);
@@ -55,13 +58,16 @@ builder.Services.AddScoped<IAffiliationEventRepository, AffiliationEventReposito
 builder.Services.AddScoped<ILogTypeRepository, LogTypeRepository>();
 builder.Services.AddScoped<IFactionIdMapRepository, FactionIdMapRepository>();
 builder.Services.AddScoped<IFactionMembershipRepository, FactionMembershipRepository>();
+builder.Services.AddScoped<IWarStateRepository, WarStateRepository>();
 
 builder.Services.AddScoped<LogFetcher>();
 builder.Services.AddScoped<PerkLogFetcher>();
 builder.Services.AddScoped<ReconstructionRunner>();
 builder.Services.AddScoped<GymTrainsService>();
 builder.Services.AddScoped<FactionService>();
+builder.Services.AddScoped<WarDerivedStateService>();
 builder.Services.AddScoped<IFactionOwnershipVerifier, StubFactionOwnershipVerifier>();
+builder.Services.AddSingleton<IWarHubBroadcaster, WarHubBroadcaster>();
 
 builder.Services.AddSingleton(new SurfacesConfig(surfacesCacheDirectory));
 
@@ -91,5 +97,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseStaticFiles();
 app.MapControllers();
+app.MapHub<WarHub>("/api/hub/war");
 
 app.Run();
