@@ -1,0 +1,28 @@
+{
+  "wars": [
+    {
+      "war_id": 48377,
+      "faction_id": 111,
+      "opponent_id": 222,
+      "start": 1731000000,
+      "end": null,
+      "winner_faction_id": null
+    },
+    {
+      "war_id": 48370,
+      "faction_id": 333,
+      "opponent_id": 444,
+      "start": 1730900000,
+      "end": 0,
+      "winner_faction_id": null
+    },
+    {
+      "war_id": 48360,
+      "faction_id": 555,
+      "opponent_id": 666,
+      "start": 1730800000,
+      "end": 1730807200,
+      "winner_faction_id": 666
+    }
+  ]
+}
