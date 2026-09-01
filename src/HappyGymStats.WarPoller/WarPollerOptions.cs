@@ -2,6 +2,7 @@ namespace HappyGymStats.WarPoller;
 
 public sealed class WarPollerOptions
 {
+    public const string SectionName = "WarPoller";
     public const string DefaultScopeKey = "public-war";
 
     public string ScopeKey { get; set; } = DefaultScopeKey;
@@ -10,6 +11,7 @@ public sealed class WarPollerOptions
     public int PollIntervalSeconds { get; set; } = 30;
     public int FailureBackoffSeconds { get; set; } = 60;
     public int MaxFailureBackoffSeconds { get; set; } = 300;
+    public int StaleThresholdSeconds { get; set; } = 120;
 
     internal void Validate()
     {
@@ -41,6 +43,11 @@ public sealed class WarPollerOptions
         if (MaxFailureBackoffSeconds < FailureBackoffSeconds)
         {
             throw new InvalidOperationException("War poller max failure backoff must be greater than or equal to the base failure backoff.");
+        }
+
+        if (StaleThresholdSeconds < PollIntervalSeconds)
+        {
+            throw new InvalidOperationException("War poller stale threshold must be greater than or equal to the poll interval.");
         }
     }
 }
