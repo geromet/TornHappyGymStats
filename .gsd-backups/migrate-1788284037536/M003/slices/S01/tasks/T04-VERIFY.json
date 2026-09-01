@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T04",
+  "unitId": "M003/S01/T04",
+  "timestamp": 1778095290913,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "bash scripts/verify/s01-api-production-contract.sh",
+      "exitCode": 0,
+      "durationMs": 6921,
+      "verdict": "pass"
+    }
+  ]
+}

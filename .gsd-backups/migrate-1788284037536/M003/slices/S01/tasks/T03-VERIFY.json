@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T03",
+  "unitId": "M003/S01/T03",
+  "timestamp": 1778095077393,
+  "passed": false,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "dotnet test --filter \"ApiEndpointTests\"",
+      "exitCode": 1,
+      "durationMs": 5165,
+      "verdict": "fail"
+    }
+  ],
+  "retryAttempt": 1,
+  "maxRetries": 2
+}

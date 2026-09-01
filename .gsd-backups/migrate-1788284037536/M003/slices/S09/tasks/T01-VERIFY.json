@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M003/S09/T01",
+  "timestamp": 1778184702725,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "dotnet --version",
+      "exitCode": 0,
+      "durationMs": 121,
+      "verdict": "pass"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T04",
+  "unitId": "M003/S06/T04",
+  "timestamp": 1778182571976,
+  "passed": false,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "bash -n scripts/recon-server.sh scripts/server-create-containers-user.sh",
+      "exitCode": 127,
+      "durationMs": 11,
+      "verdict": "fail"
+    }
+  ],
+  "retryAttempt": 1,
+  "maxRetries": 2
+}

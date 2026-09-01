@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T02",
+  "unitId": "M001/S01/T02",
+  "timestamp": 1777590130259,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "dotnet test --filter \"FullyQualifiedName~ModuleOwnershipBoundariesTests\"",
+      "exitCode": 0,
+      "durationMs": 4728,
+      "verdict": "pass"
+    },
+    {
+      "command": "bash scripts/verify-s01.sh",
+      "exitCode": 0,
+      "durationMs": 13262,
+      "verdict": "pass"
+    }
+  ]
+}

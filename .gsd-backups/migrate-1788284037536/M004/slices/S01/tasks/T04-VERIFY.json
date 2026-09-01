@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T04",
+  "unitId": "M004/S01/T04",
+  "timestamp": 1778346450245,
+  "passed": false,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "dotnet build HappyGymStats.sln",
+      "exitCode": 1,
+      "durationMs": 7396,
+      "verdict": "fail"
+    },
+    {
+      "command": "dotnet test",
+      "exitCode": 1,
+      "durationMs": 5061,
+      "verdict": "fail"
+    },
+    {
+      "command": "scripts/verify/s02-blazor-api-boundary.sh",
+      "exitCode": 1,
+      "durationMs": 4582,
+      "verdict": "fail"
+    }
+  ],
+  "retryAttempt": 1,
+  "maxRetries": 2
+}

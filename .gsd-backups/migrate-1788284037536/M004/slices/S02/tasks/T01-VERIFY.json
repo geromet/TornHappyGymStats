@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M004/S02/T01",
+  "timestamp": 1778347595973,
+  "passed": false,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "dotnet test tests/HappyGymStats.Tests/HappyGymStats.Tests.csproj --filter \"FullyQualifiedName~SqliteApiEndpointTests\"",
+      "exitCode": 1,
+      "durationMs": 7893,
+      "verdict": "fail"
+    }
+  ],
+  "retryAttempt": 1,
+  "maxRetries": 2
+}

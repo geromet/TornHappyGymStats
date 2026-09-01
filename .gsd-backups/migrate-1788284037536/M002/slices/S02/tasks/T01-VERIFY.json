@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M002/S02/T01",
+  "timestamp": 1777668699156,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "dotnet build HappyGymStats.sln",
+      "exitCode": 0,
+      "durationMs": 5693,
+      "verdict": "pass"
+    },
+    {
+      "command": "dotnet test tests/HappyGymStats.Tests/HappyGymStats.Tests.csproj --filter \"FullyQualifiedName~HappyGymStatsDbContextTests\"",
+      "exitCode": 0,
+      "durationMs": 6062,
+      "verdict": "pass"
+    }
+  ]
+}

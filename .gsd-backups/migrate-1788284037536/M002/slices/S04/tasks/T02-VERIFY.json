@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T02",
+  "unitId": "M002/S04/T02",
+  "timestamp": 1777670383228,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "dotnet test tests/HappyGymStats.Tests/HappyGymStats.Tests.csproj --filter \"FullyQualifiedName~DbPipelineIntegrationTests\"",
+      "exitCode": 0,
+      "durationMs": 10433,
+      "verdict": "pass"
+    },
+    {
+      "command": "dotnet test tests/HappyGymStats.Tests/HappyGymStats.Tests.csproj",
+      "exitCode": 0,
+      "durationMs": 7784,
+      "verdict": "pass"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M001/S03/T01",
+  "timestamp": 1777590834116,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "dotnet test tests/HappyGymStats.Tests/HappyGymStats.Tests.csproj --filter \"FullyQualifiedName~DbPipelineIntegrationTests\"",
+      "exitCode": 0,
+      "durationMs": 5579,
+      "verdict": "pass"
+    }
+  ]
+}

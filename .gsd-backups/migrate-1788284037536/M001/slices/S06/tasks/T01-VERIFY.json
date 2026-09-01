@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M001/S06/T01",
+  "timestamp": 1777592406729,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "test -s README.md",
+      "exitCode": 0,
+      "durationMs": 7,
+      "verdict": "pass"
+    }
+  ]
+}

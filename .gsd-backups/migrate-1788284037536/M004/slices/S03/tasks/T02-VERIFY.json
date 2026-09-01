@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T02",
+  "unitId": "M004/S03/T02",
+  "timestamp": 1778349026638,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "bash scripts/verify/s08-docs-contract.sh",
+      "exitCode": 0,
+      "durationMs": 50,
+      "verdict": "pass"
+    },
+    {
+      "command": "test -s docs/M004-MY-STATS-OPERATOR-GATE.md",
+      "exitCode": 0,
+      "durationMs": 7,
+      "verdict": "pass"
+    }
+  ]
+}

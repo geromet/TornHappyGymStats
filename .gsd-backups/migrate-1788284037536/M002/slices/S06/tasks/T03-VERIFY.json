@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T03",
+  "unitId": "M002/S06/T03",
+  "timestamp": 1777672721016,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "node --test tests/web/confidence-visualization.test.mjs tests/web/provenance-warnings-workflow.test.mjs",
+      "exitCode": 0,
+      "durationMs": 98,
+      "verdict": "pass"
+    },
+    {
+      "command": "bash scripts/verify/s06-provenance-warnings.sh",
+      "exitCode": 0,
+      "durationMs": 5353,
+      "verdict": "pass"
+    }
+  ]
+}
