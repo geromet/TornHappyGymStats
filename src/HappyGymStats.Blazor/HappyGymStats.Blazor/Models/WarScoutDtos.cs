@@ -8,6 +8,7 @@ public sealed record FactionScoutDto(
     DateTimeOffset? LatestWarStartedAtUtc,
     int ActiveMemberCount,
     int IdleProneMemberCount,
+    decimal MedianScorePerAttack,
     IReadOnlyList<OpponentMemberProfileDto> Members);
 
 public sealed record OpponentMemberProfileDto(
@@ -17,7 +18,10 @@ public sealed record OpponentMemberProfileDto(
     int TotalAttacks,
     int TotalScore,
     decimal AverageScorePerAttack,
+    decimal LumpAdjustedScorePerAttack,
+    decimal RawMedianScorePerWar,
     decimal LumpAdjustedScorePerWar,
+    int LumpWarCount,
     int MaxScoreInAWar,
     int MinScoreInAWar,
     decimal ParticipationRate,

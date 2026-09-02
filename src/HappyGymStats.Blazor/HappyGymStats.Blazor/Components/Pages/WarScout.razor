@@ -81,7 +81,9 @@
                 <CardHeaderContent>
                     <MudText Typo="Typo.h6">Per-member war history</MudText>
                     <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        Ranked by lump-adjusted score per war (median), which resists distortion from one-off chain-bonus wars.
+                        Ranked by lump-adjusted score per attack — chain-milestone lump wars are detected against the
+                        faction baseline of <strong>@profile.MedianScorePerAttack</strong> score/attack, then their
+                        bonus is removed so a single well-timed crossing hit doesn't inflate the rating.
                     </MudText>
                 </CardHeaderContent>
             </MudCardHeader>
@@ -92,14 +94,25 @@
                         <MudTh>Threat tier</MudTh>
                         <MudTh>Wars</MudTh>
                         <MudTh>Participation</MudTh>
+                        <MudTh>Lump-adjusted score/attack</MudTh>
+                        <MudTh>Raw score/attack</MudTh>
                         <MudTh>Lump-adjusted score/war</MudTh>
-                        <MudTh>Avg score/attack</MudTh>
                         <MudTh>Score range</MudTh>
                         <MudTh>Idle rate</MudTh>
                         <MudTh>Last seen</MudTh>
                     </HeaderContent>
                     <RowTemplate>
-                        <MudTd DataLabel="Member">@context.MemberName</MudTd>
+                        <MudTd DataLabel="Member">
+                            @context.MemberName
+                            @if (context.LumpWarCount > 0)
+                            {
+                                <MudTooltip Text="@($"{context.LumpWarCount} war(s) where a chain-milestone bonus was detected and removed from the rating")">
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">
+                                        @context.LumpWarCount lump
+                                    </MudChip>
+                                </MudTooltip>
+                            }
+                        </MudTd>
                         <MudTd DataLabel="Threat tier">
                             <MudChip T="string" Size="Size.Small" Color="@GetTierColor(context.ThreatTier)">
                                 @FormatTier(context.ThreatTier)
@@ -107,8 +120,15 @@
                         </MudTd>
                         <MudTd DataLabel="Wars">@context.WarsParticipated</MudTd>
                         <MudTd DataLabel="Participation">@FormatPercent(context.ParticipationRate)</MudTd>
-                        <MudTd DataLabel="Lump-adjusted score/war">@context.LumpAdjustedScorePerWar</MudTd>
-                        <MudTd DataLabel="Avg score/attack">@context.AverageScorePerAttack</MudTd>
+                        <MudTd DataLabel="Lump-adjusted score/attack">@context.LumpAdjustedScorePerAttack</MudTd>
+                        <MudTd DataLabel="Raw score/attack">@context.AverageScorePerAttack</MudTd>
+                        <MudTd DataLabel="Lump-adjusted score/war">
+                            @context.LumpAdjustedScorePerWar
+                            @if (context.RawMedianScorePerWar != context.LumpAdjustedScorePerWar)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">raw @context.RawMedianScorePerWar</MudText>
+                            }
+                        </MudTd>
                         <MudTd DataLabel="Score range">@context.MinScoreInAWar – @context.MaxScoreInAWar</MudTd>
                         <MudTd DataLabel="Idle rate">@FormatPercent(context.IdleRate)</MudTd>
                         <MudTd DataLabel="Last seen">@FormatTimestamp(context.LastSeenAtUtc)</MudTd>

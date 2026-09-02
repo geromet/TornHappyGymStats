@@ -52,15 +52,32 @@ and the data to do it exactly as written is present:
 claiming "report rows carry no per-attack granularity" is wrong.
 
 Build to the spec:
-- Per member per war: `residual = score − (attacks × faction_median_score_per_attack)`.
-- If `residual` is within rounding of a `ChainEngine.BonusTable` value
-  (10, 20, 40, 80, 160, 320, 640, …), flag that war row as a probable milestone lump
-  and **exclude it from the median**.
-- Surface **both** figures — raw and lump-adjusted — because "who lands crossing hits"
-  is itself worth knowing.
+- Per member per war: `residual = score − (attacks × faction_median_score_per_attack)`,
+  where the baseline is the median of every `(member, war)` score/attack for the faction
+  (zero-attack wars excluded). Exposed as `FactionScoutProfile.MedianScorePerAttack`.
+- If `residual` matches a `ChainEngine.MilestoneBonuses` value within a tolerance, flag
+  that war as a probable milestone lump: drop it from the per-war median
+  (`LumpAdjustedScorePerWar`), subtract the matched bonus from that war before taking the
+  median of per-war score/attack (`LumpAdjustedScorePerAttack`), count it
+  (`LumpWarCount`). Roster is ranked by `LumpAdjustedScorePerAttack`.
+- Surface **both** figures — raw (`AverageScorePerAttack`, `RawMedianScorePerWar`,
+  min/max) and lump-adjusted — because "who lands crossing hits" is itself worth knowing.
 - **Fixture test:** DerDoruk's war-48377 row must be flagged, and his lump-adjusted
-  median must land near the faction median rather than ~3× it. Known case, known right
-  answer (`data/V2/reference/data-layer.md`, correction section).
+  score/attack must land near the faction median rather than ~3× it. Known case, known
+  right answer (`data/V2/reference/data-layer.md`, correction section).
+
+**As built — two deliberate deviations from a literal reading of the spec:**
+- **Tolerance is `|residual − bonus| ≤ 12% of bonus`, not literal rounding.** The
+  baseline is the *faction* median, so an above-median member's residual drifts by
+  `≈ attacks × (their rate − faction rate)` before any lump. Literal rounding misses real
+  lumps on strong members; too loose discards a strong-but-lumpless member's best war and
+  understates the opponent. Tests pin both edges.
+- **Only bonuses ≥ 100 are matched** (chain milestones 250+). A residual the size of the
+  10/20/40/80 bonuses is within ordinary per-war variance against a faction-median
+  baseline and would false-positive normal above-average wars. **Known blind spot:** a war
+  that crossed several milestones at once has a residual near a *sum* of bonuses and is
+  not detected. Both choices are `const`s in `OpponentProfileEngine`, retunable, and
+  should get a real flag-rate measurement against a full roster in **S05**.
 
 ### S02 — `TornRateLimiter`  *(→ data/V2/handoff/04, task 3)*
 
