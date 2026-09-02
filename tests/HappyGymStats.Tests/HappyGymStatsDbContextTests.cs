@@ -53,15 +53,23 @@ public sealed class SqliteHappyGymStatsDbContextTests
 
         var anonymousId = Guid.NewGuid();
 
-        db.UserLogEntries.Add(new UserLogEntryEntity
+        var first = new UserLogEntryEntity
         {
             AnonymousId = anonymousId,
             LogEntryId = "log-1",
             OccurredAtUtc = DateTimeOffset.UtcNow,
             LogTypeId = 1
-        });
+        };
+
+        db.UserLogEntries.Add(first);
 
         await db.SaveChangesAsync();
+
+        // EF Core 10's change tracker throws an identity-map conflict when a second
+        // instance with the same client-set composite key is added, which would mask
+        // the constraint we are testing here. Detach the first instance so the second
+        // insert actually reaches SQLite and violates the composite primary key.
+        db.Entry(first).State = EntityState.Detached;
 
         db.UserLogEntries.Add(new UserLogEntryEntity
         {
@@ -89,16 +97,22 @@ public sealed class SqliteHappyGymStatsDbContextTests
 
         var anonymousId = Guid.NewGuid();
 
-        db.ModifierProvenance.Add(new ModifierProvenanceEntity
+        var first = new ModifierProvenanceEntity
         {
             AnonymousId = anonymousId,
             LogEntryId = "log-1",
             Scope = 1,
             SubjectId = 123,
             VerificationStatus = 1
-        });
+        };
+
+        db.ModifierProvenance.Add(first);
 
         await db.SaveChangesAsync();
+
+        // See Sqlite_user_log_entries_enforce_composite_primary_key: detach the first
+        // instance so the duplicate insert reaches SQLite and violates the composite PK.
+        db.Entry(first).State = EntityState.Detached;
 
         db.ModifierProvenance.Add(new ModifierProvenanceEntity
         {
