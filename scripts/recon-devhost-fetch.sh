@@ -26,8 +26,9 @@ Runs scripts/recon-devhost.sh on the deploy host over SSH and writes the report
 to workspace/tmp/devhost-recon-<UTC timestamp>.txt (override with --out).
 
 Read-only on both ends. The collector never prints a secret value; environment
-files are reported as key names plus SET / PLACEHOLDER / EMPTY and a truncated
-SHA-256 so dev and production secrets can be compared without being disclosed.
+files are reported as key names plus SET / PLACEHOLDER / EMPTY and a keyed
+fingerprint (HMAC under a random per-run key that is never printed), so dev and
+production secrets can be compared without being disclosed or guessable.
 
 Prerequisite:
   cloudflared access login https://ssh.geromet.com

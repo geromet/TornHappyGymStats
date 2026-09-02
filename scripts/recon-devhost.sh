@@ -11,10 +11,22 @@
 #
 # SECRET HANDLING — this report is meant to be read by someone other than the
 # operator who ran it, so it never prints a secret value. Env files are reported
-# as key names plus a status word (SET / PLACEHOLDER / EMPTY). Where it matters
-# whether two secrets are the same (dev vs production database, signing keys),
-# it prints a truncated SHA-256 of each value so they can be compared without
-# either being disclosed. Private keys are never read.
+# as key names plus a status word (SET / PLACEHOLDER / EMPTY). Private keys are
+# never read.
+#
+# Where it matters whether two secrets are the SAME (dev vs production database,
+# token signing keys), the report prints a fingerprint of each value. That
+# fingerprint is an HMAC-SHA256 under a random key generated per run and never
+# printed — NOT a plain hash.
+#
+# A plain hash would be unsafe here. Connection strings have a highly
+# predictable shape, so a bare digest of
+#   Host=...;Database=...;Username=...;Password=<unknown>
+# lets anyone holding the report grind password candidates offline until one
+# matches. Keying the digest with a per-run secret removes that: fingerprints
+# stay comparable WITHIN one report, and are meaningless outside it. It also
+# means fingerprints from two different runs are not comparable — that is the
+# intended trade.
 #
 # Usage, from a machine with an authenticated SSH session:
 #
@@ -49,6 +61,30 @@ probe() {
 probe_sh() {
   local label="$1" snippet="$2"
   probe "${label}" bash -c "${snippet}"
+}
+
+# Per-run HMAC key for secret fingerprints. Random, never printed, dies with the
+# process. Its only job is to make fingerprints comparable within this report
+# while useless for offline guessing by anyone who reads it.
+REPORT_FINGERPRINT_KEY="$(head -c 32 /dev/urandom 2>/dev/null | od -An -tx1 | tr -d ' \n')"
+if [[ -z "${REPORT_FINGERPRINT_KEY}" ]]; then
+  REPORT_FINGERPRINT_KEY="$$-$(date +%s%N 2>/dev/null)-${RANDOM}${RANDOM}"
+fi
+
+# Keyed fingerprint of a secret. Prints a short tag, never the input.
+fingerprint() {
+  local value="$1" out=""
+  if command -v openssl >/dev/null 2>&1; then
+    out="$(printf '%s' "${value}" \
+      | openssl dgst -sha256 -hmac "${REPORT_FINGERPRINT_KEY}" 2>/dev/null \
+      | awk '{print $NF}')"
+  fi
+  if [[ -z "${out}" ]] && command -v sha256sum >/dev/null 2>&1; then
+    # Fallback: still keyed, just assembled by hand.
+    out="$(printf '%s%s' "${REPORT_FINGERPRINT_KEY}" "${value}" | sha256sum | cut -d' ' -f1)"
+  fi
+  [[ -z "${out}" ]] && { printf 'unavailable'; return; }
+  printf '%s' "${out:0:12}"
 }
 
 # Can we read privileged files without prompting?
@@ -132,7 +168,7 @@ done
 
 section "API environment files — KEY NAMES AND STATUS ONLY"
 note "Values are never printed. Status is derived, and identical-secret checks"
-note "use a truncated SHA-256 so two files can be compared without disclosure."
+note "use a keyed fingerprint so two files can be compared without disclosure."
 note ""
 
 declare -A ENV_DIGESTS=()
@@ -167,8 +203,8 @@ describe_env_file() {
       status="SET"
     fi
 
-    digest="$(printf '%s' "${value}" | sha256sum 2>/dev/null | cut -c1-12)"
-    printf '    %-40s %-12s sha256:%s\n' "${key}" "${status}" "${digest:-unavailable}"
+    digest="$(fingerprint "${value}")"
+    printf '    %-40s %-12s fp:%s\n' "${key}" "${status}" "${digest}"
 
     # Remember the digest so the isolation check below can compare files
     # without either value ever being held, printed, or logged.
@@ -181,7 +217,8 @@ note ""
 describe_env_file /etc/happygymstats/api-dev.env
 
 section "Isolation check — dev must not share production secrets"
-note "Compares digests only. Neither value is read into a variable that is printed."
+note "Compares keyed fingerprints only (HMAC under a random per-run key that is"
+note "never printed). Neither secret value appears anywhere in this report."
 note ""
 isolation_problems=0
 for key in ConnectionStrings__HappyGymStats ProvisionalToken__SigningKey HAPPYGYMSTATS_CONNECTION_STRING; do
@@ -203,10 +240,10 @@ for key in ConnectionStrings__HappyGymStats ProvisionalToken__SigningKey HAPPYGY
   fi
 
   if [[ "${prod}" == "${dev}" ]]; then
-    printf '    %-40s *** SHARED WITH PRODUCTION *** (both sha256:%s)\n' "${key}" "${prod}"
+    printf '    %-40s *** SHARED WITH PRODUCTION *** (identical fingerprint)\n' "${key}"
     isolation_problems=$((isolation_problems + 1))
   else
-    printf '    %-40s OK (dev sha256:%s differs from prod sha256:%s)\n' "${key}" "${dev}" "${prod}"
+    printf '    %-40s OK (dev fp:%s differs from prod fp:%s)\n' "${key}" "${dev}" "${prod}"
   fi
 done
 
