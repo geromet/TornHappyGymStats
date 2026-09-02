@@ -55,10 +55,34 @@ public sealed record WarFactionDto(
     decimal CoverageRatio,
     int OpenTargetCount,
     decimal TargetCoverageRatio,
+    WarChainCommandDto? ChainCommand,
     WarScoreRateDto ScoreRate,
     WarEtaDto Eta,
     WarAttacksToFinishDto AttacksToFinish,
     IReadOnlyList<WarMemberDto> Members);
+
+/// <summary>
+/// Chain-command panel data for one faction (<c>data/V2/handoff/06</c>). Flattened from
+/// <see cref="HappyGymStats.Core.War.ChainTrackerState"/> and the inferred lapse timer — the
+/// board renders it directly and derives nothing.
+/// </summary>
+public sealed record WarChainCommandDto(
+    int ChainLength,
+    double CurrentMultiplier,
+    int? NextMilestone,
+    int? HitsToNextMilestone,
+    int NextMilestoneBonus,
+    bool IsInReservationWindow,
+    int ForfeitedValueIfCrossedOutside,
+    int AttackableWarTargetCount,
+    string Mode,
+    string Advice,
+    string Alert,
+    bool TimerIsInferred,
+    int? SecondsSinceLastHit,
+    int? SecondsUntilLapse,
+    int TimerSpacingSeconds,
+    string? TimerDiagnostic);
 
 public sealed record WarMemberDto(
     long MemberId,
@@ -188,6 +212,7 @@ public static class WarDtoMapper
             CoverageRatio: faction.CoverageRatio,
             OpenTargetCount: faction.OpenTargetCount,
             TargetCoverageRatio: faction.TargetCoverageRatio,
+            ChainCommand: ToChainCommandDto(faction),
             ScoreRate: new WarScoreRateDto(
                 faction.ScoreRate.SampleCount,
                 faction.ScoreRate.StartedAtUtc,
@@ -219,6 +244,33 @@ public static class WarDtoMapper
                 member.HospitalCountdownSeconds,
                 member.IsIdleAttacker,
                 member.CapturedAtUtc)).ToArray());
+
+    private static WarChainCommandDto? ToChainCommandDto(WarDerivedFactionState faction)
+    {
+        if (faction.ChainState is not { } chain)
+        {
+            return null;
+        }
+
+        var timer = faction.ChainTimer;
+        return new WarChainCommandDto(
+            ChainLength: chain.ChainLength,
+            CurrentMultiplier: chain.CurrentMultiplier,
+            NextMilestone: chain.NextMilestone,
+            HitsToNextMilestone: chain.HitsToNextMilestone,
+            NextMilestoneBonus: chain.NextMilestoneBonus,
+            IsInReservationWindow: chain.IsInReservationWindow,
+            ForfeitedValueIfCrossedOutside: chain.ForfeitedValueIfCrossedOutside,
+            AttackableWarTargetCount: chain.AttackableWarTargetCount,
+            Mode: chain.Mode.ToString(),
+            Advice: chain.Reason,
+            Alert: faction.ChainAlert.ToString(),
+            TimerIsInferred: timer?.IsInferred ?? false,
+            SecondsSinceLastHit: timer?.SecondsSinceLastIncrease,
+            SecondsUntilLapse: timer?.SecondsUntilLapse,
+            TimerSpacingSeconds: timer?.SampleSpacingSeconds ?? 0,
+            TimerDiagnostic: timer?.Diagnostic);
+    }
 
     private static WarHoleDto ToHoleDto(WarHoleRecord hole)
         => new(

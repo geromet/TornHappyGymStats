@@ -27,6 +27,27 @@ public enum ChainBoardMode
 }
 
 /// <summary>
+/// The loudest single chain signal for a faction, in ascending urgency. A distinct <c>ChainAlert</c>
+/// <b>event</b> pushed only to assigned watchers (<c>data/V2/handoff/06</c>, task 4) is deferred —
+/// <see cref="WarHub"/> has no per-war groups or per-user targeting (M1 task 10 listed them; the
+/// board shipped broadcasting full state to all). Until watchers exist (M008 S06, itself blocked on
+/// those groups) this level rides in the broadcast state and the board renders a banner from it.
+/// </summary>
+public enum ChainAlertLevel
+{
+    /// <summary>Nothing to flag.</summary>
+    None,
+
+    /// <summary>Inside the milestone reservation window — the crossing hit is reserved for a war
+    /// target (or the chain should hold if none is attackable).</summary>
+    ReservationWindow,
+
+    /// <summary>The inferred lapse timer is under <see cref="ChainTracker.AlertTimerLowSeconds"/> —
+    /// the chain is close to dropping. Outranks <see cref="ReservationWindow"/>.</summary>
+    TimerRunningLow,
+}
+
+/// <summary>
 /// A pure snapshot of chain state for the board: the current multiplier, the next milestone and
 /// distance to it, the reservation state, and what the crossing hit is worth. No timer concept -
 /// the lapse timer arrives in a later slice once its data source is confirmed.
@@ -54,6 +75,26 @@ public static class ChainTracker
     /// <summary>Inside this many hits of a milestone, the crossing hit is reserved for a war target.
     /// <c>data/V2/handoff/06</c> starts it at 5; a planner can override per war.</summary>
     public const int DefaultReservationWindowHits = 5;
+
+    /// <summary>At or below this many inferred seconds to lapse, the board raises
+    /// <see cref="ChainAlertLevel.TimerRunningLow"/>. One score-poll spacing (~30 s) is noise, so
+    /// this sits well above it to survive the ± error bar.</summary>
+    public const int AlertTimerLowSeconds = 90;
+
+    /// <summary>The loudest chain signal for the board: timer-about-to-lapse beats
+    /// reservation-window beats nothing. Pure — no I/O, no clock.</summary>
+    public static ChainAlertLevel AlertLevel(ChainTrackerState state, ChainLapseEstimate? timer)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+
+        if (timer is { Confidence: ChainLapseConfidence.Inferred, SecondsUntilLapse: int left }
+            && left <= AlertTimerLowSeconds)
+        {
+            return ChainAlertLevel.TimerRunningLow;
+        }
+
+        return state.IsInReservationWindow ? ChainAlertLevel.ReservationWindow : ChainAlertLevel.None;
+    }
 
     public static ChainTrackerState Evaluate(
         int chainLength,

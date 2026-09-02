@@ -96,6 +96,16 @@ public sealed class WarStateDerivationEngine(int winningScore = WarStateDerivati
             .GroupBy(hole => hole.FactionId)
             .ToDictionary(group => group.Key, group => group.Count());
 
+        // Full (un-bounded) sample history, oldest-first — the chain-lapse inference needs a wider
+        // window than the score-rate one (a chain can sit un-hit for minutes and still be alive),
+        // so it does NOT use boundedSamples.
+        var orderedSamples = scoreSamples.OrderBy(sample => sample.SampledAtUtc).ToArray();
+        // The poller stamps each score sample with its OWN faction id (WarPollerService). Chain
+        // command is imperative advice for us — "wait or revive", "filler OK" — so it is derived
+        // for our faction only; the enemy card must not show orders addressed to us or paint an
+        // enemy chain nearing lapse as our red alert.
+        var ourFactionId = orderedSamples.LastOrDefault()?.FactionId;
+
         derivedFactions = derivedFactions
             .Select(faction =>
             {
@@ -105,10 +115,30 @@ public sealed class WarStateDerivationEngine(int winningScore = WarStateDerivati
                 var targetCoverage = faction.AvailableMemberCount == 0
                     ? 0m
                     : decimal.Round(openTargets / (decimal)faction.AvailableMemberCount, 4, MidpointRounding.AwayFromZero);
-                return faction with
+
+                var withCoverage = faction with
                 {
                     OpenTargetCount = openTargets,
                     TargetCoverageRatio = targetCoverage,
+                };
+
+                if (ourFactionId is not long oursId || oursId != faction.FactionId)
+                {
+                    return withCoverage;
+                }
+
+                // data/V2/handoff/06: attackable war targets for us are the opponent's open slots,
+                // i.e. our own OpenTargetCount.
+                var chainState = ChainTracker.Evaluate(faction.Chain, openTargets);
+                var chainTimer = ChainLapseInference.Infer(
+                    Array.ConvertAll(orderedSamples, s => (s.SampledAtUtc, Chain: ResolveFactionChain(s, faction.FactionId))),
+                    asOfUtc);
+
+                return withCoverage with
+                {
+                    ChainState = chainState,
+                    ChainTimer = chainTimer,
+                    ChainAlert = ChainTracker.AlertLevel(chainState, chainTimer),
                 };
             })
             .ToList();
@@ -404,6 +434,21 @@ public sealed class WarStateDerivationEngine(int winningScore = WarStateDerivati
         if (sample.OpponentFactionId == factionId)
         {
             return sample.OpponentScore;
+        }
+
+        return 0;
+    }
+
+    private static int ResolveFactionChain(WarScoreSampleEntity sample, long factionId)
+    {
+        if (sample.FactionId == factionId)
+        {
+            return sample.FactionChain;
+        }
+
+        if (sample.OpponentFactionId == factionId)
+        {
+            return sample.OpponentChain;
         }
 
         return 0;

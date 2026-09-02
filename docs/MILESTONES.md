@@ -230,21 +230,72 @@ no third-party data.
   window + war targets) / `HoldForWarTarget` (in window, none — wait/revive, forfeit
   named in `Reason`) / `SustainWithFiller` (out of window, none). No timer — that is S03.
   16 tests / 32 cases. **`w06` verifier will be S08.** No I/O, so no gate dependency.
-- **S03 — chain timer source.** Real endpoint if S01 found one; otherwise derived from
-  the timestamp of the most recent hit, **labelled "inferred" on screen**.
-- **S04 — `ChainAlert` on `WarHub`.** Fires on reservation-window entry and on the timer
-  dropping below threshold.
-- **S05 — chain panel on the Blazor board.** Length, multiplier, next milestone + hits
-  remaining, value of the next milestone in points, value forfeited if the crossing
-  lands outside ("landing 1000 outside costs 640"), timer/inferred-equivalent,
-  war-targets-only banner, attackable war-target count.
-- **S06 — chain watchers.** Planner-assigned, persisted per war (a war role, not a
-  global role).
-- **S07 — filler-target policy.** When war targets are exhausted: propose outside
-  targets to sustain the chain, but filler must stop short of a crossing (chain at 997,
-  no war target free → advise *wait or revive*, not *hit three randoms*). Show the
-  `war = 1` vs `war = 2` score trade honestly.
-- **S08 — `scripts/verify/w06-chain-contract.sh`.**
+- **S03 — chain timer source.** — DONE (branch `feat/m008-s03-chain-command`, stacked on
+  S02). S01's live endpoint is still blocked, so this is the **inferred** fallback:
+  `Core/War/ChainLapseInference.Infer(perFactionChainSeries, now)` scans the *full*
+  (un-bounded, not the 8-sample score-rate window) `WarScoreSampleEntity` history for
+  the last sample where that faction's chain rose, and reports
+  `SecondsSinceLastIncrease` / `SecondsUntilLapse` with a `SampleSpacingSeconds` error
+  bar (poll interval defaults to 30 s). **Honest-output rule:** `Confidence.None` /
+  `SecondsUntilLapse = null` in two cases — (a) the chain never rises in the held history
+  (last hit older than the data), and (b) the chain rose then dropped/reset and has not
+  climbed since (the last increase belonged to a chain that has since lapsed — otherwise
+  the countdown would walk down and raise a false "about to lapse" alert for a dead
+  chain). Never a confident full timer. The board renders "~mm:ss ago (±Ns)", not a
+  ticking clock. Chain command is derived for **our faction only** (the poller stamps
+  each sample with its own faction id) — the enemy card shows no orders and no alert.
+  - **4th unverified assumption.** `data/V2/handoff/00-brief.md`'s ledger names three
+    unknowns (FF formula, hospital duration, energy model). `ChainLapseInference`
+    `.TornChainLapseTimeoutSeconds = 300` adds a fourth, *not* pre-blessed by the brief.
+    Named const + comment pointing at the ledger + a loud test
+    (`ChainLapseInference_timeout_constant_is_challengeable`). When S01's sweep lands,
+    replace the inference with the real `timeout` field and delete the const.
+  - `ChainEngine.BonusTable`'s `Timer` column ("25 minutes" at 250, …) is the *milestone*
+    time allowance (cumulative limit to *reach* the next milestone), **not** the
+    gap-between-hits lapse timeout — the two are not conflated anywhere; the comment on
+    the const spells out the difference.
+- **S04 — chain alert level.** — DONE (same branch). `ChainAlertLevel`
+  (`None` < `ReservationWindow` < `TimerRunningLow`) computed by
+  `ChainTracker.AlertLevel(state, timer)` — timer-about-to-lapse
+  (≤ `AlertTimerLowSeconds = 90`, and only for `Confidence.Inferred`) outranks the
+  window. It rides in the **broadcast war state** on `WarDerivedFactionState.ChainAlert`,
+  not a distinct hub event: a per-watcher `ChainAlert` push (handoff task 4) needs
+  `WarHub` per-war groups + per-user targeting, which M1 task 10 listed but the board
+  shipped without. Deferred with S06.
+- **S05 — chain panel on the Blazor board.** — DONE (same branch). Per-faction card on
+  `War.razor`: multiplier, next milestone + hits + bonus, "Landing chain N outside costs
+  X points", inferred last-hit / to-lapse line with the ± spacing, mode chip
+  (`Outside targets locked` / `Wait or revive — do not filler` / `Filler OK — scores
+  ~half`), and an alert banner (error on `TimerRunningLow`, warning on
+  `ReservationWindow`). Flows Core → `WarChainCommandDto` (flattened, API + Blazor
+  mirror) → `WarDtoMapper.ToChainCommandDto`.
+- **S06 — chain watchers.** — **DEFERRED** (not built). A planner-assigned, per-war
+  watcher role only does something once alerts can be pushed to *specific* users;
+  `WarHub` has no per-war groups and no per-user targeting (M1 task 10), so a
+  `ChainWatcherEntity` + migration now would persist assignments nothing can deliver to.
+  Blocked on the same hub-groups work as S04's distinct event. Revisit when the hub
+  grows targeted delivery (likely alongside M010 hit-calling).
+- **S07 — filler-target policy.** — DONE **as board advice** (same branch); the
+  target-*proposal* half is **M010** (handoff 06 "Out of scope: target selection").
+  Delivered: `ChainTracker.ChainBoardMode` already encodes the eligibility verdict, and
+  the S05 panel surfaces the honest trade — chain in the window with no attackable war
+  target → `HoldForWarTarget`, advice *"Wait or revive — filler would carry the chain
+  across and forfeit N points"*, never "hit three randoms"; out of the window with no
+  war target → `SustainWithFiller`, "scores roughly half (`war = 1`, not `2`)". Pinned
+  by `At_995_with_no_war_target_the_advice_is_wait_not_filler_and_names_the_cost` and
+  `Derive_chain_command_holds_for_a_war_target_when_none_is_attackable_in_the_window`.
+- **S08 — `scripts/verify/w06-chain-contract.sh`.** — DONE (same branch). Pins 8 named
+  acceptance tests (multiplier-vs-`ChainEngine`, reservation window, honest inferred
+  timer, challengeable timeout const, alert priority, both S07 hold-advice tests, the
+  wiring test) + 4 `War.razor` board literals + a Core/public-war boundary guardrail on
+  `ChainTracker.cs` / `ChainLapseInference.cs` (no `TornApiClient` / `HttpClient` /
+  `api.torn.com` / transport). Wired into `scripts/verify/build-and-test.sh`.
+
+**M008 status:** S02–S05, S07 (board half), S08 shipped on branch
+`feat/m008-s03-chain-command` (stacked on `feat/m008-s02-chain-tracker`). S01 stays
+BLOCKED ON USER (live Limited key + `api.torn.com`); S06 DEFERRED (hub groups). Full
+suite 278/281 — the 3 failures are the pre-existing unrelated SQLite / pending-migration
+issues on `main`, unchanged. +15 new tests.
 
 Out of scope: target *selection* among eligible targets — that is M010.
 

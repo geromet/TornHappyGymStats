@@ -155,4 +155,52 @@ public sealed class ChainTrackerTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => ChainTracker.Evaluate(500, 3, window));
     }
+
+    [Fact]
+    public void AlertLevel_is_none_outside_the_window_with_a_healthy_timer()
+    {
+        var state = ChainTracker.Evaluate(chainLength: 300, attackableWarTargetCount: 4);
+        var timer = new ChainLapseEstimate(DateTimeOffset.UnixEpoch, 30, 270, 30, true, ChainLapseConfidence.Inferred, "");
+
+        Assert.Equal(ChainAlertLevel.None, ChainTracker.AlertLevel(state, timer));
+    }
+
+    [Fact]
+    public void AlertLevel_raises_reservation_window_when_inside_it()
+    {
+        var state = ChainTracker.Evaluate(chainLength: 997, attackableWarTargetCount: 4);
+
+        Assert.Equal(ChainAlertLevel.ReservationWindow, ChainTracker.AlertLevel(state, timer: null));
+    }
+
+    [Fact]
+    public void AlertLevel_timer_running_low_outranks_the_reservation_window()
+    {
+        var state = ChainTracker.Evaluate(chainLength: 997, attackableWarTargetCount: 4);
+        var timer = new ChainLapseEstimate(
+            DateTimeOffset.UnixEpoch, 260, ChainTracker.AlertTimerLowSeconds - 1, 30, true, ChainLapseConfidence.Inferred, "");
+
+        Assert.Equal(ChainAlertLevel.TimerRunningLow, ChainTracker.AlertLevel(state, timer));
+    }
+
+    [Fact]
+    public void AlertLevel_ignores_a_low_timer_that_is_only_a_None_confidence_guess()
+    {
+        var state = ChainTracker.Evaluate(chainLength: 300, attackableWarTargetCount: 4);
+        var timer = ChainLapseEstimate.Unknown("last hit older than the window");
+
+        Assert.Equal(ChainAlertLevel.None, ChainTracker.AlertLevel(state, timer));
+    }
+
+    [Fact]
+    public void At_995_with_no_war_target_the_advice_is_wait_not_filler_and_names_the_cost()
+    {
+        // data/V2/handoff/06 S07 acceptance: chain in the window, nothing attackable -> hold.
+        // Filler would carry the chain across chain 1000 and forfeit the 640 bonus.
+        var state = ChainTracker.Evaluate(chainLength: 995, attackableWarTargetCount: 0);
+
+        Assert.Equal(ChainBoardMode.HoldForWarTarget, state.Mode);
+        Assert.Contains("Wait or revive", state.Reason);
+        Assert.Contains("640", state.Reason);
+    }
 }

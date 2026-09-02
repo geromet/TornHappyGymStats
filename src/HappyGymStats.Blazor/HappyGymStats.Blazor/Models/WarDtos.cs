@@ -38,10 +38,29 @@ public sealed record WarFactionDto(
     decimal CoverageRatio,
     int OpenTargetCount,
     decimal TargetCoverageRatio,
+    WarChainCommandDto? ChainCommand,
     WarScoreRateDto ScoreRate,
     WarEtaDto Eta,
     WarAttacksToFinishDto AttacksToFinish,
     IReadOnlyList<WarMemberDto> Members);
+
+public sealed record WarChainCommandDto(
+    int ChainLength,
+    double CurrentMultiplier,
+    int? NextMilestone,
+    int? HitsToNextMilestone,
+    int NextMilestoneBonus,
+    bool IsInReservationWindow,
+    int ForfeitedValueIfCrossedOutside,
+    int AttackableWarTargetCount,
+    string Mode,
+    string Advice,
+    string Alert,
+    bool TimerIsInferred,
+    int? SecondsSinceLastHit,
+    int? SecondsUntilLapse,
+    int TimerSpacingSeconds,
+    string? TimerDiagnostic);
 
 public sealed record WarMemberDto(
     long MemberId,
