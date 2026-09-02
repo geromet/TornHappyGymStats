@@ -1,0 +1,89 @@
+{
+  "war": {
+    "war_id": 48377,
+    "name": "Happy Gym vs Chain Breakers",
+    "start": 1731000000,
+    "end": null,
+    "is_live": true,
+    "winner_faction_id": null,
+    "status": null,
+    "unknown_war_field": "ignored"
+  },
+  "factions": [
+    {
+      "faction_id": 111,
+      "name": "Happy Gym",
+      "score": 128,
+      "chain": 42,
+      "attacks": 18,
+      "members": [
+        {
+          "user_id": 1001,
+          "name": "Alice",
+          "score": 55,
+          "chain": 20,
+          "attacks": 7,
+          "status": {
+            "state": "hospital",
+            "until": 1731003600
+          }
+        },
+        {
+          "user_id": 1002,
+          "name": "Bob",
+          "score": 40,
+          "chain": 12,
+          "attacks": 5,
+          "status": {
+            "state": "okay",
+            "until": null
+          }
+        },
+        {
+          "user_id": 1003,
+          "name": "Cara",
+          "score": 33,
+          "chain": 10,
+          "attacks": 6,
+          "status": null,
+          "unexpected_member_flag": true
+        }
+      ]
+    },
+    {
+      "faction_id": 222,
+      "name": "Chain Breakers",
+      "score": 111,
+      "chain": 33,
+      "attacks": 15,
+      "members": [
+        {
+          "user_id": 2001,
+          "name": "Dax",
+          "score": 61,
+          "chain": 18,
+          "attacks": 8,
+          "status": {
+            "state": "okay",
+            "until": null
+          }
+        },
+        {
+          "user_id": 2002,
+          "name": "Eve",
+          "score": 50,
+          "chain": 15,
+          "attacks": 7,
+          "status": {
+            "state": "traveling",
+            "until": 1731007200
+          }
+        }
+      ]
+    }
+  ],
+  "idle_attackers": [1003, 2002],
+  "ignored_root": {
+    "source": "v2"
+  }
+}

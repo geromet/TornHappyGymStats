@@ -1,0 +1,49 @@
+{
+  "attacks": [
+    {
+      "attack_id": 90001,
+      "war_id": 48377,
+      "timestamp": 1731000200,
+      "attacker_id": 1001,
+      "attacker_name": "Alice",
+      "defender_id": 2001,
+      "defender_name": "Dex",
+      "result": "Hospitalize",
+      "respect_gain": 3.45,
+      "chain": 21,
+      "is_ranked_war": true,
+      "ignored_note": "not part of the contract"
+    },
+    {
+      "attack_id": 90002,
+      "war_id": 48377,
+      "timestamp": 1731000240,
+      "attacker_id": 1002,
+      "attacker_name": "Bob",
+      "defender_id": 2002,
+      "defender_name": "Eve",
+      "result": "Mug",
+      "respect_gain": null,
+      "chain": null,
+      "is_ranked_war": true
+    },
+    {
+      "attack_id": 90003,
+      "war_id": null,
+      "timestamp": 1731000300,
+      "attacker_id": 3001,
+      "attacker_name": "Scout",
+      "defender_id": 4001,
+      "defender_name": "Target",
+      "result": "Leave",
+      "respect_gain": 0,
+      "chain": 0,
+      "is_ranked_war": false
+    }
+  ],
+  "_metadata": {
+    "links": {
+      "next": "/user/?selections=attacks&page=2"
+    }
+  }
+}

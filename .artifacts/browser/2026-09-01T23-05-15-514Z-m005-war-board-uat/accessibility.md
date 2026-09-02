@@ -1,0 +1,141 @@
+- banner:
+  - toolbar:
+    - button
+    - heading "Happy Gym Stats" [level=6]
+    - group:
+      - text: dev-war-planner
+      - button "Sign out"
+    - link "Torn City":
+      - /url: https://www.torn.com
+- complementary:
+  - paragraph: Happy Gym Stats
+  - navigation:
+    - link "Home":
+      - /url: /
+    - link "Login":
+      - /url: /login
+    - link:
+      - /url: /my-stats
+      - group: My stats
+    - link:
+      - /url: /player-account
+      - group: Player account
+    - link:
+      - /url: /faction
+      - group: Faction
+    - link "War board":
+      - /url: /war
+    - link:
+      - /url: /logs
+      - group: Logs
+    - link:
+      - /url: /settings
+      - group: Settings
+    - link "Chain calculator":
+      - /url: /chain-calculator
+    - link "Terms of use":
+      - /url: /terms
+    - link "Privacy":
+      - /url: /privacy
+    - link "Security":
+      - /url: /security
+- group:
+  - group:
+    - heading "War board" [level=4]
+    - paragraph: Live roster, score, chain, coverage ratio, hole alerts, and stale-health visibility from the repository-backed public war state.
+    - button "Refresh"
+  - text: Coverage ratio
+  - heading "66.7 %" [level=5]
+  - paragraph: 5 fighters across 2 rosters
+  - text: Hole alerts
+  - heading "2" [level=5]
+  - paragraph: Critical/high/medium/low severity board gaps
+  - text: Hub connection
+  - heading "connected" [level=5]
+  - paragraph: "Data source: hub-delta"
+  - text: Heartbeat
+  - heading "completed" [level=5]
+  - paragraph: Updated 2026-09-02 00:41:25 +02:00
+  - heading "Happy Gym" [level=6]
+  - paragraph: Faction ID 111
+  - text: Score
+  - heading "150" [level=5]
+  - text: Chain
+  - heading "21" [level=5]
+  - text: ETA
+  - paragraph: ETA 04:29:10
+  - text: Attacks to finish
+  - paragraph: "46"
+  - text: Coverage ratio
+  - paragraph: 50.0 %
+  - text: Availability
+  - paragraph: 2 ready · 1 hospital · 0 unavailable
+  - table:
+    - rowgroup
+    - rowgroup:
+      - row "Member Ready Planner Availability available Hospital countdown Ready now Score 64 Chain 12 Attacks 6":
+        - cell "Member Ready Planner"
+        - cell "Availability available"
+        - cell "Hospital countdown Ready now"
+        - cell "Score 64"
+        - cell "Chain 12"
+        - cell "Attacks 6"
+      - row "Member Hospital Watch Availability hospitalized Hospital countdown Hospital in 00:17:03 Score 22 Chain 3 Attacks 2":
+        - cell "Member Hospital Watch"
+        - cell "Availability hospitalized"
+        - cell "Hospital countdown Hospital in 00:17:03"
+        - cell "Score 22"
+        - cell "Chain 3"
+        - cell "Attacks 2"
+      - row "Member Idle Striker Availability available Hospital countdown Ready now Score 0 Chain 0 Attacks 0":
+        - cell "Member Idle Striker"
+        - cell "Availability available"
+        - cell "Hospital countdown Ready now"
+        - cell "Score 0"
+        - cell "Chain 0"
+        - cell "Attacks 0"
+  - heading "Chain Breakers" [level=6]
+  - paragraph: Faction ID 222
+  - text: Score
+  - heading "102" [level=5]
+  - text: Chain
+  - heading "11" [level=5]
+  - text: ETA
+  - paragraph: ETA 11:50:54
+  - text: Attacks to finish
+  - paragraph: "45"
+  - text: Coverage ratio
+  - paragraph: 100.0 %
+  - text: Availability
+  - paragraph: 1 ready · 1 hospital · 0 unavailable
+  - table:
+    - rowgroup
+    - rowgroup:
+      - row "Member Open Target Availability available Hospital countdown Ready now Score 40 Chain 6 Attacks 4":
+        - cell "Member Open Target"
+        - cell "Availability available"
+        - cell "Hospital countdown Ready now"
+        - cell "Score 40"
+        - cell "Chain 6"
+        - cell "Attacks 4"
+      - row "Member Opponent Hospital Availability hospitalized Hospital countdown Hospital in 00:08:03 Score 12 Chain 1 Attacks 1":
+        - cell "Member Opponent Hospital"
+        - cell "Availability hospitalized"
+        - cell "Hospital countdown Hospital in 00:08:03"
+        - cell "Score 12"
+        - cell "Chain 1"
+        - cell "Attacks 1"
+  - heading "Hole alerts" [level=6]
+  - paragraph: Idle attackers and open targets ranked by severity.
+  - paragraph:
+    - group:
+      - paragraph: critical · idleattacker
+      - paragraph: Idle Striker (Happy Gym)
+      - text: Available attacker is marked idle.
+  - paragraph:
+    - group:
+      - paragraph: medium · opentarget
+      - paragraph: Open Target (Happy Gym)
+      - text: Opponent target Open Target is available while Happy Gym still has idle attackers.
+- separator
+- text: Happy Gym Stats — Data stored locally, never shared externally.

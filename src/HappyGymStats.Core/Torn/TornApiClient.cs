@@ -1,7 +1,9 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using HappyGymStats.Core.Torn.Models;
+using HappyGymStats.Core.War;
 
 namespace HappyGymStats.Core.Torn;
 
@@ -28,96 +30,112 @@ public sealed class TornApiException : Exception
     public bool IsRetryable { get; }
 
     public HttpStatusCode? StatusCode { get; }
-
     public int? TornErrorCode { get; }
 }
 
 public sealed class TornApiClient
 {
+    private static readonly Uri TornApiBaseUri = new("https://api.torn.com/");
+    private static readonly JsonSerializerOptions UserLogJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private static readonly JsonDocumentOptions JsonDocumentOptions = new()
     {
         CommentHandling = JsonCommentHandling.Skip,
-        AllowTrailingCommas = true,
+        AllowTrailingCommas = true
     };
 
+    private static readonly Regex AbsoluteUrlRegex = new(@"https?://\S+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private readonly HttpClient _http;
 
-    public TornApiClient(HttpClient httpClient)
+    public TornApiClient(HttpClient http)
     {
-        _http = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        _http = http;
     }
 
-    public async Task<int> GetPlayerIdAsync(string apiKey, CancellationToken ct)
+    public async Task<int> GetPlayerIdAsync(string apiKey, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(apiKey))
-            throw new ArgumentException("API key must be provided.", nameof(apiKey));
+        var requestUrl = new Uri(TornApiBaseUri, "v2/user/basic?selections=basic");
 
-        var url = new Uri("https://api.torn.com/v2/user/basic");
-        var requestUrl = BuildUrlWithApiKey(url, apiKey);
-        using var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-        HttpResponseMessage response;
-        try
-        {
-            response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-        {
-            throw new TornApiException("Request timed out while calling Torn API.", isRetryable: true, statusCode: null, tornErrorCode: null);
-        }
-        catch (HttpRequestException ex)
-        {
-            throw new TornApiException("Network error while calling Torn API.", isRetryable: true, statusCode: null, tornErrorCode: null, innerException: ex);
-        }
-
-        await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        JsonDocument doc;
-        try
-        {
-            doc = await JsonDocument.ParseAsync(stream, JsonDocumentOptions, ct).ConfigureAwait(false);
-        }
-        catch (JsonException ex)
-        {
-            throw new TornApiException("Malformed JSON response from Torn API.", isRetryable: IsRetryableStatusCode(response.StatusCode), statusCode: response.StatusCode, tornErrorCode: null, innerException: ex);
-        }
-
-        using (doc)
-        {
-            if (TryGetTornError(doc.RootElement, out var tornErrorCode, out var tornErrorMessage))
-                throw new TornApiException(BuildUserSafeErrorMessage(response.StatusCode, tornErrorCode, tornErrorMessage), isRetryable: IsRetryableTornError(response.StatusCode, tornErrorCode, tornErrorMessage), statusCode: response.StatusCode, tornErrorCode: tornErrorCode);
-
-            if (!response.IsSuccessStatusCode)
-                throw new TornApiException($"Torn API returned HTTP {(int)response.StatusCode} ({response.StatusCode}).", isRetryable: IsRetryableStatusCode(response.StatusCode), statusCode: response.StatusCode, tornErrorCode: null);
-
-            // Torn API v2: /v2/user/basic wraps data under "profile", user id is "id"
-            if (doc.RootElement.TryGetProperty("profile", out var profileEl) &&
-                profileEl.TryGetProperty("id", out var playerIdEl) &&
-                playerIdEl.TryGetInt32(out var playerId))
-                return playerId;
-
-            throw new TornApiException("Torn API /v2/user/basic response missing 'profile.id'.", isRetryable: false, statusCode: response.StatusCode, tornErrorCode: null);
-        }
+        return await GetAsync(
+            apiKey,
+            requestUrl,
+            DeserializePlayerId,
+            ct).ConfigureAwait(false);
     }
 
-    public async Task<UserLogPage> GetUserLogPageAsync(string apiKey, Uri url, CancellationToken ct)
+    public async Task<UserLogPage> GetUserLogPageAsync(string apiKey, Uri url, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+
+        return await GetAsync(
+            apiKey,
+            url,
+            DeserializeUserLogPage,
+            ct).ConfigureAwait(false);
+    }
+
+    public Task<LiveFactionWarsResponse> GetLiveFactionWarsAsync(string apiKey, CancellationToken ct = default)
+        => GetWarAsync<LiveFactionWarsResponse>(apiKey, new Uri(TornApiBaseUri, "faction/?selections=rankedwars"), ct);
+
+    public Task<RankedWarHistoryPageResponse> GetRankedWarHistoryPageAsync(string apiKey, CancellationToken ct = default)
+        => GetRankedWarHistoryPageAsync(apiKey, new Uri(TornApiBaseUri, "v2/faction/warfareranked?selections=warfareranked"), ct);
+
+    public Task<RankedWarHistoryPageResponse> GetRankedWarHistoryPageAsync(string apiKey, Uri url, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+        var normalizedUrl = NormalizeTornApiUri(url);
+        return GetWarAsync<RankedWarHistoryPageResponse>(apiKey, normalizedUrl, ct);
+    }
+
+    public Task<RankedWarReportResponse> GetRankedWarReportAsync(string apiKey, long warId, CancellationToken ct = default)
+    {
+        if (warId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(warId), warId, "War id must be positive.");
+        }
+
+        return GetWarAsync<RankedWarReportResponse>(apiKey, new Uri(TornApiBaseUri, $"torn/{warId}?selections=rankedwarreport"), ct);
+    }
+
+    public Task<GlobalRankedWarsResponse> GetGlobalRankedWarsAsync(string apiKey, CancellationToken ct = default)
+        => GetWarAsync<GlobalRankedWarsResponse>(apiKey, new Uri(TornApiBaseUri, "torn/?selections=rankedwars"), ct);
+
+    public Task<UserAttacksPageResponse> GetUserAttacksPageAsync(string apiKey, CancellationToken ct = default)
+        => GetUserAttacksPageAsync(apiKey, new Uri(TornApiBaseUri, "user/?selections=attacks"), ct);
+
+    public Task<UserAttacksPageResponse> GetUserAttacksPageAsync(string apiKey, Uri url, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+        var normalizedUrl = NormalizeTornApiUri(url);
+        return GetWarAsync<UserAttacksPageResponse>(apiKey, normalizedUrl, ct);
+    }
+
+    private Task<T> GetWarAsync<T>(string apiKey, Uri requestUrl, CancellationToken ct)
+        where T : class
+        => GetAsync(
+            apiKey,
+            requestUrl,
+            root => DeserializeResponse<T>(root, WarEndpointJson.SerializerOptions, typeof(T).Name),
+            ct);
+
+    private async Task<T> GetAsync<T>(
+        string apiKey,
+        Uri requestUrl,
+        Func<JsonElement, T> deserialize,
+        CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            throw new ArgumentException("API key must be provided.", nameof(apiKey));
+            throw new ArgumentException("API key is required.", nameof(apiKey));
         }
 
-        if (url is null)
-        {
-            throw new ArgumentNullException(nameof(url));
-        }
+        ArgumentNullException.ThrowIfNull(requestUrl);
 
-        if (!url.IsAbsoluteUri)
-        {
-            throw new ArgumentException("URL must be an absolute URI.", nameof(url));
-        }
+        requestUrl = BuildUrlWithApiKey(requestUrl, apiKey);
 
-        var requestUrl = BuildUrlWithApiKey(url, apiKey);
         using var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
@@ -129,7 +147,6 @@ public sealed class TornApiClient
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            // HttpClient timeout (or other non-user cancellation).
             throw new TornApiException(
                 message: "Request timed out while calling Torn API.",
                 isRetryable: true,
@@ -178,247 +195,200 @@ public sealed class TornApiClient
 
             if (!response.IsSuccessStatusCode)
             {
-                var retryable = IsRetryableStatusCode(response.StatusCode);
                 throw new TornApiException(
-                    message: $"Torn API returned HTTP {(int)response.StatusCode} ({response.StatusCode}).",
-                    isRetryable: retryable,
-                    statusCode: response.StatusCode,
-                    tornErrorCode: null);
-            }
-
-            if (!doc.RootElement.TryGetProperty("log", out var logsElement) || logsElement.ValueKind != JsonValueKind.Array)
-            {
-                // Include HTTP status and response snippet so the user can diagnose what happened.
-                var snippet = doc.RootElement.ValueKind == JsonValueKind.Object
-                    ? JsonSerializer.Serialize(doc.RootElement)
-                    : $"(root is {doc.RootElement.ValueKind})";
-                if (snippet.Length > 500)
-                    snippet = snippet[..500] + "...(truncated)";
-
-                throw new TornApiException(
-                    message: $"Torn API returned HTTP {(int)response.StatusCode} ({response.StatusCode}) with no 'log' array. Response: {snippet}",
+                    $"Torn API returned HTTP {(int)response.StatusCode} ({response.StatusCode}).",
                     isRetryable: IsRetryableStatusCode(response.StatusCode),
                     statusCode: response.StatusCode,
                     tornErrorCode: null);
             }
 
-            if (!TryGetNextUrl(doc.RootElement, out var nextUrl, out var nextUrlError))
+            try
+            {
+                return deserialize(doc.RootElement);
+            }
+            catch (JsonException ex)
             {
                 throw new TornApiException(
-                    message: nextUrlError ?? "Malformed response from Torn API: invalid paging metadata.",
-                    isRetryable: true,
+                    message: "Malformed JSON response from Torn API.",
+                    isRetryable: IsRetryableStatusCode(response.StatusCode),
                     statusCode: response.StatusCode,
-                    tornErrorCode: null);
+                    tornErrorCode: null,
+                    innerException: ex);
             }
-
-            var logs = new List<UserLog>();
-            foreach (var logEl in logsElement.EnumerateArray())
-            {
-                if (logEl.ValueKind != JsonValueKind.Object)
-                {
-                    continue; // ignore unexpected elements
-                }
-
-                var id = logEl.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.String
-                    ? idEl.GetString() ?? ""
-                    : idEl.ValueKind == JsonValueKind.Number && idEl.TryGetInt64(out var idNum)
-                        ? idNum.ToString()
-                        : "";
-                var ts = logEl.TryGetProperty("timestamp", out var tsEl) && tsEl.TryGetInt64(out var tsVal) ? tsVal : 0;
-
-                string? title = null;
-                string? category = null;
-                int? logTypeId = null;
-
-                if (logEl.TryGetProperty("details", out var detailsEl) && detailsEl.ValueKind == JsonValueKind.Object)
-                {
-                    if (detailsEl.TryGetProperty("title", out var titleEl) && titleEl.ValueKind == JsonValueKind.String)
-                    {
-                        title = titleEl.GetString();
-                    }
-
-                    if (detailsEl.TryGetProperty("category", out var categoryEl) && categoryEl.ValueKind == JsonValueKind.String)
-                    {
-                        category = categoryEl.GetString();
-                    }
-
-                    if (detailsEl.TryGetProperty("id", out var idPropEl) && idPropEl.TryGetInt32(out var idInt))
-                    {
-                        logTypeId = idInt;
-                    }
-                }
-
-                logs.Add(new UserLog(
-                    Id: id,
-                    Timestamp: ts,
-                    Title: title,
-                    Category: category,
-                    LogTypeId: logTypeId,
-                    Raw: logEl.Clone()));
-            }
-
-            return new UserLogPage(logs, nextUrl);
         }
+    }
+
+    private static int DeserializePlayerId(JsonElement root)
+    {
+        if (!root.TryGetProperty("player_id", out var playerIdEl) || !playerIdEl.TryGetInt32(out var playerId))
+        {
+            throw new JsonException("Response did not contain a valid player_id.");
+        }
+
+        return playerId;
+    }
+
+    private static UserLogPage DeserializeUserLogPage(JsonElement root)
+    {
+        var page = DeserializeResponse<UserLogPageResponse>(root, UserLogJsonOptions, nameof(UserLogPageResponse));
+
+        if (page.Logs.ValueKind != JsonValueKind.Object)
+        {
+            throw new JsonException("Response did not contain a valid logs object.");
+        }
+
+        var logs = new List<UserLog>();
+        foreach (var prop in page.Logs.EnumerateObject())
+        {
+            var logEl = prop.Value;
+            var id = logEl.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.String
+                ? idEl.GetString() ?? ""
+                : idEl.ValueKind == JsonValueKind.Number && idEl.TryGetInt64(out var idNum)
+                    ? idNum.ToString()
+                    : "";
+            var ts = logEl.TryGetProperty("timestamp", out var tsEl) && tsEl.TryGetInt64(out var tsVal) ? tsVal : 0;
+
+            string? title = null;
+            string? category = null;
+            int? logTypeId = null;
+
+            if (logEl.TryGetProperty("details", out var detailsEl) && detailsEl.ValueKind == JsonValueKind.Object)
+            {
+                if (detailsEl.TryGetProperty("title", out var titleEl) && titleEl.ValueKind == JsonValueKind.String)
+                {
+                    title = titleEl.GetString();
+                }
+
+                if (detailsEl.TryGetProperty("category", out var categoryEl) && categoryEl.ValueKind == JsonValueKind.String)
+                {
+                    category = categoryEl.GetString();
+                }
+
+                if (detailsEl.TryGetProperty("id", out var idPropEl) && idPropEl.TryGetInt32(out var idInt))
+                {
+                    logTypeId = idInt;
+                }
+            }
+
+            logs.Add(new UserLog(
+                Id: id,
+                Timestamp: ts,
+                Title: title,
+                Category: category,
+                LogTypeId: logTypeId,
+                Raw: logEl.Clone()));
+        }
+
+        Uri? nextUrl = null;
+        var next = page.Metadata?.Links?.Next;
+        if (!string.IsNullOrWhiteSpace(next) && Uri.TryCreate(next, UriKind.Absolute, out var abs))
+        {
+            nextUrl = abs;
+        }
+
+        return new UserLogPage(logs, nextUrl);
+    }
+
+    private static T DeserializeResponse<T>(JsonElement root, JsonSerializerOptions options, string responseTypeName)
+    {
+        return root.Deserialize<T>(options)
+            ?? throw new JsonException($"Response body deserialized to null for {responseTypeName}.");
+    }
+
+    private static Uri NormalizeTornApiUri(Uri uri)
+    {
+        if (uri.IsAbsoluteUri)
+        {
+            return uri;
+        }
+
+        var pathAndQuery = uri.OriginalString;
+        if (!pathAndQuery.StartsWith('/'))
+        {
+            pathAndQuery = "/" + pathAndQuery;
+        }
+
+        return new Uri(TornApiBaseUri, pathAndQuery);
     }
 
     private static Uri BuildUrlWithApiKey(Uri baseUrl, string apiKey)
     {
         var ub = new UriBuilder(baseUrl);
-        var existing = ub.Query;
-        if (existing.StartsWith("?", StringComparison.Ordinal))
-            existing = existing[1..];
+        var existing = ub.Query?.TrimStart('?');
+        var pairs = new List<string>();
+        if (!string.IsNullOrWhiteSpace(existing))
+        {
+            foreach (var kv in existing.Split('&', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var key = kv.Split('=', 2)[0];
+                if (!key.Equals("key", StringComparison.OrdinalIgnoreCase))
+                {
+                    pairs.Add(kv);
+                }
+            }
+        }
 
-        var filtered = string.Join("&",
-            existing.Split('&', StringSplitOptions.RemoveEmptyEntries)
-                .Where(p => !p.StartsWith("key=", StringComparison.OrdinalIgnoreCase)));
-
-        var keyPair = $"key={Uri.EscapeDataString(apiKey)}";
-        ub.Query = string.IsNullOrWhiteSpace(filtered) ? keyPair : $"{filtered}&{keyPair}";
+        pairs.Add($"key={Uri.EscapeDataString(apiKey)}");
+        ub.Query = string.Join('&', pairs);
         return ub.Uri;
     }
 
-    private static bool TryGetNextUrl(JsonElement root, out Uri? nextUrl, out string? error)
+    private static bool TryGetTornError(JsonElement root, out int code, out string? errorMessage)
     {
-        nextUrl = null;
-        error = null;
-
-        if (!root.TryGetProperty("_metadata", out var mdEl) || mdEl.ValueKind != JsonValueKind.Object)
-        {
-            error = "Malformed response from Torn API: missing '_metadata'.";
-            return false;
-        }
-
-        if (!mdEl.TryGetProperty("links", out var linksEl) || linksEl.ValueKind != JsonValueKind.Object)
-        {
-            error = "Malformed response from Torn API: missing '_metadata.links'.";
-            return false;
-        }
-
-        // Torn API returns logs newest-first. The "prev" link goes to older records (backward in time),
-        // which is what we want for fetching full history. The "next" link goes to newer records.
-        // We prefer "prev" for backward paging; fall back to "next" if no "prev" exists.
-        if (linksEl.TryGetProperty("prev", out var prevEl))
-        {
-            if (prevEl.ValueKind == JsonValueKind.Null || prevEl.ValueKind != JsonValueKind.String)
-            {
-                // No prev link = terminal page (reached oldest records).
-                return true;
-            }
-
-            var prevStr = prevEl.GetString();
-            if (string.IsNullOrWhiteSpace(prevStr))
-            {
-                return true;
-            }
-
-            if (!Uri.TryCreate(prevStr, UriKind.Absolute, out var parsedPrev)
-                || (parsedPrev.Scheme != Uri.UriSchemeHttp && parsedPrev.Scheme != Uri.UriSchemeHttps)
-                || string.IsNullOrWhiteSpace(parsedPrev.Host))
-            {
-                error = "Malformed response from Torn API: '_metadata.links.prev' is not a valid absolute HTTP(S) URI.";
-                return false;
-            }
-
-            nextUrl = parsedPrev;
-            return true;
-        }
-
-        // Fallback: use "next" if no "prev" exists.
-        if (!linksEl.TryGetProperty("next", out var nextEl))
-        {
-            // No next link is a valid terminal page.
-            return true;
-        }
-
-        if (nextEl.ValueKind == JsonValueKind.Null)
-        {
-            return true;
-        }
-
-        if (nextEl.ValueKind != JsonValueKind.String)
-        {
-            error = "Malformed response from Torn API: '_metadata.links.next' is not a string.";
-            return false;
-        }
-
-        var nextStr = nextEl.GetString();
-        if (string.IsNullOrWhiteSpace(nextStr))
-        {
-            return true;
-        }
-
-        if (!Uri.TryCreate(nextStr, UriKind.Absolute, out var parsed)
-            || (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps)
-            || string.IsNullOrWhiteSpace(parsed.Host))
-        {
-            error = "Malformed response from Torn API: '_metadata.links.next' is not a valid absolute HTTP(S) URI.";
-            return false;
-        }
-
-        nextUrl = parsed;
-        return true;
-    }
-
-    private static bool TryGetTornError(JsonElement root, out int? code, out string? error)
-    {
-        code = null;
-        error = null;
-
-        // Torn-style error payloads are usually: { "code": 2, "error": "Incorrect key" }
-        if (!root.TryGetProperty("error", out var errorEl) || errorEl.ValueKind != JsonValueKind.String)
+        code = 0;
+        errorMessage = null;
+        if (!root.TryGetProperty("error", out var errorEl) || errorEl.ValueKind != JsonValueKind.Object)
         {
             return false;
         }
 
-        error = errorEl.GetString();
-
-        if (root.TryGetProperty("code", out var codeEl) && codeEl.TryGetInt32(out var parsedCode))
+        if (errorEl.TryGetProperty("code", out var codeEl) && codeEl.TryGetInt32(out var c))
         {
-            code = parsedCode;
+            code = c;
+        }
+
+        if (errorEl.TryGetProperty("error", out var msgEl) && msgEl.ValueKind == JsonValueKind.String)
+        {
+            errorMessage = msgEl.GetString();
         }
 
         return true;
     }
 
     private static bool IsRetryableStatusCode(HttpStatusCode statusCode)
+        => statusCode == HttpStatusCode.TooManyRequests || (int)statusCode >= 500;
+
+    private static bool IsRetryableTornError(HttpStatusCode statusCode, int tornErrorCode, string? message)
+        => IsRetryableStatusCode(statusCode)
+           || tornErrorCode == 5
+           || (message?.Contains("rate limit", StringComparison.OrdinalIgnoreCase) ?? false);
+
+    private static string BuildUserSafeErrorMessage(HttpStatusCode statusCode, int tornErrorCode, string? tornError)
     {
-        var sc = (int)statusCode;
-        if (statusCode == HttpStatusCode.TooManyRequests)
+        var baseMessage = $"Torn API error {tornErrorCode}";
+        if (statusCode != HttpStatusCode.OK)
         {
-            return true;
+            baseMessage += $" with HTTP {(int)statusCode} ({statusCode})";
         }
 
-        // Server-side/transient.
-        return sc >= 500 || statusCode == HttpStatusCode.RequestTimeout;
+        var sanitized = SanitizeErrorText(tornError);
+        if (!string.IsNullOrWhiteSpace(sanitized))
+        {
+            baseMessage += $": {sanitized}";
+        }
+
+        return baseMessage + ".";
     }
 
-    private static bool IsRetryableTornError(HttpStatusCode statusCode, int? tornCode, string? tornErrorMessage)
+    private static string? SanitizeErrorText(string? input)
     {
-        if (IsRetryableStatusCode(statusCode))
+        if (string.IsNullOrWhiteSpace(input))
         {
-            return true;
+            return input;
         }
 
-        // Torn error codes are not publicly stable across all docs. We only treat obvious rate-limit signals as retryable.
-        if (tornCode is 5)
-        {
-            return true;
-        }
-
-        if (!string.IsNullOrWhiteSpace(tornErrorMessage)
-            && tornErrorMessage.Contains("too many", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return false;
-    }
-
-    private static string BuildUserSafeErrorMessage(HttpStatusCode statusCode, int? tornCode, string? tornError)
-    {
-        // Never include secrets. We also avoid echoing the request URI.
-        var codePart = tornCode is null ? "" : $"Torn code {tornCode}. ";
-        var errPart = string.IsNullOrWhiteSpace(tornError) ? "Unknown Torn error." : tornError;
-        return $"Torn API error. {codePart}HTTP {(int)statusCode} ({statusCode}). {errPart}";
+        var scrubbed = AbsoluteUrlRegex.Replace(input, "[redacted-url]");
+        scrubbed = Regex.Replace(scrubbed, @"(?i)(^|[?&])key=[^&\s]+", "$1key=[redacted]");
+        return scrubbed;
     }
 }

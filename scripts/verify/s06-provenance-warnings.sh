@@ -11,8 +11,13 @@ if [[ ! -x "${S05_VERIFY}" ]]; then
   chmod +x "${S05_VERIFY}"
 fi
 
-echo "==> Running baseline surfaces generation (S05 script)"
-bash "${S05_VERIFY}"
+api_key="${TORN_API_KEY:-${HAPPYGYMSTATS_TORN_API_KEY:-}}"
+if [[ -n "${api_key}" ]]; then
+  echo "==> Running baseline surfaces generation (S05 script)"
+  bash "${S05_VERIFY}"
+else
+  echo "==> No API key env detected; using existing local surfaces artifact (secretless mode)"
+fi
 
 echo "==> Verifying warnings payload shape in latest.json"
 python3 - <<'PY' "${LATEST_PATH}"

@@ -25,6 +25,19 @@ public sealed record SurfacesDatasetMetaDto(
     int EventPointCount,
     int RecordCount);
 
+public sealed record MyStatsDatasetDto(
+    string Dataset,
+    string Version,
+    MyStatsSeriesDto Series,
+    MyStatsMetaDto Meta);
+
+public sealed record MyStatsSeriesDto(
+    GymCloudSeriesDto GymCloud);
+
+public sealed record MyStatsMetaDto(
+    int GymPointCount,
+    int RecordCount);
+
 public sealed record ImportStatusDto(
     string Id,
     string Outcome,

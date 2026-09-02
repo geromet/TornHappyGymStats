@@ -17,7 +17,7 @@ namespace HappyGymStats.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.4")
+                .HasAnnotation("ProductVersion", "10.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -213,6 +213,132 @@ namespace HappyGymStats.Data.Migrations
                     b.ToTable("ModifierProvenance");
                 });
 
+            modelBuilder.Entity("HappyGymStats.Data.Entities.RankedWarHistoryEntity", b =>
+                {
+                    b.Property<long>("WarId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CapturedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("EndedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("FactionChain")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("FactionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FactionName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int?>("FactionScore")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("IngestedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("OpponentChain")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("OpponentFactionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("OpponentFactionName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int?>("OpponentScore")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ReportCapturedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ReportIngestedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long?>("WinnerFactionId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("WarId");
+
+                    b.HasIndex("EndedAtUtc");
+
+                    b.HasIndex("FactionId", "StartedAtUtc");
+
+                    b.HasIndex("OpponentFactionId", "StartedAtUtc");
+
+                    b.ToTable("RankedWarHistory", (string)null);
+                });
+
+            modelBuilder.Entity("HappyGymStats.Data.Entities.RankedWarReportMemberEntity", b =>
+                {
+                    b.Property<long>("WarId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("FactionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("MemberId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("Attacks")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CapturedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Chain")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FactionName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("IngestedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsIdleAttacker")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("MemberName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("Score")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StatusState")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("StatusUntilUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("WarId", "FactionId", "MemberId");
+
+                    b.HasIndex("MemberId");
+
+                    b.HasIndex("FactionId", "MemberId");
+
+                    b.HasIndex("WarId", "FactionId");
+
+                    b.ToTable("RankedWarReportMembers", (string)null);
+                });
+
             modelBuilder.Entity("HappyGymStats.Data.Entities.UserLogEntryEntity", b =>
                 {
                     b.Property<Guid>("AnonymousId")
@@ -288,6 +414,194 @@ namespace HappyGymStats.Data.Migrations
                     b.HasIndex("AnonymousId", "OccurredAtUtc");
 
                     b.ToTable("UserLogEntries");
+                });
+
+            modelBuilder.Entity("HappyGymStats.Data.Entities.WarCurrentEntity", b =>
+                {
+                    b.Property<string>("ScopeKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("EndsAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("FactionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FactionName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<bool>("IsLive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("ObservedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("OpponentFactionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("OpponentFactionName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime?>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("WarId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("ScopeKey");
+
+                    b.HasIndex("WarId")
+                        .IsUnique()
+                        .HasFilter("\"WarId\" IS NOT NULL");
+
+                    b.ToTable("WarCurrent", (string)null);
+                });
+
+            modelBuilder.Entity("HappyGymStats.Data.Entities.WarPollerHeartbeatEntity", b =>
+                {
+                    b.Property<string>("ScopeKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long?>("ActiveWarId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("FailureBackoffSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("Phase")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("PollCompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("PollIntervalSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("PollStartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("StaleAfterUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ScopeKey");
+
+                    b.HasIndex("ActiveWarId");
+
+                    b.HasIndex("Phase", "UpdatedAtUtc");
+
+                    b.ToTable("WarPollerHeartbeats", (string)null);
+                });
+
+            modelBuilder.Entity("HappyGymStats.Data.Entities.WarRosterSnapshotEntity", b =>
+                {
+                    b.Property<long>("WarId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("FactionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("MemberId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("Attacks")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CapturedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Chain")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FactionName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("MemberName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("Score")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StatusState")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("StatusUntilUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("WarId", "FactionId", "MemberId");
+
+                    b.HasIndex("WarId", "CapturedAtUtc");
+
+                    b.ToTable("WarRosterSnapshots", (string)null);
+                });
+
+            modelBuilder.Entity("HappyGymStats.Data.Entities.WarScoreSampleEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("FactionChain")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("FactionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FactionName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("FactionScore")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("OpponentChain")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("OpponentFactionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("OpponentFactionName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("OpponentScore")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("SampledAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("WarId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WarId", "SampledAtUtc");
+
+                    b.ToTable("WarScoreSamples", (string)null);
                 });
 #pragma warning restore 612, 618
         }

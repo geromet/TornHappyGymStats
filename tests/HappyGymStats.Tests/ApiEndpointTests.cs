@@ -1,10 +1,14 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Claims;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using HappyGymStats.Api;
 using HappyGymStats.Core.Models;
 using HappyGymStats.Data;
 using HappyGymStats.Data.Entities;
+using HappyGymStats.Identity.Authentication;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
@@ -12,6 +16,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using System.Reflection;
 using Xunit;
 
 namespace HappyGymStats.Tests;
@@ -192,6 +199,74 @@ public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTest
     }
 
     [Fact]
+    public async Task Surfaces_me_returns_unauthorized_when_anonymous_id_claim_missing_or_invalid()
+    {
+        using var clientWithoutClaim = _factory.CreateAuthenticatedClient(null);
+        var missingClaimResponse = await clientWithoutClaim.GetAsync("/api/v1/torn/surfaces/me");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, missingClaimResponse.StatusCode);
+        var missingClaimPayload = await missingClaimResponse.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
+        Assert.NotNull(missingClaimPayload);
+        Assert.Equal("unauthorized", missingClaimPayload.Error.Code);
+
+        using var clientWithInvalidClaim = _factory.CreateAuthenticatedClient("not-a-guid");
+        var invalidClaimResponse = await clientWithInvalidClaim.GetAsync("/api/v1/torn/surfaces/me");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, invalidClaimResponse.StatusCode);
+        var invalidClaimPayload = await invalidClaimResponse.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
+        Assert.NotNull(invalidClaimPayload);
+        Assert.Equal("unauthorized", invalidClaimPayload.Error.Code);
+    }
+
+    [Fact]
+    public async Task Surfaces_me_returns_only_caller_scoped_gym_points()
+    {
+        var callerAnonymousId = Guid.NewGuid();
+        var otherAnonymousId = Guid.NewGuid();
+
+        await _factory.SeedUserLogEntriesAsync(
+            new UserLogEntryEntity
+            {
+                AnonymousId = callerAnonymousId,
+                LogEntryId = "caller-train",
+                OccurredAtUtc = new DateTimeOffset(2026, 05, 01, 12, 00, 00, TimeSpan.Zero),
+                LogTypeId = 1,
+                HappyBeforeTrain = 600,
+                HappyUsed = 50,
+                EnergyUsed = 10,
+                StrengthBefore = 2000,
+                StrengthIncreased = 25,
+            },
+            new UserLogEntryEntity
+            {
+                AnonymousId = otherAnonymousId,
+                LogEntryId = "other-train",
+                OccurredAtUtc = new DateTimeOffset(2026, 05, 01, 13, 00, 00, TimeSpan.Zero),
+                LogTypeId = 1,
+                HappyBeforeTrain = 650,
+                HappyUsed = 50,
+                EnergyUsed = 10,
+                StrengthBefore = 3000,
+                StrengthIncreased = 30,
+            });
+
+        using var client = _factory.CreateAuthenticatedClient(callerAnonymousId.ToString());
+        var response = await client.GetAsync("/api/v1/torn/surfaces/me");
+
+        response.EnsureSuccessStatusCode();
+
+        using var payloadDoc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = payloadDoc.RootElement;
+
+        Assert.Equal("surfaces", root.GetProperty("dataset").GetString());
+        Assert.Equal(1, root.GetProperty("meta").GetProperty("gymPointCount").GetInt32());
+
+        var gymX = root.GetProperty("series").GetProperty("gymCloud").GetProperty("x");
+        Assert.Single(gymX.EnumerateArray());
+        Assert.Equal(2000, gymX[0].GetDouble());
+    }
+
+    [Fact]
     public async Task Import_requires_api_key()
     {
         using var client = _factory.CreateClient();
@@ -204,6 +279,83 @@ public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTest
         Assert.NotNull(payload);
         Assert.Equal("validation_failed", payload.Error.Code);
         Assert.Equal("apiKey is required.", payload.Error.Message);
+    }
+
+    [Fact]
+    public async Task Import_me_requires_valid_anonymous_id_claim()
+    {
+        using var clientMissingClaim = _factory.CreateAuthenticatedClient(null);
+        var missingClaimResponse = await clientMissingClaim.PostAsJsonAsync("/api/v1/torn/import-jobs/me", new { apiKey = "key" });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, missingClaimResponse.StatusCode);
+
+        using var clientInvalidClaim = _factory.CreateAuthenticatedClient("not-a-guid");
+        var invalidClaimResponse = await clientInvalidClaim.PostAsJsonAsync("/api/v1/torn/import-jobs/me", new { apiKey = "key" });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, invalidClaimResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Import_me_returns_identity_setup_required_when_identity_map_missing()
+    {
+        using var client = _factory.CreateAuthenticatedClient(Guid.NewGuid().ToString());
+        var response = await client.PostAsJsonAsync("/api/v1/torn/import-jobs/me", new { apiKey = "key" });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
+        Assert.NotNull(payload);
+        Assert.Equal("identity_setup_required", payload.Error.Code);
+    }
+
+    [Fact]
+    public async Task Import_me_rejects_identity_map_subject_mismatch()
+    {
+        var callerAnonymousId = Guid.NewGuid();
+        await _factory.SeedIdentityMapEntriesAsync(new IdentityMapEntity
+        {
+            AnonymousId = callerAnonymousId,
+            KeycloakSub = "mapped-sub",
+            IsProvisional = false,
+            CreatedAtUtc = DateTimeOffset.UtcNow,
+        });
+
+        using var client = _factory.CreateAuthenticatedClient(callerAnonymousId.ToString(), keycloakSub: "different-sub");
+        var response = await client.PostAsJsonAsync("/api/v1/torn/import-jobs/me", new { apiKey = "key" });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Import_me_binds_to_caller_anonymous_id_and_ignores_body_tampering()
+    {
+        var callerAnonymousId = Guid.NewGuid();
+        var attackerAnonymousId = Guid.NewGuid();
+        await _factory.SeedIdentityMapEntriesAsync(new IdentityMapEntity
+        {
+            AnonymousId = callerAnonymousId,
+            KeycloakSub = "test-sub",
+            IsProvisional = false,
+            CreatedAtUtc = DateTimeOffset.UtcNow,
+        });
+
+        using var client = _factory.CreateAuthenticatedClient(callerAnonymousId.ToString(), keycloakSub: "test-sub");
+        var response = await client.PostAsJsonAsync("/api/v1/torn/import-jobs/me", new
+        {
+            apiKey = "bad-key-for-test",
+            anonymousId = attackerAnonymousId,
+            ownerAnonymousId = attackerAnonymousId,
+            fresh = false,
+        });
+
+        Assert.True(response.StatusCode is HttpStatusCode.Accepted or HttpStatusCode.OK);
+
+        var latestResponse = await client.GetAsync("/api/v1/torn/import-jobs/latest");
+        latestResponse.EnsureSuccessStatusCode();
+
+        using var scope = _factory.Services.CreateScope();
+        var orchestrator = scope.ServiceProvider.GetRequiredService<HappyGymStats.Core.Import.ImportOrchestrator>();
+        Assert.NotNull(orchestrator.Latest);
+        Assert.Equal(callerAnonymousId, orchestrator.Latest!.AnonymousId);
     }
 
     [Fact]
@@ -257,7 +409,24 @@ public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTest
 
                 services.AddSingleton(_connection);
                 services.AddDbContext<HappyGymStatsDbContext>(options => options.UseSqlite(_connection));
+
+                services.AddAuthentication(options =>
+                {
+                    options.DefaultAuthenticateScheme = TestAuthHandler.SchemeName;
+                    options.DefaultChallengeScheme = TestAuthHandler.SchemeName;
+                }).AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });
             });
+        }
+
+        public HttpClient CreateAuthenticatedClient(string? anonymousIdClaim, string keycloakSub = "test-sub")
+        {
+            var client = CreateClient();
+            if (anonymousIdClaim is not null)
+                client.DefaultRequestHeaders.Add(TestAuthHandler.AnonymousIdHeader, anonymousIdClaim);
+
+            client.DefaultRequestHeaders.Add(TestAuthHandler.SubjectHeader, keycloakSub);
+
+            return client;
         }
 
         public void ResetDatabase()
@@ -266,7 +435,13 @@ public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTest
             var db = scope.ServiceProvider.GetRequiredService<HappyGymStatsDbContext>();
             db.UserLogEntries.RemoveRange(db.UserLogEntries);
             db.ImportRuns.RemoveRange(db.ImportRuns);
+            db.IdentityMap.RemoveRange(db.IdentityMap);
             db.SaveChanges();
+
+            var orchestrator = scope.ServiceProvider.GetRequiredService<HappyGymStats.Core.Import.ImportOrchestrator>();
+            var latestField = typeof(HappyGymStats.Core.Import.ImportOrchestrator)
+                .GetField("_latest", BindingFlags.Instance | BindingFlags.NonPublic);
+            latestField?.SetValue(orchestrator, null);
         }
 
         public async Task SeedUserLogEntriesAsync(params UserLogEntryEntity[] rows)
@@ -274,6 +449,14 @@ public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTest
             using var scope = Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<HappyGymStatsDbContext>();
             db.UserLogEntries.AddRange(rows);
+            await db.SaveChangesAsync();
+        }
+
+        public async Task SeedIdentityMapEntriesAsync(params IdentityMapEntity[] rows)
+        {
+            using var scope = Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<HappyGymStatsDbContext>();
+            db.IdentityMap.AddRange(rows);
             await db.SaveChangesAsync();
         }
 
@@ -294,6 +477,49 @@ public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTest
             base.Dispose(disposing);
             if (disposing)
                 _connection?.Dispose();
+        }
+    }
+
+    private sealed class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions>
+    {
+        public const string SchemeName = "Test";
+        public const string AnonymousIdHeader = "X-Test-AnonymousId";
+        public const string SubjectHeader = "X-Test-Subject";
+
+        public TestAuthHandler(
+            IOptionsMonitor<AuthenticationSchemeOptions> options,
+            ILoggerFactory logger,
+            UrlEncoder encoder)
+            : base(options, logger, encoder)
+        {
+        }
+
+        protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+        {
+            var subject = "test-sub";
+            if (Request.Headers.TryGetValue(SubjectHeader, out var subjectHeader)
+                && !string.IsNullOrWhiteSpace(subjectHeader.ToString()))
+            {
+                subject = subjectHeader.ToString();
+            }
+
+            var claims = new List<Claim>
+            {
+                new(ClaimTypes.NameIdentifier, subject),
+                new(ClaimTypes.Name, "test-user"),
+                new(ClaimTypes.Role, Roles.User),
+            };
+
+            if (Request.Headers.TryGetValue(AnonymousIdHeader, out var anonymousIdHeader)
+                && !string.IsNullOrWhiteSpace(anonymousIdHeader.ToString()))
+            {
+                claims.Add(new Claim(Claims.AnonymousId, anonymousIdHeader.ToString()));
+            }
+
+            var identity = new ClaimsIdentity(claims, SchemeName);
+            var principal = new ClaimsPrincipal(identity);
+            var ticket = new AuthenticationTicket(principal, SchemeName);
+            return Task.FromResult(AuthenticateResult.Success(ticket));
         }
     }
 }

@@ -55,6 +55,9 @@ tmp/
 .gsd/
 .gsd
 .gsd-id
+GSD/
+GSD-BACKUPS/
+ARTIFACTS/
 
 ## MCP local config
 .mcp.json
@@ -65,3 +68,19 @@ torn-log-samples.json
 
 ## Docs sandbox for ignored scratch docs
 docs/gitignore/
+
+# ── GSD baseline (auto-generated) ──
+.gsd-worktrees/
+.gsd-backups/
+nul
+nul.*
+con
+con.*
+prn
+prn.*
+aux
+aux.*
+com[1-9]
+com[1-9].*
+lpt[1-9]
+lpt[1-9].*

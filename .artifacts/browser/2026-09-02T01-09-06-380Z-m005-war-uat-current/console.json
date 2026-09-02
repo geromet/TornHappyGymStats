@@ -1,0 +1,44 @@
+[
+  {
+    "type": "info",
+    "text": "[2026-09-02T01:01:53.202Z] Information: Normalizing '_blazor' to 'http://127.0.0.1:5137/_blazor'.",
+    "timestamp": 1788310913327,
+    "url": "http://127.0.0.1:5137/war",
+    "pageId": 1
+  },
+  {
+    "type": "info",
+    "text": "[2026-09-02T01:01:53.221Z] Information: WebSocket connected to ws://127.0.0.1:5137/_blazor?id=UYvyjTSRf4UKU9h1dOF3KQ.",
+    "timestamp": 1788310913328,
+    "url": "http://127.0.0.1:5137/war",
+    "pageId": 1
+  },
+  {
+    "type": "info",
+    "text": "[2026-09-02T01:02:23.480Z] Information: Normalizing '_blazor' to 'http://127.0.0.1:5137/_blazor'.",
+    "timestamp": 1788310944460,
+    "url": "http://127.0.0.1:5137/war",
+    "pageId": 1
+  },
+  {
+    "type": "info",
+    "text": "[2026-09-02T01:02:23.489Z] Information: WebSocket connected to ws://127.0.0.1:5137/_blazor?id=lRWhTYTO7lqTeCchTLZTOg.",
+    "timestamp": 1788310944460,
+    "url": "http://127.0.0.1:5137/war",
+    "pageId": 1
+  },
+  {
+    "type": "info",
+    "text": "[2026-09-02T01:08:47.013Z] Information: Normalizing '_blazor' to 'http://127.0.0.1:5137/_blazor'.",
+    "timestamp": 1788311327418,
+    "url": "http://127.0.0.1:5137/war",
+    "pageId": 1
+  },
+  {
+    "type": "info",
+    "text": "[2026-09-02T01:08:47.022Z] Information: WebSocket connected to ws://127.0.0.1:5137/_blazor?id=agbQXA06nynoWwqa-TjB8Q.",
+    "timestamp": 1788311327418,
+    "url": "http://127.0.0.1:5137/war",
+    "pageId": 1
+  }
+]

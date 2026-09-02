@@ -52,6 +52,19 @@ public sealed class ImportOrchestrator : BackgroundService
         // Resume imports resolve the existing AnonymousId from the DB in RunImportAsync.
         var anonymousId = fresh ? Guid.NewGuid() : Guid.Empty;
 
+        return EnqueueInternal(apiKey, fresh, anonymousId, publicKey);
+    }
+
+    public ImportJobStatus EnqueueForAnonymousId(string apiKey, Guid anonymousId, byte[]? publicKey = null)
+    {
+        if (_latest is { IsTerminal: false })
+            return _latest;
+
+        return EnqueueInternal(apiKey, fresh: true, anonymousId, publicKey);
+    }
+
+    private ImportJobStatus EnqueueInternal(string apiKey, bool fresh, Guid anonymousId, byte[]? publicKey)
+    {
         var status = new ImportJobStatus(
             Id: Guid.NewGuid().ToString("N"),
             AnonymousId: anonymousId,

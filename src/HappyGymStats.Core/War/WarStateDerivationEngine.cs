@@ -1,0 +1,408 @@
+using HappyGymStats.Data.Entities;
+
+namespace HappyGymStats.Core.War;
+
+public sealed class WarStateDerivationEngine(int winningScore = WarStateDerivationEngine.DefaultWinningScore, int maxScoreSamples = WarStateDerivationEngine.DefaultMaxScoreSamples)
+{
+    public const int DefaultWinningScore = 1_000;
+    public const int DefaultMaxScoreSamples = 8;
+
+    public WarDerivedState Derive(
+        IReadOnlyCollection<WarRosterSnapshotEntity> rosterRows,
+        IReadOnlyCollection<WarScoreSampleEntity> scoreSamples,
+        DateTimeOffset asOfUtc,
+        IReadOnlyCollection<long>? idleAttackerIds = null)
+    {
+        var warnings = new List<string>();
+        var errors = new List<string>();
+        var boundedSamples = scoreSamples
+            .OrderBy(sample => sample.SampledAtUtc)
+            .TakeLast(Math.Max(2, maxScoreSamples))
+            .ToArray();
+
+        if (rosterRows.Count == 0)
+        {
+            warnings.Add("No roster snapshot rows were provided.");
+            return new WarDerivedState
+            {
+                WarId = boundedSamples.LastOrDefault()?.WarId,
+                AsOfUtc = asOfUtc,
+                ScoreWindowStartedAtUtc = boundedSamples.FirstOrDefault()?.SampledAtUtc,
+                ScoreWindowEndedAtUtc = boundedSamples.LastOrDefault()?.SampledAtUtc,
+                ScoreSampleCount = boundedSamples.Length,
+                CoverageRatio = 1m,
+                Warnings = warnings,
+                Errors = errors,
+            };
+        }
+
+        var normalizedIdleIds = BuildIdleAttackerSet(rosterRows, idleAttackerIds, warnings);
+        var factions = rosterRows
+            .GroupBy(row => new { row.FactionId, row.FactionName })
+            .OrderBy(group => group.Key.FactionId)
+            .ToArray();
+        var memberStateByFactionId = new Dictionary<long, List<WarDerivedMemberState>>();
+        var derivedFactions = new List<WarDerivedFactionState>(factions.Length);
+
+        foreach (var factionGroup in factions)
+        {
+            var members = factionGroup
+                .OrderBy(row => row.MemberId)
+                .Select(row => DeriveMemberState(row, asOfUtc, normalizedIdleIds.Contains(row.MemberId)))
+                .ToArray();
+            memberStateByFactionId[factionGroup.Key.FactionId] = members.ToList();
+
+            var scoreRate = DeriveScoreRateWindow(factionGroup.Key.FactionId, boundedSamples, warnings);
+            var rosterScore = factionGroup.Sum(row => Math.Max(0, row.Score));
+            var rosterChain = factionGroup.Sum(row => Math.Max(0, row.Chain));
+            var currentScore = ResolveLatestFactionScore(boundedSamples.LastOrDefault(), factionGroup.Key.FactionId, rosterScore);
+            var currentChain = ResolveLatestFactionChain(boundedSamples.LastOrDefault(), factionGroup.Key.FactionId, rosterChain);
+            var remainingScore = Math.Max(0, winningScore - currentScore);
+            var availableMembers = members.Count(member => member.Availability == WarMemberAvailabilityKind.Available);
+            var idleAvailableMembers = members.Count(member => member.IsIdleAttacker && member.Availability == WarMemberAvailabilityKind.Available);
+            var coverageRatio = availableMembers == 0
+                ? 1m
+                : decimal.Round((availableMembers - idleAvailableMembers) / (decimal)availableMembers, 4, MidpointRounding.AwayFromZero);
+
+            derivedFactions.Add(new WarDerivedFactionState
+            {
+                FactionId = factionGroup.Key.FactionId,
+                FactionName = factionGroup.Key.FactionName,
+                Score = currentScore,
+                Chain = currentChain,
+                RemainingScoreToWin = remainingScore,
+                AvailableMemberCount = availableMembers,
+                HospitalizedMemberCount = members.Count(member => member.Availability == WarMemberAvailabilityKind.Hospitalized),
+                UnavailableMemberCount = members.Count(member => member.Availability is WarMemberAvailabilityKind.Unavailable or WarMemberAvailabilityKind.Unknown),
+                CoverageRatio = coverageRatio,
+                ScoreRate = scoreRate,
+                Eta = DeriveEta(remainingScore, scoreRate),
+                AttacksToFinish = DeriveAttacksToFinish(remainingScore, currentScore, factionGroup),
+                Members = members,
+            });
+        }
+
+        var holes = DeriveHoles(derivedFactions, memberStateByFactionId)
+            .OrderByDescending(hole => hole.Severity)
+            .ThenBy(hole => hole.Kind)
+            .ThenBy(hole => hole.FactionId)
+            .ThenBy(hole => hole.MemberId)
+            .ToArray();
+
+        var totalAvailable = derivedFactions.Sum(faction => faction.AvailableMemberCount);
+        var totalCovered = derivedFactions.Sum(faction => (int)Math.Round(faction.CoverageRatio * faction.AvailableMemberCount, MidpointRounding.AwayFromZero));
+        var overallCoverage = totalAvailable == 0
+            ? 1m
+            : decimal.Round(totalCovered / (decimal)totalAvailable, 4, MidpointRounding.AwayFromZero);
+
+        return new WarDerivedState
+        {
+            WarId = rosterRows.First().WarId,
+            AsOfUtc = asOfUtc,
+            RosterCapturedAtUtc = rosterRows.Max(row => row.CapturedAtUtc),
+            ScoreWindowStartedAtUtc = boundedSamples.FirstOrDefault()?.SampledAtUtc,
+            ScoreWindowEndedAtUtc = boundedSamples.LastOrDefault()?.SampledAtUtc,
+            ScoreSampleCount = boundedSamples.Length,
+            CoverageRatio = overallCoverage,
+            Factions = derivedFactions,
+            Holes = holes,
+            Warnings = warnings,
+            Errors = errors,
+        };
+    }
+
+    private static HashSet<long> BuildIdleAttackerSet(
+        IReadOnlyCollection<WarRosterSnapshotEntity> rosterRows,
+        IReadOnlyCollection<long>? explicitIdleAttackerIds,
+        ICollection<string> warnings)
+    {
+        var rosterMemberIds = rosterRows.Select(row => row.MemberId).ToHashSet();
+        var idleIds = rosterRows
+            .Where(row => string.Equals(row.StatusState, "idle", StringComparison.OrdinalIgnoreCase))
+            .Select(row => row.MemberId)
+            .ToHashSet();
+
+        if (explicitIdleAttackerIds is null)
+        {
+            return idleIds;
+        }
+
+        foreach (var memberId in explicitIdleAttackerIds)
+        {
+            idleIds.Add(memberId);
+            if (!rosterMemberIds.Contains(memberId))
+            {
+                warnings.Add($"Idle attacker id {memberId} was not present in the roster snapshot.");
+            }
+        }
+
+        return idleIds;
+    }
+
+    private static WarDerivedMemberState DeriveMemberState(WarRosterSnapshotEntity row, DateTimeOffset asOfUtc, bool isIdleAttacker)
+    {
+        var normalizedState = row.StatusState?.Trim().ToLowerInvariant();
+        var untilUtc = row.StatusUntilUtc?.ToUniversalTime();
+        var hospitalCountdown = 0;
+        var availability = normalizedState switch
+        {
+            null or "" or "okay" or "idle" => WarMemberAvailabilityKind.Available,
+            "hospital" when untilUtc.HasValue && untilUtc.Value > asOfUtc => WarMemberAvailabilityKind.Hospitalized,
+            "hospital" => WarMemberAvailabilityKind.Available,
+            "travel" or "jail" or "federal" or "abroad" => WarMemberAvailabilityKind.Unavailable,
+            _ => WarMemberAvailabilityKind.Unknown,
+        };
+
+        if (string.Equals(normalizedState, "hospital", StringComparison.Ordinal) && untilUtc.HasValue && untilUtc.Value > asOfUtc)
+        {
+            hospitalCountdown = (int)Math.Ceiling((untilUtc.Value - asOfUtc).TotalSeconds);
+        }
+
+        return new WarDerivedMemberState
+        {
+            MemberId = row.MemberId,
+            MemberName = row.MemberName,
+            Score = row.Score,
+            Chain = row.Chain,
+            Attacks = row.Attacks,
+            StatusState = row.StatusState,
+            StatusUntilUtc = row.StatusUntilUtc,
+            Availability = availability,
+            HospitalCountdownSeconds = Math.Max(0, hospitalCountdown),
+            IsIdleAttacker = isIdleAttacker,
+            CapturedAtUtc = row.CapturedAtUtc,
+        };
+    }
+
+    private static WarScoreRateWindow DeriveScoreRateWindow(long factionId, IReadOnlyList<WarScoreSampleEntity> samples, ICollection<string> warnings)
+    {
+        if (samples.Count < 2)
+        {
+            warnings.Add($"Faction {factionId} does not have enough score samples to compute a rate.");
+            return new WarScoreRateWindow
+            {
+                SampleCount = samples.Count,
+                StartedAtUtc = samples.FirstOrDefault()?.SampledAtUtc,
+                EndedAtUtc = samples.LastOrDefault()?.SampledAtUtc,
+                Diagnostic = "insufficient-score-samples",
+            };
+        }
+
+        var first = samples.First();
+        var last = samples.Last();
+        var windowSeconds = (int)Math.Round((last.SampledAtUtc - first.SampledAtUtc).TotalSeconds, MidpointRounding.AwayFromZero);
+        if (windowSeconds <= 0)
+        {
+            warnings.Add($"Faction {factionId} score samples produced a non-positive time window.");
+            return new WarScoreRateWindow
+            {
+                SampleCount = samples.Count,
+                StartedAtUtc = first.SampledAtUtc,
+                EndedAtUtc = last.SampledAtUtc,
+                WindowSeconds = Math.Max(0, windowSeconds),
+                Diagnostic = "invalid-score-window",
+            };
+        }
+
+        var scoreDelta = ResolveFactionScore(last, factionId) - ResolveFactionScore(first, factionId);
+        if (scoreDelta <= 0)
+        {
+            warnings.Add($"Faction {factionId} score samples produced no positive score delta.");
+            return new WarScoreRateWindow
+            {
+                SampleCount = samples.Count,
+                StartedAtUtc = first.SampledAtUtc,
+                EndedAtUtc = last.SampledAtUtc,
+                WindowSeconds = windowSeconds,
+                ScoreDelta = scoreDelta,
+                Diagnostic = "non-positive-score-delta",
+            };
+        }
+
+        return new WarScoreRateWindow
+        {
+            SampleCount = samples.Count,
+            StartedAtUtc = first.SampledAtUtc,
+            EndedAtUtc = last.SampledAtUtc,
+            WindowSeconds = windowSeconds,
+            ScoreDelta = scoreDelta,
+            PointsPerMinute = decimal.Round(scoreDelta * 60m / windowSeconds, 4, MidpointRounding.AwayFromZero),
+            IsAvailable = true,
+        };
+    }
+
+    private static WarEtaEstimate DeriveEta(int remainingScore, WarScoreRateWindow scoreRate)
+    {
+        if (remainingScore == 0)
+        {
+            return new WarEtaEstimate
+            {
+                RemainingScore = 0,
+                SecondsUntilWin = 0,
+                IsAvailable = true,
+            };
+        }
+
+        if (!scoreRate.IsAvailable || scoreRate.PointsPerMinute is null || scoreRate.PointsPerMinute <= 0)
+        {
+            return new WarEtaEstimate
+            {
+                RemainingScore = remainingScore,
+                Diagnostic = scoreRate.Diagnostic ?? "eta-unavailable",
+            };
+        }
+
+        var pointsPerSecond = scoreRate.PointsPerMinute.Value / 60m;
+        var secondsUntilWin = (int)Math.Ceiling(remainingScore / pointsPerSecond);
+        return new WarEtaEstimate
+        {
+            RemainingScore = remainingScore,
+            SecondsUntilWin = Math.Max(0, secondsUntilWin),
+            IsAvailable = true,
+        };
+    }
+
+    private static WarAttacksToFinishEstimate DeriveAttacksToFinish(int remainingScore, int currentScore, IEnumerable<WarRosterSnapshotEntity> factionGroup)
+    {
+        var totalAttacks = factionGroup.Sum(row => Math.Max(0, row.Attacks));
+        var totalScore = Math.Max(0, currentScore);
+        if (remainingScore == 0)
+        {
+            return new WarAttacksToFinishEstimate
+            {
+                AverageScorePerAttack = totalAttacks == 0 ? null : decimal.Round(totalScore / (decimal)totalAttacks, 4, MidpointRounding.AwayFromZero),
+                RequiredAttacks = 0,
+                IsAvailable = true,
+            };
+        }
+
+        if (totalAttacks == 0 || totalScore == 0)
+        {
+            return new WarAttacksToFinishEstimate
+            {
+                Diagnostic = "no-score-per-attack-baseline",
+            };
+        }
+
+        var averageScorePerAttack = decimal.Round(totalScore / (decimal)totalAttacks, 4, MidpointRounding.AwayFromZero);
+        var requiredAttacks = (int)Math.Ceiling(remainingScore / averageScorePerAttack);
+        return new WarAttacksToFinishEstimate
+        {
+            AverageScorePerAttack = averageScorePerAttack,
+            RequiredAttacks = Math.Max(0, requiredAttacks),
+            IsAvailable = true,
+        };
+    }
+
+    private static IReadOnlyList<WarHoleRecord> DeriveHoles(
+        IReadOnlyList<WarDerivedFactionState> factions,
+        IReadOnlyDictionary<long, List<WarDerivedMemberState>> memberStateByFactionId)
+    {
+        if (factions.Count == 0)
+        {
+            return [];
+        }
+
+        var holes = new List<WarHoleRecord>();
+        foreach (var faction in factions)
+        {
+            var opponent = factions.FirstOrDefault(candidate => candidate.FactionId != faction.FactionId);
+            var members = memberStateByFactionId[faction.FactionId];
+            var idleMembers = members.Where(member => member.IsIdleAttacker).ToArray();
+
+            foreach (var member in idleMembers)
+            {
+                holes.Add(new WarHoleRecord
+                {
+                    Kind = WarHoleKind.IdleAttacker,
+                    Severity = ResolveIdleSeverity(member),
+                    FactionId = faction.FactionId,
+                    FactionName = faction.FactionName,
+                    OpponentFactionId = opponent?.FactionId,
+                    MemberId = member.MemberId,
+                    MemberName = member.MemberName,
+                    Reason = member.Availability == WarMemberAvailabilityKind.Available
+                        ? "Available attacker is marked idle."
+                        : "Idle attacker feed references a member who is not currently available.",
+                });
+            }
+
+            if (opponent is null || idleMembers.Length == 0)
+            {
+                continue;
+            }
+
+            foreach (var target in opponent.Members.Where(member => member.Availability == WarMemberAvailabilityKind.Available && !member.IsIdleAttacker))
+            {
+                holes.Add(new WarHoleRecord
+                {
+                    Kind = WarHoleKind.OpenTarget,
+                    Severity = WarHoleSeverity.Medium,
+                    FactionId = faction.FactionId,
+                    FactionName = faction.FactionName,
+                    OpponentFactionId = opponent.FactionId,
+                    MemberId = target.MemberId,
+                    MemberName = target.MemberName,
+                    Reason = $"Opponent target {target.MemberName} is available while {faction.FactionName} still has idle attackers.",
+                });
+            }
+        }
+
+        return holes;
+    }
+
+    private static WarHoleSeverity ResolveIdleSeverity(WarDerivedMemberState member)
+        => member.Availability switch
+        {
+            WarMemberAvailabilityKind.Available => WarHoleSeverity.Critical,
+            WarMemberAvailabilityKind.Hospitalized => WarHoleSeverity.High,
+            WarMemberAvailabilityKind.Unavailable => WarHoleSeverity.High,
+            _ => WarHoleSeverity.Medium,
+        };
+
+    private static int ResolveFactionScore(WarScoreSampleEntity sample, long factionId)
+    {
+        if (sample.FactionId == factionId)
+        {
+            return sample.FactionScore;
+        }
+
+        if (sample.OpponentFactionId == factionId)
+        {
+            return sample.OpponentScore;
+        }
+
+        return 0;
+    }
+
+    private static int ResolveLatestFactionScore(WarScoreSampleEntity? sample, long factionId, int fallbackScore)
+    {
+        if (sample is null)
+        {
+            return fallbackScore;
+        }
+
+        var score = ResolveFactionScore(sample, factionId);
+        return score > 0 ? score : fallbackScore;
+    }
+
+    private static int ResolveLatestFactionChain(WarScoreSampleEntity? sample, long factionId, int fallbackChain)
+    {
+        if (sample is null)
+        {
+            return fallbackChain;
+        }
+
+        if (sample.FactionId == factionId)
+        {
+            return sample.FactionChain;
+        }
+
+        if (sample.OpponentFactionId == factionId)
+        {
+            return sample.OpponentChain;
+        }
+
+        return fallbackChain;
+    }
+}

@@ -1,0 +1,415 @@
+@page "/chain-calculator"
+@rendermode InteractiveServer
+@using HappyGymStats.Core.War
+@inject IJSRuntime JS
+@inject ILogger<ChainCalculator> Logger
+
+<PageTitle>Chain calculator · Happy Gym Stats</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-1">Chain calculator</MudText>
+<MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+    Every sensible way to split a hit budget into chains, ranked by respect earned.
+</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="3">
+        <MudPaper Class="pa-4 mb-4" Elevation="2">
+            <MudText Typo="Typo.subtitle1" Class="mb-2">Your hits</MudText>
+            <MudNumericField T="double" @bind-Value="_baseRespect" Label="Base respect" Min="0.1" Class="mb-2" />
+            <MudNumericField T="int" @bind-Value="_budget" Label="Hit budget" Min="1" Max="200000" Class="mb-2" />
+            <MudNumericField T="int" @bind-Value="_maxLegs" Label="Max chains" Min="1" Max="12" Class="mb-2" />
+            <MudNumericField T="int" @bind-Value="_minLeg" Label="Min chain length" Min="1" Class="mb-2" />
+            <MudNumericField T="int?" @bind-Value="_maxLeg" Label="Max chain length (optional)" Min="1" Class="mb-2" />
+            <MudCheckBox T="bool" @bind-Value="_spendAll" Label="Spend every hit" Class="mb-2" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
+                Raise the minimum to hide combinations like 990 + 10 that nobody plans. Max length is optional.
+            </MudText>
+
+            <MudDivider Class="mb-3" />
+
+            <MudText Typo="Typo.subtitle1" Class="mb-2">Multiplier</MudText>
+            <MudNumericField T="double" @bind-Value="_a" Label="log10 coefficient (a)" Class="mb-2" />
+            <MudNumericField T="double" @bind-Value="_b" Label="constant (b)" Class="mb-3" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
+                respect per hit = base × (a·log10(hit) + b)
+            </MudText>
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="Search">
+                Search
+            </MudButton>
+
+            <MudDivider Class="my-3" />
+
+            <MudText Typo="Typo.subtitle1" Class="mb-2">Selected</MudText>
+            <MudText Typo="Typo.body2" Style="color:#2563eb;">A — @(_selectedA?.Name ?? "—")</MudText>
+            <MudText Typo="Typo.body2" Style="color:#ea580c;" Class="mb-2">B — @(_selectedB?.Name ?? "—")</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                Use the A / B buttons on a row in the Combinations tab.
+            </MudText>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="9">
+        <MudTabs ActivePanelIndex="_activeTab" ActivePanelIndexChanged="OnTabChangedAsync" Rounded="true" ApplyEffectsToContainer="true">
+            <MudTabPanel Text="Combinations">
+                <MudText Typo="Typo.body2" Class="mb-3">@_status</MudText>
+                <MudTable Items="_splits" Hover="true" Dense="true" Bordered="true" RowStyleFunc="RowStyleFunc"
+                          Striped="true" FixedHeader="true" Height="560px">
+                    <HeaderContent>
+                        <MudTh>#</MudTh>
+                        <MudTh>Combination</MudTh>
+                        <MudTh>Chains</MudTh>
+                        <MudTh>Hits</MudTh>
+                        <MudTh>Unused</MudTh>
+                        <MudTh>Respect</MudTh>
+                        <MudTh>Respect / hit</MudTh>
+                        <MudTh>vs best</MudTh>
+                        <MudTh></MudTh>
+                    </HeaderContent>
+                    <RowTemplate Context="split">
+                        <MudTd>@split.Rank</MudTd>
+                        <MudTd>@split.Name</MudTd>
+                        <MudTd>@split.Legs.Length</MudTd>
+                        <MudTd>@split.Hits.ToString("N0")</MudTd>
+                        <MudTd>@((_budget - split.Hits).ToString("N0"))</MudTd>
+                        <MudTd>@split.Respect.ToString("N0")</MudTd>
+                        <MudTd>@split.PerHit.ToString("N3")</MudTd>
+                        <MudTd>@VsBest(split)</MudTd>
+                        <MudTd>
+                            <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                                <MudButton OnClick="@(() => SetSelectionAsync(split, isA: true))">A</MudButton>
+                                <MudButton OnClick="@(() => SetSelectionAsync(split, isA: false))">B</MudButton>
+                            </MudButtonGroup>
+                        </MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager PageSizeOptions="new[] { 10, 25, 50, 100 }" />
+                    </PagerContent>
+                </MudTable>
+            </MudTabPanel>
+
+            <MudTabPanel Text="Compare A / B">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2" Spacing="3">
+                    <MudCheckBox T="bool" Value="_showDiff" Label="Show difference (B − A)" ValueChanged="OnDiffToggledAsync" />
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="SwapSelectionAsync">Swap A / B</MudButton>
+                </MudStack>
+                <div id="chain-compare-chart" style="width: 100%; height: 420px;"></div>
+                <MudText Typo="Typo.body2" Class="mt-3" Style="white-space: pre-line;">@CompareSummary()</MudText>
+            </MudTabPanel>
+
+            <MudTabPanel Text="Chain curve">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2" Spacing="3">
+                    <MudSelect T="string" Value="_curveMode" Label="Show" ValueChanged="OnCurveModeChangedAsync" Style="max-width:220px;">
+                        <MudSelectItem Value="@("Respect per hit")">Respect per hit</MudSelectItem>
+                        <MudSelectItem Value="@("Total respect")">Total respect</MudSelectItem>
+                    </MudSelect>
+                </MudStack>
+                <div id="chain-curve-chart" style="width: 100%; height: 420px;"></div>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                    One unbroken chain, for reference. The sharp rises are milestone bonuses (10, 25, 50, 100 hits, …) —
+                    a lump sum of respect that gets added the instant the chain reaches that length. Because the bonus
+                    is a one-time payment, "respect per hit" spikes right at the milestone and then decays back down
+                    as later hits dilute it across a longer chain. The dashed line strips the bonuses out entirely, so
+                    you can see the smooth, bonus-free growth underneath.
+                </MudText>
+            </MudTabPanel>
+
+            <MudTabPanel Text="Bonuses">
+                <MudTable Items="@BuildBonusRows()" Hover="true" Dense="true" Bordered="true">
+                    <HeaderContent>
+                        <MudTh>Milestone</MudTh>
+                        <MudTh>Bonus</MudTh>
+                        <MudTh>Cumulative</MudTh>
+                        <MudTh>Chain timer</MudTh>
+                        <MudTh>Chain respect here</MudTh>
+                    </HeaderContent>
+                    <RowTemplate Context="row">
+                        <MudTd>@row.Milestone.ToString("N0")</MudTd>
+                        <MudTd>@row.Bonus.ToString("N0")</MudTd>
+                        <MudTd>@row.Cumulative.ToString("N0")</MudTd>
+                        <MudTd>@row.Timer</MudTd>
+                        <MudTd>@row.Respect.ToString("N0")</MudTd>
+                    </RowTemplate>
+                </MudTable>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                    The timer column is reference only; it does not enter any calculation.
+                </MudText>
+            </MudTabPanel>
+        </MudTabs>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private double _a = ChainEngine.DefaultA;
+    private double _b = ChainEngine.DefaultB;
+    private double _baseRespect = ChainEngine.DefaultBase;
+    private int _budget = 1000;
+    private int _maxLegs = 6;
+    private int _minLeg = 10;
+    private int? _maxLeg;
+    private bool _spendAll = true;
+
+    private ChainEngine _engine = new();
+    private List<ChainSplit> _splits = new();
+    private ChainSplit? _selectedA;
+    private ChainSplit? _selectedB;
+    private bool _showDiff;
+    private string _curveMode = "Respect per hit";
+    private string _status = "Ready.";
+
+    private int _activeTab;
+    private bool _compareChartDirty;
+    private bool _curveChartDirty = true;
+
+    protected override void OnInitialized() => Search();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_activeTab == 1 && _compareChartDirty)
+        {
+            _compareChartDirty = false;
+            await DrawCompareChartAsync();
+        }
+        else if (_activeTab == 2 && _curveChartDirty)
+        {
+            _curveChartDirty = false;
+            await DrawCurveChartAsync();
+        }
+    }
+
+    private void Search()
+    {
+        if (_budget < 1 || _maxLegs < 1)
+        {
+            _status = "Hit budget and max chains must be at least 1.";
+            return;
+        }
+        if (_maxLegs > 12)
+        {
+            _maxLegs = 12;
+        }
+
+        _engine = new ChainEngine(_a, _b);
+        _splits = ChainEngine.EnumerateSplits(_engine, _budget, _baseRespect, _maxLegs, _spendAll, _maxLeg, Math.Max(1, _minLeg));
+        _selectedA = _splits.Count > 0 ? _splits[0] : null;
+        _selectedB = _splits.Count > 1 ? _splits[1] : null;
+        _status = _splits.Count == 0
+            ? "Nothing fits in that budget."
+            : $"{_splits.Count:N0} combinations fit in {_budget:N0} hits at base respect {_baseRespect:g} (max {_maxLegs} chains).";
+        _compareChartDirty = true;
+        _curveChartDirty = true;
+    }
+
+    private async Task OnTabChangedAsync(int index)
+    {
+        _activeTab = index;
+        if (index == 1) await DrawCompareChartAsync();
+        else if (index == 2) await DrawCurveChartAsync();
+    }
+
+    private async Task SetSelectionAsync(ChainSplit split, bool isA)
+    {
+        if (isA) _selectedA = split; else _selectedB = split;
+        if (_activeTab == 1) await DrawCompareChartAsync();
+        else _compareChartDirty = true;
+    }
+
+    private async Task SwapSelectionAsync()
+    {
+        (_selectedA, _selectedB) = (_selectedB, _selectedA);
+        if (_activeTab == 1) await DrawCompareChartAsync();
+    }
+
+    private async Task OnDiffToggledAsync(bool value)
+    {
+        _showDiff = value;
+        await DrawCompareChartAsync();
+    }
+
+    private async Task OnCurveModeChangedAsync(string value)
+    {
+        _curveMode = value;
+        await DrawCurveChartAsync();
+    }
+
+    private string VsBest(ChainSplit split)
+    {
+        if (_splits.Count == 0) return "";
+        var top = _splits[0];
+        if (ReferenceEquals(split, top)) return "best";
+        var rel = top.Respect > 0 ? split.Respect / top.Respect - 1 : 0;
+        return rel.ToString("+0.00%;-0.00%;0%");
+    }
+
+    private string CompareSummary()
+    {
+        if (_selectedA == null || _selectedB == null)
+            return "Pick two combinations from the Combinations tab (A / B buttons) to compare them.";
+
+        var a = _selectedA;
+        var b = _selectedB;
+        var diff = b.Respect - a.Respect;
+        var pct = a.Respect > 0 ? diff / a.Respect : 0;
+        var lead = b.Respect > a.Respect ? "B" : (a.Respect > b.Respect ? "A" : "tie");
+
+        return $"A: {a.Name}  hits={a.Hits:N0}  respect={a.Respect:N0}\n" +
+               $"B: {b.Name}  hits={b.Hits:N0}  respect={b.Respect:N0}\n" +
+               $"B − A: {diff:+#,0;-#,0;0}  ({pct:+0.0%;-0.0%;0%})\n" +
+               $"Ahead: {lead}";
+    }
+
+    private async Task DrawCompareChartAsync()
+    {
+        try
+        {
+            var traces = new List<object>();
+            List<double>? curveA = _selectedA != null ? _engine.CumulativeCurve(_selectedA.Legs, _baseRespect) : null;
+            List<double>? curveB = _selectedB != null ? _engine.CumulativeCurve(_selectedB.Legs, _baseRespect) : null;
+
+            if (_showDiff && curveA != null && curveB != null)
+            {
+                var span = Math.Max(curveA.Count, curveB.Count);
+                var full = new double[span];
+                for (var i = 0; i < span; i++)
+                {
+                    var va = curveA[Math.Min(i, curveA.Count - 1)];
+                    var vb = curveB[Math.Min(i, curveB.Count - 1)];
+                    full[i] = vb - va;
+                }
+                var (dx, dy) = Downsample(full);
+                traces.Add(BuildLine(dx, dy, "B − A", "#16a34a"));
+            }
+            else
+            {
+                if (curveA != null)
+                {
+                    var (ax, ay) = Downsample(curveA);
+                    traces.Add(BuildLine(ax, ay, "A", "#2563eb"));
+                }
+                if (curveB != null)
+                {
+                    var (bx, by) = Downsample(curveB);
+                    traces.Add(BuildLine(bx, by, "B", "#ea580c"));
+                }
+            }
+
+            await JS.InvokeVoidAsync("plotlyInterop.render", "chain-compare-chart", traces,
+                BuildChartLayout("Hits", "Cumulative respect", xLog: false));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to draw chain compare chart");
+        }
+    }
+
+    private async Task DrawCurveChartAsync()
+    {
+        try
+        {
+            var max = Math.Clamp(Math.Max(_budget * 2, 10_000), 100, 200_000);
+            var points = BuildCurvePoints(max);
+            var xs = new double[points.Count];
+            var ys = new double[points.Count];
+            var ysNoBonus = new double[points.Count];
+            for (var i = 0; i < points.Count; i++)
+            {
+                var n = points[i];
+                var respect = _engine.ChainRespect(n, _baseRespect);
+                var respectNoBonus = _baseRespect * _engine.SigmaMult(n);
+                xs[i] = n;
+                ys[i] = _curveMode == "Respect per hit" ? respect / n : respect;
+                ysNoBonus[i] = _curveMode == "Respect per hit" ? respectNoBonus / n : respectNoBonus;
+            }
+
+            var trace = BuildLine(xs, ys, "With milestone bonuses", "#2563eb");
+            var traceNoBonus = BuildDashedLine(xs, ysNoBonus, "Without milestone bonuses", "#ea580c");
+            await JS.InvokeVoidAsync("plotlyInterop.render", "chain-curve-chart", new[] { trace, traceNoBonus },
+                BuildChartLayout("Chain length (log scale)", _curveMode, xLog: true));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to draw chain curve chart");
+        }
+    }
+
+    private static List<int> BuildCurvePoints(int max)
+    {
+        var points = new List<int>();
+        for (var p = 1; p <= Math.Min(100, max); p++) points.Add(p);
+        for (var p = 110; p <= Math.Min(1000, max); p += 10) points.Add(p);
+        for (var p = 1100; p <= Math.Min(10000, max); p += 100) points.Add(p);
+        for (var p = 10500; p <= max; p += 500) points.Add(p);
+        return points;
+    }
+
+    private static (double[] X, double[] Y) Downsample(IReadOnlyList<double> curve, int maxPoints = 1200)
+    {
+        var n = curve.Count;
+        if (n == 0) return (Array.Empty<double>(), Array.Empty<double>());
+        var stride = Math.Max(1, (int)Math.Ceiling(n / (double)maxPoints));
+        var xs = new List<double>();
+        var ys = new List<double>();
+        for (var i = 0; i < n; i += stride)
+        {
+            xs.Add(i + 1);
+            ys.Add(curve[i]);
+        }
+        if ((int)xs[^1] != n)
+        {
+            xs.Add(n);
+            ys.Add(curve[n - 1]);
+        }
+        return (xs.ToArray(), ys.ToArray());
+    }
+
+    private IEnumerable<BonusRow> BuildBonusRows()
+    {
+        var running = 0;
+        foreach (var (milestone, bonus, timer) in ChainEngine.BonusTable)
+        {
+            running += bonus;
+            yield return new BonusRow(milestone, bonus, running, timer, _engine.ChainRespect(milestone, _baseRespect));
+        }
+    }
+
+    private string RowStyleFunc(ChainSplit split, int index)
+    {
+        if (ReferenceEquals(split, _selectedA)) return "background-color: rgba(37,99,235,0.18);";
+        if (ReferenceEquals(split, _selectedB)) return "background-color: rgba(234,88,12,0.18);";
+        return string.Empty;
+    }
+
+    private static object BuildLine(double[] x, double[] y, string name, string color) => new
+    {
+        type = "scatter",
+        mode = "lines",
+        name,
+        x,
+        y,
+        line = new { color, width = 2 }
+    };
+
+    private static object BuildDashedLine(double[] x, double[] y, string name, string color) => new
+    {
+        type = "scatter",
+        mode = "lines",
+        name,
+        x,
+        y,
+        line = new { color, width = 2, dash = "dash" }
+    };
+
+    private static object BuildChartLayout(string xTitle, string yTitle, bool xLog) => new
+    {
+        paper_bgcolor = "rgba(0,0,0,0)",
+        plot_bgcolor = "rgba(0,0,0,0)",
+        font = new { color = "#e8f1ff", family = "Roboto, sans-serif" },
+        showlegend = true,
+        legend = new { font = new { color = "#e8f1ff" } },
+        xaxis = new { title = xTitle, type = xLog ? "log" : "linear", gridcolor = "#243457", zerolinecolor = "#243457" },
+        yaxis = new { title = yTitle, gridcolor = "#243457", zerolinecolor = "#243457" },
+        margin = new { l = 60, r = 20, t = 20, b = 50 }
+    };
+
+    private readonly record struct BonusRow(int Milestone, int Bonus, int Cumulative, string Timer, double Respect);
+}

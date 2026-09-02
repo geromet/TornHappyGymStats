@@ -76,6 +76,23 @@ public sealed class UserLogEntryRepository(HappyGymStatsDbContext db) : IUserLog
             .ToListAsync(ct)
             .ContinueWith(t => (IReadOnlyList<GymLogEntry>)t.Result, TaskContinuationOptions.ExecuteSynchronously);
 
+    public Task<IReadOnlyList<GymLogEntry>> GetGymLogEntriesAsync(Guid anonymousId, CancellationToken ct)
+        => db.UserLogEntries
+            .AsNoTracking()
+            .Where(x => x.AnonymousId == anonymousId && x.HappyUsed != null)
+            .OrderBy(x => x.OccurredAtUtc)
+            .Select(x => new GymLogEntry(
+                x.LogEntryId,
+                x.OccurredAtUtc,
+                x.HappyBeforeTrain,
+                x.EnergyUsed,
+                x.StrengthBefore, x.StrengthIncreased,
+                x.DefenseBefore, x.DefenseIncreased,
+                x.SpeedBefore, x.SpeedIncreased,
+                x.DexterityBefore, x.DexterityIncreased))
+            .ToListAsync(ct)
+            .ContinueWith(t => (IReadOnlyList<GymLogEntry>)t.Result, TaskContinuationOptions.ExecuteSynchronously);
+
     public async Task<CursorPage<GymTrainDto>> GetGymTrainsPageAsync(int take, PageCursor? cursor, CancellationToken ct)
     {
         IQueryable<UserLogEntryEntity> baseQuery;

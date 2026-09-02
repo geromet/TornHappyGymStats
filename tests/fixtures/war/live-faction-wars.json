@@ -1,0 +1,29 @@
+{
+  "wars": [
+    {
+      "war_id": 48377,
+      "faction_id": 111,
+      "faction_name": "Happy Gym",
+      "opponent_id": 222,
+      "opponent_name": "Chain Breakers",
+      "start": 1731000000,
+      "end": null,
+      "is_live": true,
+      "score": 128,
+      "chain": 42,
+      "ignored_debug_field": "fixture-only"
+    },
+    {
+      "war_id": 48378,
+      "faction_id": 333,
+      "faction_name": "Cardio Crew",
+      "opponent_id": 444,
+      "opponent_name": "Heavy Hitters",
+      "start": 1730900000,
+      "end": 1730907200,
+      "is_live": false,
+      "score": 95,
+      "chain": 18
+    }
+  ]
+}

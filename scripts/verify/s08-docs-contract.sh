@@ -5,6 +5,7 @@ README_FILE="README.md"
 OVERVIEW_FILE="docs/OVERVIEW.md"
 SETUP_FILE="docs/SETUP.md"
 DEPLOYMENT_FILE="docs/DEPLOYMENT.md"
+M004_OPERATOR_GATE_FILE="docs/M004-MY-STATS-OPERATOR-GATE.md"
 HTTP_FILE="src/HappyGymStats.Api/HappyGymStats.Api.http"
 
 fail() {
@@ -44,6 +45,7 @@ check_file_exists "$README_FILE"
 check_file_exists "$OVERVIEW_FILE"
 check_file_exists "$SETUP_FILE"
 check_file_exists "$DEPLOYMENT_FILE"
+check_file_exists "$M004_OPERATOR_GATE_FILE"
 check_file_exists "$HTTP_FILE"
 
 # Required current-state contract markers (README)
@@ -76,6 +78,15 @@ check_contains "$DEPLOYMENT_FILE" "happygymstats-adminpanel" "Deployment include
 check_contains "$DEPLOYMENT_FILE" "https://torn.geromet.com/api/v1/torn/health" "Deployment includes external API health route"
 check_contains "$DEPLOYMENT_FILE" "https://admin.geromet.com/admin/health" "Deployment includes admin health route"
 check_contains "$DEPLOYMENT_FILE" "bash scripts/verify/production-smoke.sh" "Deployment includes canonical smoke command"
+
+# Required current-state contract markers (M004 My stats operator gate)
+check_contains "$M004_OPERATOR_GATE_FILE" "Keycloak" "M004 runbook names Keycloak gate"
+check_contains "$M004_OPERATOR_GATE_FILE" "signed-out" "M004 runbook includes signed-out challenge scenario"
+check_contains "$M004_OPERATOR_GATE_FILE" "identity_setup_required" "M004 runbook includes identity setup required failure code"
+check_contains "$M004_OPERATOR_GATE_FILE" "/api/v1/torn/surfaces/me" "M004 runbook includes private surfaces endpoint"
+check_contains "$M004_OPERATOR_GATE_FILE" "/api/v1/torn/import-jobs/me" "M004 runbook includes private import endpoint"
+check_contains "$M004_OPERATOR_GATE_FILE" "Torn API key" "M004 runbook includes Torn API key redaction guidance"
+check_contains "$M004_OPERATOR_GATE_FILE" "sanitized" "M004 runbook includes sanitized evidence guidance"
 
 # Required current-state contract markers (.http examples)
 check_contains "$HTTP_FILE" "@HappyGymStats.Api_HostAddress = http://localhost:5047" ".http uses current local API default host"
