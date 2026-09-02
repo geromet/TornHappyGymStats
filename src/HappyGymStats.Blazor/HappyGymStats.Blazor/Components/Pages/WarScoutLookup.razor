@@ -1,0 +1,37 @@
+@page "/war/scout"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@inject NavigationManager Navigation
+
+<PageTitle>Scout an opponent · Happy Gym Stats</PageTitle>
+
+<MudStack Spacing="3">
+    <div>
+        <MudText Typo="Typo.h4">Scout an opponent</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary">
+            Enter a Torn faction ID to open its pre-war briefing, built from that faction's captured ranked-war history.
+        </MudText>
+    </div>
+
+    <MudPaper Class="pa-4" MaxWidth="420px">
+        <MudStack Spacing="2">
+            <MudNumericField @bind-Value="_factionId" Label="Faction ID" Variant="Variant.Outlined" Min="1" HideSpinButtons="true" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search" OnClick="GoToScoutPage" Disabled="@(_factionId is null or <= 0)">
+                Open briefing
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+</MudStack>
+
+@code {
+    private long? _factionId;
+
+    private void GoToScoutPage()
+    {
+        if (_factionId is > 0)
+        {
+            Navigation.NavigateTo($"/war/scout/{_factionId}");
+        }
+    }
+}

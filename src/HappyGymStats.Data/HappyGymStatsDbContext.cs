@@ -33,6 +33,7 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
     public DbSet<WarRosterSnapshotEntity> WarRosterSnapshots => Set<WarRosterSnapshotEntity>();
     public DbSet<WarScoreSampleEntity> WarScoreSamples => Set<WarScoreSampleEntity>();
     public DbSet<WarPollerHeartbeatEntity> WarPollerHeartbeats => Set<WarPollerHeartbeatEntity>();
+    public DbSet<RankedWarHistoryBackfillStateEntity> RankedWarHistoryBackfillState => Set<RankedWarHistoryBackfillStateEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -186,6 +187,24 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
             entity.Property(e => e.StaleAfterUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
             entity.HasIndex(e => e.ActiveWarId);
             entity.HasIndex(e => new { e.Phase, e.UpdatedAtUtc });
+        });
+
+        modelBuilder.Entity<RankedWarHistoryBackfillStateEntity>(entity =>
+        {
+            entity.ToTable("RankedWarHistoryBackfillState");
+            entity.HasKey(e => e.ScopeKey);
+            entity.Property(e => e.ScopeKey).HasMaxLength(64);
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(32);
+            entity.Property(e => e.Phase).HasMaxLength(64);
+            entity.Property(e => e.NextHistoryPageUrl).HasMaxLength(2048);
+            entity.Property(e => e.LastFailureCategory).HasMaxLength(32);
+            entity.Property(e => e.LastErrorMessage).HasMaxLength(1024);
+            entity.Property(e => e.LastSuccessAtUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
+            entity.Property(e => e.LastFailureAtUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
+            entity.Property(e => e.NextRetryAtUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
+            entity.Property(e => e.CreatedAtUtc).HasConversion(UtcDateTimeOffsetConverter);
+            entity.Property(e => e.UpdatedAtUtc).HasConversion(UtcDateTimeOffsetConverter);
+            entity.HasIndex(e => e.NextRetryAtUtc);
         });
     }
 }
