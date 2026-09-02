@@ -28,77 +28,13 @@
 # means fingerprints from two different runs are not comparable — that is the
 # intended trade.
 #
-# Usage, from a machine with an authenticated SSH session:
+# Requires scripts/lib/recon-common.sh prepended. Use the wrapper, which
+# concatenates them locally and pipes the result over stdin:
 #
-#   ssh <host> 'bash -s' < scripts/recon-devhost.sh > workspace/tmp/devhost-recon.txt
-#
-# or via the wrapper, which handles the timestamp and output path:
-#
-#   bash scripts/recon-devhost-fetch.sh
+#   bash scripts/recon-fetch.sh devhost --sudo
 set -uo pipefail   # deliberately no -e: a failed probe must not abort the survey
 
-HR="────────────────────────────────────────────────────────────"
-section() { printf '\n%s\n  %s\n%s\n' "$HR" "$1" "$HR"; }
-note()    { printf '  %s\n' "$1"; }
-
-# Run a command, indent its output, never let a failure kill the script.
-probe() {
-  local label="$1"; shift
-  printf '  %s:\n' "${label}"
-  if output="$("$@" 2>&1)"; then
-    if [[ -z "${output}" ]]; then
-      printf '    (empty)\n'
-    else
-      printf '%s\n' "${output}" | sed 's/^/    /'
-    fi
-  else
-    printf '%s\n' "${output}" | sed 's/^/    /'
-    printf '    [command exited non-zero]\n'
-  fi
-}
-
-# Same, but for a shell snippet.
-probe_sh() {
-  local label="$1" snippet="$2"
-  probe "${label}" bash -c "${snippet}"
-}
-
-# Per-run HMAC key for secret fingerprints. Random, never printed, dies with the
-# process. Its only job is to make fingerprints comparable within this report
-# while useless for offline guessing by anyone who reads it.
-REPORT_FINGERPRINT_KEY="$(head -c 32 /dev/urandom 2>/dev/null | od -An -tx1 | tr -d ' \n')"
-if [[ -z "${REPORT_FINGERPRINT_KEY}" ]]; then
-  REPORT_FINGERPRINT_KEY="$$-$(date +%s%N 2>/dev/null)-${RANDOM}${RANDOM}"
-fi
-
-# Keyed fingerprint of a secret. Prints a short tag, never the input.
-fingerprint() {
-  local value="$1" out=""
-  if command -v openssl >/dev/null 2>&1; then
-    out="$(printf '%s' "${value}" \
-      | openssl dgst -sha256 -hmac "${REPORT_FINGERPRINT_KEY}" 2>/dev/null \
-      | awk '{print $NF}')"
-  fi
-  if [[ -z "${out}" ]] && command -v sha256sum >/dev/null 2>&1; then
-    # Fallback: still keyed, just assembled by hand.
-    out="$(printf '%s%s' "${REPORT_FINGERPRINT_KEY}" "${value}" | sha256sum | cut -d' ' -f1)"
-  fi
-  [[ -z "${out}" ]] && { printf 'unavailable'; return; }
-  printf '%s' "${out:0:12}"
-}
-
-# Can we read privileged files without prompting?
-SUDO=""
-if sudo -n true 2>/dev/null; then
-  SUDO="sudo -n"
-fi
-
-printf 'HappyGymStats dev-host reconnaissance\n'
-printf 'generated: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-printf 'host:      %s\n' "$(hostname 2>/dev/null || echo unknown)"
-printf 'user:      %s\n' "$(whoami 2>/dev/null || echo unknown)"
-printf 'sudo:      %s\n' "$([[ -n "${SUDO}" ]] && echo 'passwordless available' || echo 'NOT passwordless (privileged sections will be partial)')"
-printf 'mutations: none (read-only script)\n'
+report_header "HappyGymStats dev-host reconnaissance"
 
 section "Ports the dev host wants (5147 API, 5282 Blazor)"
 for port in 5147 5282; do
@@ -141,7 +77,9 @@ probe_sh "torndev references" "${SUDO} grep -rn 'torndev' /etc/nginx/ 2>/dev/nul
 section "TLS origin certificate"
 # Only metadata. The private key is never read.
 probe_sh "origin.pem subject/SAN/validity" "${SUDO} openssl x509 -in /etc/ssl/cloudflare/origin.pem -noout -subject -ext subjectAltName -dates 2>/dev/null || openssl x509 -in /etc/ssl/cloudflare/origin.pem -noout -subject -ext subjectAltName -dates 2>/dev/null || echo '(cert not readable)'"
-probe_sh "key present (existence only)" "test -f /etc/ssl/cloudflare/origin.key && echo 'origin.key present (contents NOT read)' || echo 'origin.key missing'"
+printf '  key present (existence only):\n'
+printf '    origin.key: %s\n' "$(file_state /etc/ssl/cloudflare/origin.key)"
+note "(contents are never read)"
 
 section "systemd — happygymstats units"
 probe_sh "unit files" "systemctl list-unit-files 'happygymstats*' --no-pager 2>/dev/null || echo '(none)'"
@@ -175,14 +113,16 @@ declare -A ENV_DIGESTS=()
 
 describe_env_file() {
   local path="$1"
-  if [[ ! -f "${path}" ]]; then
-    note "${path}: absent"
+  local state
+  state="$(file_state "${path}")"
+  if [[ "${state}" != present* ]]; then
+    note "${path}: ${state}"
     return
   fi
 
   local content
-  if ! content="$(${SUDO} cat "${path}" 2>/dev/null)"; then
-    note "${path}: present but NOT READABLE (needs root)"
+  if ! content="$(bash -c "${SUDO} cat '${path}'" 2>/dev/null)"; then
+    note "${path}: present but BLIND — needs root"
     return
   fi
 
@@ -283,6 +223,8 @@ probe_sh "memory" "free -h 2>/dev/null | grep -E '^(Mem|Swap):'"
 probe_sh "disk" "df -h / /var 2>/dev/null | grep -v '^Filesystem'"
 probe_sh "cpu" "nproc 2>/dev/null"
 probe_sh "os" "grep -E '^(NAME|VERSION)=' /etc/os-release 2>/dev/null"
+
+print_findings_summary
 
 section "End"
 note "Report complete. Nothing on this host was modified."
