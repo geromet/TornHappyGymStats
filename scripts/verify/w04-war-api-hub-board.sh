@@ -13,7 +13,7 @@ readonly API_PROGRAM="${ROOT_DIR}/src/HappyGymStats.Api/Program.cs"
 readonly WAR_CONTROLLER="${ROOT_DIR}/src/HappyGymStats.Api/Controllers/WarController.cs"
 readonly HUB_SOURCE="${ROOT_DIR}/src/HappyGymStats.Api/Hubs/WarHub.cs"
 readonly HUB_BROADCASTER="${ROOT_DIR}/src/HappyGymStats.Api/Hubs/WarHubBroadcaster.cs"
-readonly BLAZOR_DTOS="${ROOT_DIR}/src/HappyGymStats.Blazor/HappyGymStats.Blazor/Models/WarDtos.cs"
+readonly WAR_DTOS="${ROOT_DIR}/src/HappyGymStats.Contracts/Models/WarDtos.cs"
 readonly BOARD_SERVICE="${ROOT_DIR}/src/HappyGymStats.Blazor/HappyGymStats.Blazor/Services/WarBoardService.cs"
 readonly BOARD_PAGE="${ROOT_DIR}/src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/War.razor"
 readonly LAYOUT_FILE="${ROOT_DIR}/src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Layout/MainLayout.razor"
@@ -121,7 +121,7 @@ require_file "$API_PROGRAM"
 require_file "$WAR_CONTROLLER"
 require_file "$HUB_SOURCE"
 require_file "$HUB_BROADCASTER"
-require_file "$BLAZOR_DTOS"
+require_file "$WAR_DTOS"
 require_file "$BOARD_SERVICE"
 require_file "$BOARD_PAGE"
 require_file "$LAYOUT_FILE"
@@ -154,6 +154,6 @@ require_literal '/api/v1/war/internal/notify' "$ENV_EXAMPLE" 'Internal notify en
 
 forbid_regex_in_files 'TornApiClient|api\.torn\.com|centrifugo|ajax|scrap|PersonalLane|personal-lane' \
   'No forbidden direct Torn/ajax/Centrifugo/scraping/personal-lane references in API hub + board boundary files' \
-  "$WAR_CONTROLLER" "$HUB_SOURCE" "$HUB_BROADCASTER" "$BLAZOR_DTOS" "$BOARD_SERVICE" "$BOARD_PAGE"
+  "$WAR_CONTROLLER" "$HUB_SOURCE" "$HUB_BROADCASTER" "$WAR_DTOS" "$BOARD_SERVICE" "$BOARD_PAGE"
 
 pass 'w04 war API + hub + board final assembly verifier passed'

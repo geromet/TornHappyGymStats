@@ -10,7 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Auth: Keycloak JWT validation + group→role mapping only.
 // IClaimsTransformation is intentionally NOT enriched with anonymous_id — admins cannot
 // resolve AnonymousId → player identity.
-builder.Services.AddKeycloakAuthentication("https://auth.geromet.com/realms/torn");
+builder.Services.AddKeycloakAuthentication(builder.Configuration);
 builder.Services.AddScoped<IClaimsTransformation, KeycloakGroupClaimsTransformer>();
 
 // All endpoints require admin role by default; health is [AllowAnonymous].

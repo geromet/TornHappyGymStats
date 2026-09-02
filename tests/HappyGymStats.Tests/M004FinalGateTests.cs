@@ -1,12 +1,11 @@
-extern alias blazor;
 
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using HappyGymStats.Data.Entities;
 using Microsoft.Extensions.DependencyInjection;
-using ApiFailure = blazor::HappyGymStats.Blazor.Services.ApiFailure;
-using SurfacesService = blazor::HappyGymStats.Blazor.Services.SurfacesService;
+using ApiFailure = HappyGymStats.Blazor.Services.ApiFailure;
+using SurfacesService = HappyGymStats.Blazor.Services.SurfacesService;
 using Xunit;
 
 namespace HappyGymStats.Tests;
@@ -133,7 +132,7 @@ public sealed class M004FinalGateTests : IClassFixture<SqliteApiEndpointTests.Sq
         var failure = await Assert.ThrowsAsync<ApiFailure>(() => sut.StartMyStatsImportAsync("safe-key"));
 
         Assert.Contains("/api/v1/torn/import-jobs/me", failure.Endpoint, StringComparison.Ordinal);
-        Assert.Equal(blazor::HappyGymStats.Blazor.Services.ApiFailureCategory.Deserialization, failure.Category);
+        Assert.Equal(HappyGymStats.Blazor.Services.ApiFailureCategory.Deserialization, failure.Category);
     }
 
     private static string ReadTrackedSource(string relativePath)

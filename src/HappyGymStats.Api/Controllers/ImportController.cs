@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using HappyGymStats.Api.Infrastructure;
+using HappyGymStats.Core.Models;
 using HappyGymStats.Core.Import;
 using HappyGymStats.Core.Repositories;
 using HappyGymStats.Data.Entities;

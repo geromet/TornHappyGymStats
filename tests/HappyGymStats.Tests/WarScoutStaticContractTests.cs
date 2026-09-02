@@ -59,7 +59,7 @@ public sealed class WarScoutStaticContractTests
     {
         var combined = string.Join(
             "\n",
-            ReadRepoFile("src/HappyGymStats.Blazor/HappyGymStats.Blazor/Models/WarScoutDtos.cs"),
+            ReadRepoFile("src/HappyGymStats.Contracts/Models/WarScoutDtos.cs"),
             ReadRepoFile("src/HappyGymStats.Blazor/HappyGymStats.Blazor/Services/WarScoutService.cs"),
             ReadRepoFile("src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/WarScout.razor"));
 

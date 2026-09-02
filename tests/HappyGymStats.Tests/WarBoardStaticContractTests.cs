@@ -67,7 +67,7 @@ public sealed class WarBoardStaticContractTests
     {
         var combined = string.Join(
             "\n",
-            ReadRepoFile("src/HappyGymStats.Blazor/HappyGymStats.Blazor/Models/WarDtos.cs"),
+            ReadRepoFile("src/HappyGymStats.Contracts/Models/WarDtos.cs"),
             ReadRepoFile("src/HappyGymStats.Blazor/HappyGymStats.Blazor/Services/WarBoardService.cs"),
             ReadRepoFile("src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/War.razor"));
 

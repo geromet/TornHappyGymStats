@@ -29,15 +29,15 @@ public sealed class DbPipelineIntegrationTests
             Content = new StringContent(
                 """
                 {
-                  "log": [
-                    {
+                  "logs": {
+                    "log-1": {
                       "id": "log-1",
                       "timestamp": 1777546189,
                       "details": { "id": 5301, "title": "Gym train defense", "category": "Gym" },
                       "data": { "happy_used": 25, "energy_used": 20, "defense_before": "7566.34", "defense_increased": "30.6" }
                     }
-                  ],
-                  "_metadata": { "links": { "prev": null } }
+                  },
+                  "_metadata": { "links": { "next": null } }
                 }
                 """,
                 Encoding.UTF8,
@@ -47,7 +47,8 @@ public sealed class DbPipelineIntegrationTests
         using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
 
         var services = new ServiceCollection();
-        services.AddDbContext<HappyGymStatsDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
+        services.AddDbContext<HappyGymStatsDbContext>(options => options
+            .UseSqlite($"Data Source={dbPath}"));
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<HappyGymStatsDbContext>());
         services.AddScoped<IUserLogEntryRepository, UserLogEntryRepository>();
         services.AddScoped<IImportRunRepository, ImportRunRepository>();
@@ -57,8 +58,14 @@ public sealed class DbPipelineIntegrationTests
 
         using (var migrationScope = provider.CreateScope())
         {
+            // Matches the API's own SQLite provider path (dev-auth mode uses
+            // EnsureCreatedAsync, never MigrateAsync). The Postgres-flavored migration
+            // chain is validated under Npgsql instead: 'dotnet ef migrations
+            // has-pending-model-changes' at design time and the Testcontainers
+            // integration tier at runtime. Applying Npgsql migrations under SQLite
+            // additionally cannot express store-generated integer PKs (rowid alias).
             var migrationDb = migrationScope.ServiceProvider.GetRequiredService<HappyGymStatsDbContext>();
-            await migrationDb.Database.MigrateAsync();
+            await migrationDb.Database.EnsureCreatedAsync();
         }
 
         using var scope = provider.CreateScope();
@@ -447,39 +454,4 @@ public sealed class DbPipelineIntegrationTests
             => Task.FromResult(_handler(request));
     }
 
-    private sealed record DatasetPaths(string RepoRoot, string UserLogsJsonlPath)
-    {
-        public static DatasetPaths Discover()
-        {
-            var dir = new DirectoryInfo(AppContext.BaseDirectory);
-            while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "HappyGymStats.sln")))
-                dir = dir.Parent;
-
-            if (dir is null)
-                throw new DirectoryNotFoundException("Unable to locate repository root from test output directory.");
-
-            var dataRoot = Path.Combine(dir.FullName, "src", "HappyGymStats.Cli", "bin", "Debug", "net8.0", "data");
-            return new DatasetPaths(
-                RepoRoot: dir.FullName,
-                UserLogsJsonlPath: Path.Combine(dataRoot, "userlogs.jsonl"));
-        }
-
-        public IDisposable UseRepoRootAsCurrentDirectory() => new CurrentDirectoryScope(RepoRoot);
-    }
-
-    private sealed class CurrentDirectoryScope : IDisposable
-    {
-        private readonly string _originalDirectory;
-
-        public CurrentDirectoryScope(string newDirectory)
-        {
-            _originalDirectory = Directory.GetCurrentDirectory();
-            Directory.SetCurrentDirectory(newDirectory);
-        }
-
-        public void Dispose()
-        {
-            Directory.SetCurrentDirectory(_originalDirectory);
-        }
-    }
 }

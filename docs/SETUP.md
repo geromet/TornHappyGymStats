@@ -2,18 +2,18 @@
 
 This setup guide reflects the current production shape: **API + Blazor + AdminPanel + Postgres + Keycloak**.
 
-- This repository contains the API and shared libraries.
-- Blazor and AdminPanel are operational runtime peers; their service contracts are documented here even if their source trees are not present in this checkout.
+- This repository contains the API, Blazor frontend, AdminPanel, and shared libraries.
+- Blazor and AdminPanel service contracts are documented here and their sources live under `src/`.
 
 ## Prerequisites
 
-- .NET 8 SDK (8.0.126 currently pinned via repository `global.json`)
+- .NET 10 SDK (10.0.106+ pinned via repository `global.json`, `rollForward: latestPatch`)
 - Docker (for Postgres/Testcontainers verification paths)
 - `curl`, `bash`, and `rg`
 
 ## .NET SDK/runtime contract (M003 S09)
 
-- All tracked projects currently target `net8.0`.
+- All tracked projects currently target `net10.0`.
 - Local build/test/restore should use the SDK selected by `global.json` (repo root).
 - Deployment publish scripts target `linux-x64` and use `dotnet publish --self-contained true` for API/AdminPanel.
 - Because deploy artifacts are self-contained, the server does **not** need a preinstalled shared ASP.NET/.NET runtime for those services; it still needs systemd/nginx/service prerequisites documented in deployment smoke checks.

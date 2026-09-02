@@ -58,9 +58,15 @@ tmp/
 GSD/
 GSD-BACKUPS/
 ARTIFACTS/
+.artifacts/
 
 ## MCP local config
 .mcp.json
+
+## Claude Code local state (settings.json may be shared deliberately)
+.claude/settings.local.json
+.claude/plans/
+.claude/commands-local/
 
 ## Local artifacts
 happygymstats.dump

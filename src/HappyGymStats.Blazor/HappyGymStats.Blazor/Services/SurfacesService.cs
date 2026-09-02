@@ -1,6 +1,6 @@
 using System.Net;
 using System.Text.Json;
-using HappyGymStats.Blazor.Models;
+using HappyGymStats.Core.Models;
 
 namespace HappyGymStats.Blazor.Services;
 

@@ -5,6 +5,7 @@ using System.Text.Json;
 using HappyGymStats.Api;
 using HappyGymStats.Api.Hubs;
 using HappyGymStats.Api.Models;
+using HappyGymStats.Core.Models;
 using HappyGymStats.Core.War;
 using HappyGymStats.Data;
 using HappyGymStats.Data.Entities;

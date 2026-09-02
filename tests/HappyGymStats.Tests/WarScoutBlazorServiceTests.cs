@@ -1,12 +1,11 @@
-extern alias blazor;
 
 using System;
 using System.Net;
 using System.Net.Http;
 using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
-using ApiFailureCategory = blazor::HappyGymStats.Blazor.Services.ApiFailureCategory;
-using WarScoutService = blazor::HappyGymStats.Blazor.Services.WarScoutService;
+using ApiFailureCategory = HappyGymStats.Blazor.Services.ApiFailureCategory;
+using WarScoutService = HappyGymStats.Blazor.Services.WarScoutService;
 using Xunit;
 
 namespace HappyGymStats.Tests;

@@ -27,7 +27,7 @@ if (developmentAuthEnabled)
 }
 else
 {
-    builder.Services.AddKeycloakAuthentication("https://auth.geromet.com/realms/torn");
+    builder.Services.AddKeycloakAuthentication(builder.Configuration);
 }
 builder.Services.AddScoped<IClaimsTransformation, HappyGymStatsClaimsTransformer>();
 builder.Services.Configure<ProvisionalTokenOptions>(
@@ -35,10 +35,25 @@ builder.Services.Configure<ProvisionalTokenOptions>(
 builder.Services.AddSingleton<IProvisionalTokenService, ProvisionalTokenService>();
 
 builder.Services.AddCors(options =>
-    options.AddPolicy("ReadApi", policy => policy
-        .AllowAnyOrigin()
-        .AllowAnyHeader()
-        .WithMethods("GET", "POST")));
+    options.AddPolicy("ReadApi", policy =>
+    {
+        // Cors:AllowedOrigins is a comma-separated list ("*" restores the historical
+        // allow-any-origin behavior). Config-driven so deployments can restrict origins
+        // without a code change.
+        var allowedOrigins = (builder.Configuration["Cors:AllowedOrigins"] ?? "*")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (allowedOrigins.Contains("*"))
+        {
+            policy.AllowAnyOrigin();
+        }
+        else
+        {
+            policy.WithOrigins(allowedOrigins);
+        }
+
+        policy.AllowAnyHeader().WithMethods("GET", "POST");
+    }));
 
 builder.Services.AddControllers();
 builder.Services.AddSignalR(options =>

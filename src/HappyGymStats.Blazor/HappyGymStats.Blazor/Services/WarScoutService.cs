@@ -1,5 +1,5 @@
 using System.Net.Http.Json;
-using HappyGymStats.Blazor.Models;
+using HappyGymStats.Core.Models;
 
 namespace HappyGymStats.Blazor.Services;
 
