@@ -1,5 +1,6 @@
 using HappyGymStats.Core.Repositories;
 using HappyGymStats.Core.Torn;
+using HappyGymStats.Core.War;
 using HappyGymStats.Data;
 using HappyGymStats.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -61,6 +62,8 @@ public static class Program
 
         builder.Services.AddScoped<IWarStateRepository, WarStateRepository>();
         builder.Services.AddScoped<IImportRunRepository, ImportRunRepository>();
+        builder.Services.AddScoped<IWarHistoryRepository, WarHistoryRepository>();
+        builder.Services.AddScoped<IWarHistoryIngestWriter, WarHistoryIngestWriter>();
         builder.Services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<HappyGymStatsDbContext>());
         builder.Services.AddScoped<WarPollerService>();
         builder.Services.AddHostedService<WarPollerHostedService>();
