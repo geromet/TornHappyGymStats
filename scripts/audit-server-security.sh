@@ -24,8 +24,18 @@ section "Patch state"
 probe_sh "OS" "grep -E '^(NAME|VERSION)=' /etc/os-release 2>/dev/null"
 probe_sh "kernel" "uname -r"
 blank
+RUNNING_KERNEL="$(uname -r)"
+NEWEST_KERNEL="$(ls -1 /boot/vmlinuz-* 2>/dev/null | sed 's|.*/vmlinuz-||' | sort -V | tail -1)"
+note "running kernel:  ${RUNNING_KERNEL}"
+note "newest installed: ${NEWEST_KERNEL:-unknown}"
 if [[ -f /var/run/reboot-required ]]; then
-  finding MED "reboot required to activate installed kernel/library updates"
+  if [[ -n "${NEWEST_KERNEL}" && "${NEWEST_KERNEL}" != "${RUNNING_KERNEL}" ]]; then
+    run_abi="$(printf '%s' "${RUNNING_KERNEL}" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+' || echo "${RUNNING_KERNEL}")"
+    new_abi="$(printf '%s' "${NEWEST_KERNEL}" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+' || echo "${NEWEST_KERNEL}")"
+    finding HIGH "running kernel ${run_abi} but ${new_abi} is installed — the patched kernel is on disk and NOT in use, so every kernel CVE fixed between them is live until reboot"
+  else
+    finding MED "reboot required to activate installed library updates"
+  fi
   probe_sh "reboot-required packages" "cat /var/run/reboot-required.pkgs 2>/dev/null || echo '(list unavailable)'"
 else
   note "no pending reboot flagged"
@@ -111,7 +121,7 @@ blank
 probe_sh "recent successful logins" "last -n 15 2>/dev/null | head -18 || echo '(wtmp unavailable)'"
 blank
 probe_priv "recent failed auth attempts (count by source)" \
-  "journalctl -u ssh -u sshd --since '7 days ago' 2>/dev/null | grep -ci 'authentication failure\\|Failed password' | xargs -I{} echo '{} failed auth events in the last 7 days'"
+  "journalctl -u ssh -u sshd --since '7 days ago' 2>/dev/null | grep -v 'sudo\\[' | grep -ci 'authentication failure\\|Failed password' | xargs -I{} echo '{} failed auth events in the last 7 days'"
 
 # ─────────────────────────────────────────────────────────────
 section "Intrusion prevention"
@@ -145,8 +155,12 @@ probe_sh "non-vendor systemd units (locally added)" \
 section "Secret file permissions"
 note "Modes and owners only. Contents are never read."
 blank
+# Only genuine secrets belong here. A certificate is public by design — it is
+# handed to every TLS client — so /etc/ssl/cloudflare/origin.pem is reported
+# below for completeness but never flagged. Only the private key and the env
+# files are secrets.
 for f in /etc/happygymstats/api.env /etc/happygymstats/api-dev.env \
-         /etc/ssl/cloudflare/origin.key /etc/ssl/cloudflare/origin.pem; do
+         /etc/ssl/cloudflare/origin.key; do
   state="$(file_state "${f}")"
   if [[ "${state}" == present* ]]; then
     if (( ROOT_OK == 1 )); then
@@ -175,6 +189,9 @@ for f in /etc/happygymstats/api.env /etc/happygymstats/api-dev.env \
     printf '    %s: %s\n' "${f}" "${state}"
   fi
 done
+blank
+note "Public certificate (not a secret; world-readable is correct):"
+probe_priv "origin.pem" "stat -c '%a %U:%G %n' /etc/ssl/cloudflare/origin.pem 2>/dev/null"
 blank
 probe_priv "/etc/happygymstats directory" "stat -c '%a %U:%G %n' /etc/happygymstats 2>/dev/null"
 probe_priv "/etc/ssl/cloudflare directory" "stat -c '%a %U:%G %n' /etc/ssl/cloudflare 2>/dev/null"
@@ -282,16 +299,25 @@ fi
 blank
 note "Reset-credentials (Forgot password) — the precondition for CVE-2026-18963."
 note "Probed over loopback only; this never leaves the host."
-probe_sh "realm login page advertises password reset?" \
+# The earlier version built an auth URL with client_id=account and a guessed
+# redirect_uri; Keycloak rejects the mismatched redirect before rendering a
+# login page, so it returned nothing and the report said "realm may not exist"
+# about a realm that plainly does. Confirm the realm first, then probe the
+# reset-credentials endpoint directly — it returns a page when the flow is on
+# and an error when it is off, without needing a client at all.
+probe_sh "reset-credentials flow, per realm" \
   "for realm in torn master; do
-     body=\"\$(curl -fsS --max-time 8 \"http://127.0.0.1:8080/realms/\${realm}/protocol/openid-connect/auth?client_id=account&response_type=code&redirect_uri=http://127.0.0.1:8080/realms/\${realm}/account/\" 2>/dev/null)\"
-     if [ -z \"\$body\" ]; then
-       echo \"  \${realm}: (no response — realm may not exist or client_id differs)\"
-     elif printf '%s' \"\$body\" | grep -qi 'reset-credentials\\|forgot'; then
-       echo \"  \${realm}: PASSWORD RESET APPEARS ENABLED\"
-     else
-       echo \"  \${realm}: no password-reset link found (flow likely disabled)\"
+     disco=\"\$(curl -fsS --max-time 8 \"http://127.0.0.1:8080/realms/\${realm}/.well-known/openid-configuration\" 2>/dev/null)\"
+     if [ -z \"\$disco\" ]; then
+       echo \"  \${realm}: realm not reachable on loopback — skipped (not evidence of anything)\"
+       continue
      fi
+     code=\"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 \"http://127.0.0.1:8080/realms/\${realm}/login-actions/reset-credentials\" 2>/dev/null)\"
+     case \"\$code\" in
+       200) echo \"  \${realm}: realm OK; reset-credentials returned 200 — FORGOT-PASSWORD LIKELY ENABLED\" ;;
+       400|403|404) echo \"  \${realm}: realm OK; reset-credentials returned \${code} — flow appears disabled\" ;;
+       *)   echo \"  \${realm}: realm OK; reset-credentials returned \${code} — INCONCLUSIVE, confirm in the console\" ;;
+     esac
    done"
 blank
 note "A disabled Forgot-password flow removes the CVE-2026-18963 attack path, and"
@@ -339,6 +365,23 @@ probe_priv "server_name inventory" \
   "nginx -T 2>/dev/null | grep -E '^\\s*server_name' | sort -u"
 blank
 probe_priv "nginx config test" "nginx -t 2>&1"
+blank
+# nginx accepts duplicate server_name and silently serves the FIRST matching
+# block, so a duplicate is a routing bug that never announces itself.
+if (( ROOT_OK == 1 )); then
+  # tr on spaces alone leaves tabs behind, which then count as a "duplicate".
+  dupes="$(bash -c "${SUDO} nginx -T 2>/dev/null" \
+    | grep -oE '^[[:space:]]*server_name[^;]*;' \
+    | sed 's/[[:space:]]*server_name[[:space:]]*//; s/;//' \
+    | tr '[:space:]' '\n' \
+    | grep -vE '^$|^_$' \
+    | sort | uniq -d)"
+  if [[ -n "${dupes}" ]]; then
+    finding MED "duplicate nginx server_name(s) — nginx serves the first matching block and ignores the rest: $(echo "${dupes}" | tr '\n' ' ')"
+  else
+    note "no duplicate server_name entries"
+  fi
+fi
 
 # ─────────────────────────────────────────────────────────────
 section "Service health"
@@ -350,7 +393,7 @@ blank
 probe_sh "happygymstats units" "systemctl list-units 'happygymstats*' --all --no-pager 2>/dev/null"
 blank
 probe_priv "recent unit crashes/restarts (7d)" \
-  "journalctl --since '7 days ago' -p err --no-pager 2>/dev/null | grep -iE 'happygymstats|nginx|postgres|keycloak' | tail -20"
+  "journalctl --since '7 days ago' -p err --no-pager 2>/dev/null | grep -v 'sudo\\[' | grep -iE 'happygymstats|nginx|postgres|keycloak' | tail -20"
 
 # ─────────────────────────────────────────────────────────────
 section "Memory, swap and OOM history"
@@ -361,7 +404,7 @@ if [[ "${swap_total}" == "0" ]]; then
   finding MED "no swap configured — memory pressure produces OOM kills rather than slowdown; adding two more .NET services will tighten this"
 fi
 probe_priv "past OOM kills" \
-  "journalctl -k --no-pager 2>/dev/null | grep -i 'out of memory\\|oom-killer\\|Killed process' | tail -10 || echo '(none found)'"
+  "journalctl -k --no-pager 2>/dev/null | grep -v 'sudo\\[' | grep -i 'out of memory\\|oom-killer\\|Killed process' | tail -10 || echo '(none found)'"
 blank
 probe_sh "top memory consumers" \
   "ps -eo pid,rss,comm --sort=-rss 2>/dev/null | head -12 | awk '{printf \"  %-8s %8s KB  %s\\n\", \$1, \$2, \$3}'"
