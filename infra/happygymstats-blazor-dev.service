@@ -1,0 +1,30 @@
+[Unit]
+Description=HappyGymStats Blazor frontend (dev host — torndev.geromet.com)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/happygymstats-blazor-dev/current
+ExecStart=/var/www/happygymstats-blazor-dev/current/HappyGymStats.Blazor
+Restart=on-failure
+RestartSec=5
+
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5282
+
+# MUST be the dev API (5147), not production's 5047. Pointing this at 5047
+# would make the dev frontend drive the production API and its database while
+# looking like an isolated environment.
+Environment=ApiBaseUrl=http://127.0.0.1:5147
+
+# Whole-site admin gate. Only this host sets it; production leaves it unset and
+# is therefore unaffected. See RestrictedAccessExtensions.
+Environment=Access__RestrictToAdmins=true
+
+# Dedicated Keycloak client so a production session cookie cannot ride into dev.
+Environment=Keycloak__ClientId=happygymstats-web-dev
+
+[Install]
+WantedBy=multi-user.target

@@ -73,6 +73,102 @@ The runtime route contract checked by smoke:
 - `https://admin.geromet.com/admin/health` → AdminPanel health
 - `https://admin.geromet.com/admin/api/v1/import-runs` should return auth denial (401/403) when unauthenticated
 
+## Dev host — torndev.geromet.com
+
+A second, private deployment of the same build for testing before production.
+
+**Why a subdomain and not `torn.geromet.com/dev`.** The Blazor app hardcodes
+`<base href="/" />` and runs Interactive Server, so a path mount would need a
+different build (different base href, relocated `/_blazor` circuit, rewritten API
+base) — meaning you would no longer be testing what you ship. It would also share
+an origin, and therefore a cookie jar, with production: signing into dev could
+clobber a live session. A dedicated host avoids all of it. This mirrors the
+choice already made for `admin.geromet.com`.
+
+`torndev` is deliberately a single-label subdomain: the Cloudflare origin
+certificate covers `*.geromet.com` but not `*.*.geromet.com`, so
+`dev.torn.geromet.com` would need a paid tier.
+
+### Runtime shape
+
+| | Production | Dev |
+|---|---|---|
+| Host | `torn.geromet.com` | `torndev.geromet.com` |
+| API | `127.0.0.1:5047` | `127.0.0.1:5147` |
+| Blazor | `127.0.0.1:5182` | `127.0.0.1:5282` |
+| API root | `/var/www/happygymstats` | `/var/www/happygymstats-dev` |
+| Blazor root | `/var/www/happygymstats-blazor` | `/var/www/happygymstats-blazor-dev` |
+| Units | `happygymstats-api`, `happygymstats-blazor` | `happygymstats-api-dev`, `happygymstats-blazor-dev` |
+| API env file | `/etc/happygymstats/api.env` | `/etc/happygymstats/api-dev.env` |
+| Keycloak client | `happygymstats-web` | `happygymstats-web-dev` |
+| Access | public | administrators only |
+
+The published build is identical in both. Everything that differs lives in the
+systemd units and the host env file.
+
+### Operator prerequisites
+
+These cannot be scripted from this repo:
+
+1. **DNS** — Cloudflare A record `torndev.geromet.com` to the origin IP.
+2. **Keycloak** — a client `happygymstats-web-dev` in realm `torn`, with redirect
+   URI `https://torndev.geromet.com/signin-oidc`, post-logout redirect
+   `https://torndev.geromet.com/signout-callback-oidc`, and web origin
+   `https://torndev.geromet.com`. A separate client, rather than a second
+   redirect URI on `happygymstats-web`, is what stops a production session from
+   being replayed against dev. Your account must be in the `/admins` group.
+3. **Postgres** — a database and role for dev, separate from production. The API
+   runs migrations at startup, so a shared database would let a dev build alter
+   the production schema.
+4. **Env file** — fill in `/etc/happygymstats/api-dev.env` after the setup script
+   seeds it. It ships `REPLACE_ME` placeholders so the service fails loudly
+   rather than starting against something real. `ProvisionalToken__SigningKey`
+   must differ from production, or dev-minted tokens are valid there.
+
+### Bootstrap and deploy
+
+```bash
+# 1) Static contract check — offline, no host needed
+bash scripts/verify/devhost-contract.sh
+
+# 2) Dry run: local checks only, prints what it would do
+bash scripts/setup-devhost-server.sh
+
+# 3) Bootstrap the host (nginx block, both units, release roots, env skeleton)
+DEPLOY_INSTALL_DEV_HOST=1 \
+  bash scripts/setup-devhost-server.sh --execute --confirm-remote-setup
+
+# 4) Deploy code
+bash scripts/deploy-dev.sh                      # or --target backend|frontend
+
+# 5) Verify
+bash scripts/verify/devhost-smoke.sh
+```
+
+`deploy-dev.sh` reuses `deploy-backend.sh` / `deploy-frontend.sh` with the dev
+roots and units supplied through their existing env-var overrides, so the two
+environments cannot drift apart. It refuses to run if pointed at a production
+root or unit.
+
+### Admin-only gate
+
+`Access:RestrictToAdmins` (set as `Access__RestrictToAdmins=true` in the dev
+Blazor unit) enables `RestrictedAccessExtensions`, which denies every request
+that is not from an administrator. Unset — as in production — the middleware is
+never registered.
+
+It is middleware rather than an `AuthorizationOptions.FallbackPolicy` on purpose:
+a fallback policy also captures the OIDC callback, static assets and the cookie
+handler's `AccessDeniedPath`, so a signed-in non-admin would loop between the
+challenge and the denial. The allowlist in `AlwaysAllowedPathPrefixes` keeps the
+sign-in round trip reachable; anonymous visitors get a challenge, signed-in
+non-admins get a flat 403.
+
+Admin is recognised from the `admin` role claim, a flat `roles` claim, or the raw
+Keycloak `/admins` group. All three are needed because the Blazor host registers
+no `IClaimsTransformation` — unlike the API and AdminPanel, it never maps
+`/admins` onto a role.
+
 ## AdminPanel setup details
 
 Dry-run validation (safe):
