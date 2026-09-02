@@ -274,4 +274,4 @@ for id in 5915 5916 5963 2051 2052 2053 2054 2055 2056 2057 2058 2059 2120 2130 
 - Use automated redacting scripts for sharable payloads:
   - `scripts/helpers/fetch-underused-log-samples.sh` (Linux/macOS)
   - `scripts/helpers/fetch-underused-log-samples.bat` (Windows CMD)
-- Torn API terms/usage disclosure: `docs/TORN-API-TOS.md`
+- Torn API terms/usage disclosure: `docs/torn-api/terms-of-service.md`

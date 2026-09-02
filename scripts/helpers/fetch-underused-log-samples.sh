@@ -4,18 +4,18 @@ set -euo pipefail
 # Fetch Torn log samples for selected underused log types into a SINGLE redacted JSON file.
 # Usage:
 #   bash scripts/helpers/fetch-underused-log-samples.sh
-#   bash scripts/helpers/fetch-underused-log-samples.sh --api-key "..." --limit 100 --out ./torn-log-samples.json
+#   bash scripts/helpers/fetch-underused-log-samples.sh --api-key "..." --limit 100 --out ./workspace/archive/torn-log-samples.json
 
 API_KEY=""
 LIMIT="100"
-OUT_FILE="./torn-log-samples.json"
+OUT_FILE="./workspace/archive/torn-log-samples.json"
 BASE_URL="https://api.torn.com/v2/user/log"
 
 usage() {
   cat <<'EOF'
 Usage:
   bash scripts/helpers/fetch-underused-log-samples.sh
-  bash scripts/helpers/fetch-underused-log-samples.sh --api-key "<key>" [--limit 100] [--out ./torn-log-samples.json]
+  bash scripts/helpers/fetch-underused-log-samples.sh --api-key "<key>" [--limit 100] [--out ./workspace/archive/torn-log-samples.json]
 
 Options:
   --api-key   Torn API key (if omitted, script prompts interactively)

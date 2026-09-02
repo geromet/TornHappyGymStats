@@ -11,7 +11,7 @@ HappyGymStats is a Torn telemetry pipeline with a production ASP.NET API, a Blaz
 - My stats operator gate (M004): [docs/M004-MY-STATS-OPERATOR-GATE.md](docs/M004-MY-STATS-OPERATOR-GATE.md)
 - Audit context (2026-05-06-181943): [.gsd/milestones/M003/M003-ROADMAP.md](.gsd/milestones/M003/M003-ROADMAP.md)
 - Production smoke verification: [`scripts/verify/production-smoke.sh`](scripts/verify/production-smoke.sh)
-- Torn API key ToS disclosure: [docs/TORN-API-TOS.md](docs/TORN-API-TOS.md)
+- Torn API key ToS disclosure: [docs/torn-api/terms-of-service.md](docs/torn-api/terms-of-service.md)
 
 ## Minimal verification commands
 
