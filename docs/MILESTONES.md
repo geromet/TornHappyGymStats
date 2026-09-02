@@ -43,6 +43,10 @@ deliverables that were not built or were built differently. This milestone close
 before new features stack on top. Slices are independent; size is set by the findings
 below, all confirmed against the tree.
 
+**Branch layout.** The slices land as a **stack**, not on `main` yet: `feat/m007-s01-…`
+off `main` (carries this plan doc), `feat/m007-s02-…` off S01, etc. Look for completed
+slices on their branch, not `main`, until the stack is merged.
+
 ### S01 — Ranked-war lump detection rework  *(→ data/V2/handoff/05)*  — DONE (branch `feat/m007-s01-lump-detection`)
 
 The shipped `OpponentMemberProfile.LumpAdjustedScorePerWar` is the **median of per-war
@@ -79,13 +83,33 @@ Build to the spec:
   not detected. Both choices are `const`s in `OpponentProfileEngine`, retunable, and
   should get a real flag-rate measurement against a full roster in **S05**.
 
-### S02 — `TornRateLimiter`  *(→ data/V2/handoff/04, task 3)*
+### S02 — `TornRateLimiter`  *(→ data/V2/handoff/04, task 3; data/V2/handoff/03 "Rate limiting")*  — DONE (branch `feat/m007-s02-rate-limiter`, stacked on S01)
 
-`TornApiClient` has retry classification but no limiter. Add a per-key token bucket:
-80/min ceiling, priority shedding (rosters + war state above linked-member polling),
-`code 5` back-off. Tests for budget exhaustion and for the `code 5` back-off path.
-This is a hard dependency for M009's per-linked-member polling and M010's FFScouter
-service limiter, so it lands here rather than being reinvented twice.
+`Core/Torn/TornRateLimiter` — per-key token bucket, default 80/min ceiling (below Torn's
+100), continuous fractional refill, `TimeProvider`-injected for deterministic tests.
+- **Per-key dimension is a non-reversible hash** (`KeyIdentity` = SHA-256 first 8 bytes,
+  hex) so the raw key never becomes a dictionary key or reaches a log.
+- **Priority shedding** via per-priority token reserves — `TornRequestPriority`
+  `Roster (0) < WarState (10%) < AttacksFull (25%) < Other (40%)`; as the bucket drains,
+  low priority is refused first, rosters last.
+- **`code 5` / HTTP 429 back-off**: `ReportThrottled` drains the bucket and opens an
+  exponential-backoff window (base 2s, ×2 per consecutive hit, cap 2min) with ±50%
+  jitter; `ReportSuccess` clears the escalation once outside the window.
+- `TryAcquire` (non-blocking, returns `RetryAfter`) + `AcquireAsync` (waits via the
+  `TimeProvider`, honours cancellation, re-checks ≥ every 5s).
+- Wired into `TornApiClient` as an **optional** ctor dep (`TornRateLimiter? = null`, so
+  the ~8 `new TornApiClient(http)` test call sites still compile); every `GetAsync` path
+  acquires before send and reports throttle/success. Per-endpoint priority: live
+  `wars`/`warfareranked` → `WarState`, `attacks` → `AttacksFull`, history backfill +
+  `rankedwarreport` + player-id/user-log → `Other`. Registered `AddSingleton` in both
+  `Api` and `WarPoller` `Program.cs`.
+- 11 tests: ceiling exhaustion, continuous refill + cap, full shedding order, per-key
+  isolation, back-off window blocks all priorities, consecutive-throttle escalation,
+  `ReportSuccess` reset, `KeyIdentity` stability/non-exposure, `AcquireAsync` wait +
+  cancellation.
+
+**Not done here:** the poll *scheduler* (5s cycle, per-linked-member `attacksfull`) —
+that's M009/M010. This slice is the limiter primitive + universal wiring only.
 
 ### S03 — Open-slot holes  *(→ data/V2/handoff/04, "Definition of a hole")*
 

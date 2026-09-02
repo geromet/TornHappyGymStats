@@ -51,6 +51,7 @@ public static class Program
         });
 
         builder.Services.AddSingleton<IWarPollerClock, WarPollerClock>();
+        builder.Services.AddSingleton<TornRateLimiter>();
         builder.Services.AddHttpClient<TornApiClient>(client =>
         {
             client.BaseAddress = new Uri("https://api.torn.com/");

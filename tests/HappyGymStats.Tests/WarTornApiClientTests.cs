@@ -234,8 +234,50 @@ public sealed class WarTornApiClientTests
         Assert.Equal("https://api.torn.com/user/?selections=log&from=2", page.NextUrl?.AbsoluteUri);
     }
 
+    [Fact]
+    public async Task A_code_5_response_opens_the_rate_limiter_backoff_for_that_key()
+    {
+        const string response = """
+        { "error": { "code": 5, "error": "Too many requests" } }
+        """;
+        var limiter = new TornRateLimiter(perMinuteCeiling: 80);
+        var sut = CreateClient(new RecordingHttpMessageHandler((_, _) => Task.FromResult(JsonResponse(response))), limiter);
+
+        await Assert.ThrowsAsync<TornApiException>(() => sut.GetGlobalRankedWarsAsync(ApiKey));
+
+        // The call went through the limiter, and reporting the throttle opened a backoff window.
+        var lease = limiter.TryAcquire(TornRateLimiter.KeyIdentity(ApiKey), TornRequestPriority.Roster);
+        Assert.False(lease.Acquired);
+        Assert.True(lease.RetryAfter >= TimeSpan.FromSeconds(2));
+    }
+
+    [Fact]
+    public async Task A_call_acquires_from_the_rate_limiter_before_hitting_the_network()
+    {
+        var limiter = new TornRateLimiter(perMinuteCeiling: 4);
+        var keyId = TornRateLimiter.KeyIdentity(ApiKey);
+        while (limiter.TryAcquire(keyId, TornRequestPriority.WarState).Acquired)
+        {
+        }
+
+        var handlerCalled = false;
+        var sut = CreateClient(new RecordingHttpMessageHandler((_, _) =>
+        {
+            handlerCalled = true;
+            return Task.FromResult(JsonResponse("{\"wars\":[]}"));
+        }), limiter);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.GetGlobalRankedWarsAsync(ApiKey, cts.Token));
+        Assert.False(handlerCalled, "the limiter should have blocked before the request was sent");
+    }
+
     private static TornApiClient CreateClient(HttpMessageHandler handler)
         => new(new HttpClient(handler));
+
+    private static TornApiClient CreateClient(HttpMessageHandler handler, TornRateLimiter rateLimiter)
+        => new(new HttpClient(handler), rateLimiter);
 
     private static HttpResponseMessage JsonResponse(string content, HttpStatusCode statusCode = HttpStatusCode.OK)
         => new(statusCode)

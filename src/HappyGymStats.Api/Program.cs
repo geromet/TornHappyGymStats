@@ -65,6 +65,7 @@ builder.Services.AddDbContext<HappyGymStatsDbContext>(options =>
     }
 });
 
+builder.Services.AddSingleton<TornRateLimiter>();
 builder.Services.AddHttpClient<TornApiClient>(client =>
 {
     client.BaseAddress = new Uri("https://api.torn.com/");

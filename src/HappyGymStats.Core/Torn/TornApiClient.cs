@@ -49,10 +49,12 @@ public sealed class TornApiClient
 
     private static readonly Regex AbsoluteUrlRegex = new(@"https?://\S+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private readonly HttpClient _http;
+    private readonly TornRateLimiter? _rateLimiter;
 
-    public TornApiClient(HttpClient http)
+    public TornApiClient(HttpClient http, TornRateLimiter? rateLimiter = null)
     {
         _http = http;
+        _rateLimiter = rateLimiter;
     }
 
     public async Task<int> GetPlayerIdAsync(string apiKey, CancellationToken ct = default)
@@ -63,6 +65,7 @@ public sealed class TornApiClient
             apiKey,
             requestUrl,
             DeserializePlayerId,
+            TornRequestPriority.Other,
             ct).ConfigureAwait(false);
     }
 
@@ -74,11 +77,12 @@ public sealed class TornApiClient
             apiKey,
             url,
             DeserializeUserLogPage,
+            TornRequestPriority.Other,
             ct).ConfigureAwait(false);
     }
 
     public Task<LiveFactionWarsResponse> GetLiveFactionWarsAsync(string apiKey, CancellationToken ct = default)
-        => GetWarAsync<LiveFactionWarsResponse>(apiKey, new Uri(TornApiBaseUri, "faction/?selections=rankedwars"), ct);
+        => GetWarAsync<LiveFactionWarsResponse>(apiKey, new Uri(TornApiBaseUri, "faction/?selections=rankedwars"), TornRequestPriority.WarState, ct);
 
     public Task<RankedWarHistoryPageResponse> GetRankedWarHistoryPageAsync(string apiKey, CancellationToken ct = default)
         => GetRankedWarHistoryPageAsync(apiKey, new Uri(TornApiBaseUri, "v2/faction/warfareranked?selections=warfareranked"), ct);
@@ -87,7 +91,9 @@ public sealed class TornApiClient
     {
         ArgumentNullException.ThrowIfNull(url);
         var normalizedUrl = NormalizeTornApiUri(url);
-        return GetWarAsync<RankedWarHistoryPageResponse>(apiKey, normalizedUrl, ct);
+        // Backfill paging is deliberately low priority - it is a background catch-up job, not live
+        // war state (data/V2/handoff/05).
+        return GetWarAsync<RankedWarHistoryPageResponse>(apiKey, normalizedUrl, TornRequestPriority.Other, ct);
     }
 
     public Task<RankedWarReportResponse> GetRankedWarReportAsync(string apiKey, long warId, CancellationToken ct = default)
@@ -97,11 +103,11 @@ public sealed class TornApiClient
             throw new ArgumentOutOfRangeException(nameof(warId), warId, "War id must be positive.");
         }
 
-        return GetWarAsync<RankedWarReportResponse>(apiKey, new Uri(TornApiBaseUri, $"torn/{warId}?selections=rankedwarreport"), ct);
+        return GetWarAsync<RankedWarReportResponse>(apiKey, new Uri(TornApiBaseUri, $"torn/{warId}?selections=rankedwarreport"), TornRequestPriority.Other, ct);
     }
 
     public Task<GlobalRankedWarsResponse> GetGlobalRankedWarsAsync(string apiKey, CancellationToken ct = default)
-        => GetWarAsync<GlobalRankedWarsResponse>(apiKey, new Uri(TornApiBaseUri, "torn/?selections=rankedwars"), ct);
+        => GetWarAsync<GlobalRankedWarsResponse>(apiKey, new Uri(TornApiBaseUri, "torn/?selections=rankedwars"), TornRequestPriority.WarState, ct);
 
     public Task<UserAttacksPageResponse> GetUserAttacksPageAsync(string apiKey, CancellationToken ct = default)
         => GetUserAttacksPageAsync(apiKey, new Uri(TornApiBaseUri, "user/?selections=attacks"), ct);
@@ -110,21 +116,23 @@ public sealed class TornApiClient
     {
         ArgumentNullException.ThrowIfNull(url);
         var normalizedUrl = NormalizeTornApiUri(url);
-        return GetWarAsync<UserAttacksPageResponse>(apiKey, normalizedUrl, ct);
+        return GetWarAsync<UserAttacksPageResponse>(apiKey, normalizedUrl, TornRequestPriority.AttacksFull, ct);
     }
 
-    private Task<T> GetWarAsync<T>(string apiKey, Uri requestUrl, CancellationToken ct)
+    private Task<T> GetWarAsync<T>(string apiKey, Uri requestUrl, TornRequestPriority priority, CancellationToken ct)
         where T : class
         => GetAsync(
             apiKey,
             requestUrl,
             root => DeserializeResponse<T>(root, WarEndpointJson.SerializerOptions, typeof(T).Name),
+            priority,
             ct);
 
     private async Task<T> GetAsync<T>(
         string apiKey,
         Uri requestUrl,
         Func<JsonElement, T> deserialize,
+        TornRequestPriority priority,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(apiKey))
@@ -134,6 +142,34 @@ public sealed class TornApiClient
 
         ArgumentNullException.ThrowIfNull(requestUrl);
 
+        var keyIdentity = _rateLimiter is null ? null : TornRateLimiter.KeyIdentity(apiKey);
+        if (_rateLimiter is not null)
+        {
+            await _rateLimiter.AcquireAsync(keyIdentity!, priority, ct).ConfigureAwait(false);
+        }
+
+        try
+        {
+            var result = await SendAndParseAsync(apiKey, requestUrl, deserialize, ct).ConfigureAwait(false);
+            _rateLimiter?.ReportSuccess(keyIdentity!);
+            return result;
+        }
+        catch (TornApiException ex) when (_rateLimiter is not null && IsThrottleSignal(ex))
+        {
+            _rateLimiter.ReportThrottled(keyIdentity!);
+            throw;
+        }
+    }
+
+    private static bool IsThrottleSignal(TornApiException ex)
+        => ex.TornErrorCode == 5 || ex.StatusCode == HttpStatusCode.TooManyRequests;
+
+    private async Task<T> SendAndParseAsync<T>(
+        string apiKey,
+        Uri requestUrl,
+        Func<JsonElement, T> deserialize,
+        CancellationToken ct)
+    {
         requestUrl = BuildUrlWithApiKey(requestUrl, apiKey);
 
         using var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
