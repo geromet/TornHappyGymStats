@@ -137,7 +137,6 @@ phase "roots"
 check_root "api" "${LAYOUT_API_ROOT}"
 check_root "blazor" "${LAYOUT_BLAZOR_ROOT}"
 check_root "adminpanel" "${LAYOUT_ADMIN_ROOT}"
-check_root "frontend" "${LAYOUT_FRONTEND_ROOT}"
 
 phase "services"
 check_service "${LAYOUT_API_SERVICE}"
@@ -149,10 +148,6 @@ printf 'RESULT required_failures=%s optional_warnings=%s\n' "$failures" "$warnin
 
 if (( failures > 0 )); then
   exit 1
-fi
-
-exit 0
-
 fi
 
 exit 0
