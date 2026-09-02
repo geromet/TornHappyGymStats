@@ -63,6 +63,84 @@ public sealed record LiveFactionWar
     public int? Chain { get; init; }
 }
 
+public sealed record RankedWarHistoryPageResponse
+{
+    [JsonPropertyName("wars")]
+    public required IReadOnlyList<RankedWarHistoryEntry> Wars { get; init; }
+
+    [JsonPropertyName("_metadata")]
+    public RankedWarHistoryPageMetadata? Metadata { get; init; }
+}
+
+public sealed record RankedWarHistoryEntry
+{
+    [JsonPropertyName("war_id")]
+    public required long WarId { get; init; }
+
+    [JsonPropertyName("faction_id")]
+    public required long FactionId { get; init; }
+
+    [JsonPropertyName("faction_name")]
+    public required string FactionName { get; init; }
+
+    [JsonPropertyName("opponent_id")]
+    public required long OpponentId { get; init; }
+
+    [JsonPropertyName("opponent_name")]
+    public required string OpponentName { get; init; }
+
+    [JsonPropertyName("start")]
+    public required DateTimeOffset Start { get; init; }
+
+    [JsonPropertyName("end")]
+    public DateTimeOffset? End { get; init; }
+
+    [JsonPropertyName("winner_faction_id")]
+    public long? WinnerFactionId { get; init; }
+
+    [JsonPropertyName("score")]
+    public int? Score { get; init; }
+
+    [JsonPropertyName("chain")]
+    public int? Chain { get; init; }
+
+    [JsonPropertyName("opponent_score")]
+    public int? OpponentScore { get; init; }
+
+    [JsonPropertyName("opponent_chain")]
+    public int? OpponentChain { get; init; }
+
+    [JsonPropertyName("status")]
+    public string? Status { get; init; }
+}
+
+public sealed record RankedWarHistoryPageMetadata
+{
+    [JsonPropertyName("links")]
+    public RankedWarHistoryPageLinks? Links { get; init; }
+
+    [JsonPropertyName("page")]
+    public int? Page { get; init; }
+
+    [JsonPropertyName("per_page")]
+    public int? PerPage { get; init; }
+
+    [JsonPropertyName("next_cursor")]
+    public string? NextCursor { get; init; }
+
+    [JsonPropertyName("has_more")]
+    public bool HasMore { get; init; }
+}
+
+public sealed record RankedWarHistoryPageLinks
+{
+    [JsonPropertyName("next")]
+    public string? Next { get; init; }
+
+    [JsonPropertyName("prev")]
+    public string? Prev { get; init; }
+}
+
 public sealed record RankedWarReportResponse
 {
     [JsonPropertyName("war")]
@@ -91,6 +169,12 @@ public sealed record RankedWarSummary
 
     [JsonPropertyName("is_live")]
     public bool IsLive { get; init; }
+
+    [JsonPropertyName("winner_faction_id")]
+    public long? WinnerFactionId { get; init; }
+
+    [JsonPropertyName("status")]
+    public string? Status { get; init; }
 }
 
 public sealed record RankedWarFactionReport
@@ -106,6 +190,9 @@ public sealed record RankedWarFactionReport
 
     [JsonPropertyName("chain")]
     public required int Chain { get; init; }
+
+    [JsonPropertyName("attacks")]
+    public int? Attacks { get; init; }
 
     [JsonPropertyName("members")]
     public IReadOnlyList<RankedWarMemberReport> Members { get; init; } = Array.Empty<RankedWarMemberReport>();

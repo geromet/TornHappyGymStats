@@ -80,6 +80,16 @@ public sealed class TornApiClient
     public Task<LiveFactionWarsResponse> GetLiveFactionWarsAsync(string apiKey, CancellationToken ct = default)
         => GetWarAsync<LiveFactionWarsResponse>(apiKey, new Uri(TornApiBaseUri, "faction/?selections=rankedwars"), ct);
 
+    public Task<RankedWarHistoryPageResponse> GetRankedWarHistoryPageAsync(string apiKey, CancellationToken ct = default)
+        => GetRankedWarHistoryPageAsync(apiKey, new Uri(TornApiBaseUri, "v2/faction/warfareranked?selections=warfareranked"), ct);
+
+    public Task<RankedWarHistoryPageResponse> GetRankedWarHistoryPageAsync(string apiKey, Uri url, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+        var normalizedUrl = NormalizeTornApiUri(url);
+        return GetWarAsync<RankedWarHistoryPageResponse>(apiKey, normalizedUrl, ct);
+    }
+
     public Task<RankedWarReportResponse> GetRankedWarReportAsync(string apiKey, long warId, CancellationToken ct = default)
     {
         if (warId <= 0)

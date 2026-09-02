@@ -1,0 +1,47 @@
+{
+  "wars": [
+    {
+      "war_id": 48377,
+      "faction_id": 111,
+      "faction_name": "Happy Gym",
+      "opponent_id": 222,
+      "opponent_name": "Chain Breakers",
+      "start": 1731000000,
+      "end": null,
+      "winner_faction_id": null,
+      "score": 128,
+      "chain": 42,
+      "opponent_score": 111,
+      "opponent_chain": 33,
+      "status": null,
+      "unexpected_rank": 7
+    },
+    {
+      "war_id": 48360,
+      "faction_id": 555,
+      "faction_name": "Night Guard",
+      "opponent_id": 666,
+      "opponent_name": "Morning Riot",
+      "start": 1730800000,
+      "end": 1730807200,
+      "winner_faction_id": 666,
+      "score": 97,
+      "chain": 31,
+      "opponent_score": 100,
+      "opponent_chain": 34,
+      "status": "finished"
+    }
+  ],
+  "_metadata": {
+    "links": {
+      "next": "/v2/faction/warfareranked?selections=warfareranked&page=2",
+      "prev": null
+    },
+    "page": 1,
+    "per_page": 2,
+    "next_cursor": "cursor-2",
+    "has_more": true,
+    "ignored_meta": "ok"
+  },
+  "ignored_root": true
+}
