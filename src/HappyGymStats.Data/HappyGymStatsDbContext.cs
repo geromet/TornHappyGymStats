@@ -27,6 +27,8 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
     public DbSet<FactionMembershipEntity> FactionMembership => Set<FactionMembershipEntity>();
     public DbSet<UserLogEntryEntity> UserLogEntries => Set<UserLogEntryEntity>();
     public DbSet<LogTypeEntity> LogTypes => Set<LogTypeEntity>();
+    public DbSet<RankedWarHistoryEntity> RankedWarHistory => Set<RankedWarHistoryEntity>();
+    public DbSet<RankedWarReportMemberEntity> RankedWarReportMembers => Set<RankedWarReportMemberEntity>();
     public DbSet<WarCurrentEntity> WarCurrent => Set<WarCurrentEntity>();
     public DbSet<WarRosterSnapshotEntity> WarRosterSnapshots => Set<WarRosterSnapshotEntity>();
     public DbSet<WarScoreSampleEntity> WarScoreSamples => Set<WarScoreSampleEntity>();
@@ -99,6 +101,40 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
             entity.HasKey(e => e.LogTypeId);
             entity.Property(e => e.LogTypeId).ValueGeneratedNever();
             entity.Property(e => e.LogTypeTitle).IsRequired();
+        });
+
+        modelBuilder.Entity<RankedWarHistoryEntity>(entity =>
+        {
+            entity.ToTable("RankedWarHistory");
+            entity.HasKey(e => e.WarId);
+            entity.Property(e => e.WarId).ValueGeneratedNever();
+            entity.Property(e => e.FactionName).HasMaxLength(128);
+            entity.Property(e => e.OpponentFactionName).HasMaxLength(128);
+            entity.Property(e => e.Status).HasMaxLength(64);
+            entity.Property(e => e.StartedAtUtc).HasConversion(UtcDateTimeOffsetConverter);
+            entity.Property(e => e.EndedAtUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
+            entity.Property(e => e.CapturedAtUtc).HasConversion(UtcDateTimeOffsetConverter);
+            entity.Property(e => e.IngestedAtUtc).HasConversion(UtcDateTimeOffsetConverter);
+            entity.Property(e => e.ReportCapturedAtUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
+            entity.Property(e => e.ReportIngestedAtUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
+            entity.HasIndex(e => new { e.FactionId, e.StartedAtUtc });
+            entity.HasIndex(e => new { e.OpponentFactionId, e.StartedAtUtc });
+            entity.HasIndex(e => e.EndedAtUtc);
+        });
+
+        modelBuilder.Entity<RankedWarReportMemberEntity>(entity =>
+        {
+            entity.ToTable("RankedWarReportMembers");
+            entity.HasKey(e => new { e.WarId, e.FactionId, e.MemberId });
+            entity.Property(e => e.FactionName).HasMaxLength(128);
+            entity.Property(e => e.MemberName).HasMaxLength(128);
+            entity.Property(e => e.StatusState).HasMaxLength(64);
+            entity.Property(e => e.StatusUntilUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
+            entity.Property(e => e.CapturedAtUtc).HasConversion(UtcDateTimeOffsetConverter);
+            entity.Property(e => e.IngestedAtUtc).HasConversion(UtcDateTimeOffsetConverter);
+            entity.HasIndex(e => new { e.WarId, e.FactionId });
+            entity.HasIndex(e => new { e.FactionId, e.MemberId });
+            entity.HasIndex(e => e.MemberId);
         });
 
         modelBuilder.Entity<WarCurrentEntity>(entity =>
