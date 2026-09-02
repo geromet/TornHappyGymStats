@@ -369,17 +369,37 @@ blank
 # nginx accepts duplicate server_name and silently serves the FIRST matching
 # block, so a duplicate is a routing bug that never announces itself.
 if (( ROOT_OK == 1 )); then
-  # tr on spaces alone leaves tabs behind, which then count as a "duplicate".
-  dupes="$(bash -c "${SUDO} nginx -T 2>/dev/null" \
-    | grep -oE '^[[:space:]]*server_name[^;]*;' \
-    | sed 's/[[:space:]]*server_name[[:space:]]*//; s/;//' \
-    | tr '[:space:]' '\n' \
-    | grep -vE '^$|^_$' \
-    | sort | uniq -d)"
+  # A name appearing twice is NORMAL and expected: the standard pattern is one
+  # :443 block plus one :80 block that redirects to it. Only a name repeated on
+  # the SAME listen port is a real conflict, because there nginx silently serves
+  # the first block and ignores the rest.
+  #
+  # An earlier version compared names without regard to port and so flagged
+  # every correctly-configured host, including this one.
+  dupes="$(bash -c "${SUDO} nginx -T 2>/dev/null" | awk '
+    /^[[:space:]]*server[[:space:]]*\{/ { depth++; if (depth==1) { port=""; names="" } }
+    /listen[[:space:]]/ && depth>=1 {
+      line=$0
+      if (line ~ /443/) port="443"
+      else if (line ~ /[^0-9]80([^0-9]|$)/) port="80"
+    }
+    /^[[:space:]]*server_name[[:space:]]/ && depth>=1 {
+      sub(/^[[:space:]]*server_name[[:space:]]*/, "", $0); sub(/;.*/, "", $0)
+      names=$0
+    }
+    /\}/ {
+      if (depth==1 && names != "") {
+        n=split(names, a, /[[:space:]]+/)
+        for (i=1;i<=n;i++) if (a[i] != "" && a[i] != "_") print port "|" a[i]
+        names=""
+      }
+      if (depth>0) depth--
+    }
+  ' | sort | uniq -d)"
   if [[ -n "${dupes}" ]]; then
-    finding MED "duplicate nginx server_name(s) — nginx serves the first matching block and ignores the rest: $(echo "${dupes}" | tr '\n' ' ')"
+    finding MED "nginx server_name declared twice on the SAME port — the second block is dead config: $(echo "${dupes}" | tr '\n' ' ')"
   else
-    note "no duplicate server_name entries"
+    note "no server_name conflicts (a name on both :80 and :443 is the normal redirect pattern, not a conflict)"
   fi
 fi
 
