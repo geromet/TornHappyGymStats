@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# w06-chain-contract.sh — canonical verifier for M008 chain command (data/V2/handoff/06).
+# w06-chain-contract.sh — canonical verifier for M008 chain command (workspace/V2/handoff/06).
 #
 # Numbering note: the handoff calls this "w05-chain-contract.sh". w05 was already taken by
 # M007 S05's scouting verifier (the handoff's own "w04" name collided with GSD's
@@ -35,7 +35,7 @@ required_files=(
   "$BOARD_PAGE"
 )
 
-# Acceptance criteria from data/V2/handoff/06, each pinned to a named test.
+# Acceptance criteria from workspace/V2/handoff/06, each pinned to a named test.
 required_tests=(
   # task 1 — the tracker multiplier cannot disagree with the scoring engine
   "CurrentMultiplier_never_disagrees_with_ChainEngine"

@@ -1,6 +1,6 @@
 # War-command milestones (M007+)
 
-Derived from the hand-off pack in `data/V2/`. This is a fresh milestone breakdown for
+Derived from the hand-off pack in `workspace/V2/`. This is a fresh milestone breakdown for
 the work that remains after the live war board (hand-off M1) and scouting (hand-off M2)
 were built as GSD milestones M004–M006.
 
@@ -8,28 +8,29 @@ were built as GSD milestones M004–M006.
 
 - **Numbering.** GSD owns a live milestone registry using `M001`–`M006`. This document
   continues that sequence from `M007` so nothing collides. Each entry cross-references
-  the hand-off document it is based on: `→ data/V2/handoff/NN`.
-- **Authoritative source.** `data/V2/` is the current pack. `data/` (no `V2`) is a stale
-  subset — only `handoff/00-brief.md` differs, and `data/` is missing hand-off docs
-  05–11 entirely. Cite `data/V2/...` paths only.
-- **This plan does not touch GSD.** `GSD/STATE.md` / `GSD/ROADMAP.md` are the external
-  tool's state and are edited there, not here. `GSD/STATE.md` is currently stale (still
-  shows M006/S02 executing though PR #30 merged) — left as-is deliberately.
+  the hand-off document it is based on: `→ workspace/V2/handoff/NN`.
+- **Authoritative source.** `workspace/V2/` is the current pack. The older copy at
+  `workspace/handoff/` (no `V2`) is a stale subset — only `00-brief.md` differs, and it is
+  missing hand-off docs 05–11 entirely. Cite `workspace/V2/...` paths only.
+- **This plan does not touch GSD.** `STATE.md` / `ROADMAP.md` under
+  `workspace/archive/GSD/` are the external tool's state and are edited there, not here.
+  `STATE.md` is currently stale (still shows M006/S02 executing though PR #30 merged) —
+  left as-is deliberately.
 - **Two standing non-goals, every milestone below:**
   1. **No game actions, ever.** No code path in M007–M013 may issue a state-changing
      request to Torn — no auto-attack, refill, travel, or scripted click. Links are
-     plain anchors a human clicks. (`data/V2/handoff/00-brief.md`, Hard constraints.)
+     plain anchors a human clicks. (`workspace/V2/handoff/00-brief.md`, Hard constraints.)
   2. **The `Ecies` scheme must not be reused for the war key vault.** It encrypts to a
      client-held public key so the server *cannot* decrypt — useless for a key the
      server must use unattended. M009 uses envelope encryption keyed off
-     `WAR_KEY_MASTER`. (`data/V2/handoff/07-milestone-4-member-linking.md`.)
+     `WAR_KEY_MASTER`. (`workspace/V2/handoff/07-milestone-4-member-linking.md`.)
 
 ## Gates — stop-and-report points, not ordinary tasks
 
 | Gate | Milestone | Rule |
 |---|---|---|
 | Chain-endpoint lookup sweep | M008 | Run `chain` / `chainreport` / `chains` selections and record what they return **before** designing any timer UI. Decides whether the lapse timer is real or inferred. |
-| FF-formula validation | M010 | Compare `FF = min(3, 1 + (8/3)·def/att)` against FFScouter's own fair-fight figure across a full roster. If they disagree, the 0.75× targeting rule is wrong — **M010 halts** until understood. Record the outcome in `data/V2/reference/scoring-formula.md` either way. |
+| FF-formula validation | M010 | Compare `FF = min(3, 1 + (8/3)·def/att)` against FFScouter's own fair-fight figure across a full roster. If they disagree, the 0.75× targeting rule is wrong — **M010 halts** until understood. Record the outcome in `workspace/V2/reference/scoring-formula.md` either way. |
 | Gear-tracker spike | M012 | First task is a written finding, not a build. Determine whether enemy gear is obtainable through the documented API at all. A documented dead end is an acceptable, complete outcome. |
 | Backtest vs naive baseline | M013 | The harness must retrodict finished wars better than "extrapolate current score rates linearly". If it does not, **stop** and publish that. The comparison is published whether or not it is favourable. |
 
@@ -38,7 +39,7 @@ were built as GSD milestones M004–M006.
 ## M007 — Conformance sweep: close M1/M2 acceptance gaps
 
 **Why it exists.** M006 was marked COMPLETE, but a check against hand-off M1 and M2
-acceptance criteria (`data/V2/handoff/04`, `data/V2/handoff/05`) found stated
+acceptance criteria (`workspace/V2/handoff/04`, `workspace/V2/handoff/05`) found stated
 deliverables that were not built or were built differently. This milestone closes them
 before new features stack on top. Slices are independent; size is set by the findings
 below. Two findings were re-scoped once checked against the tree: S01 (lump detection
@@ -49,7 +50,7 @@ but were mis-gated) — see each slice.
 off `main` (carries this plan doc), `feat/m007-s02-…` off S01, etc. Look for completed
 slices on their branch, not `main`, until the stack is merged.
 
-### S01 — Ranked-war lump detection rework  *(→ data/V2/handoff/05)*  — DONE (branch `feat/m007-s01-lump-detection`)
+### S01 — Ranked-war lump detection rework  *(→ workspace/V2/handoff/05)*  — DONE (branch `feat/m007-s01-lump-detection`)
 
 The shipped `OpponentMemberProfile.LumpAdjustedScorePerWar` is the **median of per-war
 score** — an outlier dampener. Hand-off M2 specifies actual milestone-lump detection,
@@ -70,7 +71,7 @@ Build to the spec:
   min/max) and lump-adjusted — because "who lands crossing hits" is itself worth knowing.
 - **Fixture test:** DerDoruk's war-48377 row must be flagged, and his lump-adjusted
   score/attack must land near the faction median rather than ~3× it. Known case, known
-  right answer (`data/V2/reference/data-layer.md`, correction section).
+  right answer (`workspace/V2/reference/data-layer.md`, correction section).
 
 **As built — two deliberate deviations from a literal reading of the spec:**
 - **Tolerance is `|residual − bonus| ≤ 12% of bonus`, not literal rounding.** The
@@ -85,7 +86,7 @@ Build to the spec:
   not detected. Both choices are `const`s in `OpponentProfileEngine`, retunable. A real
   flag-rate measurement against a full roster is **deferred** (no local data) — see S05.
 
-### S02 — `TornRateLimiter`  *(→ data/V2/handoff/04, task 3; data/V2/handoff/03 "Rate limiting")*  — DONE (branch `feat/m007-s02-rate-limiter`, stacked on S01)
+### S02 — `TornRateLimiter`  *(→ workspace/V2/handoff/04, task 3; workspace/V2/handoff/03 "Rate limiting")*  — DONE (branch `feat/m007-s02-rate-limiter`, stacked on S01)
 
 `Core/Torn/TornRateLimiter` — per-key token bucket, default 80/min ceiling (below Torn's
 100), continuous fractional refill, `TimeProvider`-injected for deterministic tests.
@@ -113,7 +114,7 @@ Build to the spec:
 **Not done here:** the poll *scheduler* (5s cycle, per-linked-member `attacksfull`) —
 that's M009/M010. This slice is the limiter primitive + universal wiring only.
 
-### S03 — Open-slot holes  *(→ data/V2/handoff/04, "Definition of a hole")*  — DONE (branch `feat/m007-s03-open-slot-holes`, stacked on S02)
+### S03 — Open-slot holes  *(→ workspace/V2/handoff/04, "Definition of a hole")*  — DONE (branch `feat/m007-s03-open-slot-holes`, stacked on S02)
 
 **Premise was wrong.** `WarHoleKind.OpenTarget` already existed, was derived, mapped to
 the DTO, and asserted in two tests — the S01-planning grep (`hole|coverage|idle`) just
@@ -152,14 +153,14 @@ holes incl. 2 open slots from the side with available members), plus new focused
 open slots without our idlers, hospitalised/abroad enemy is not a slot, idle enemy *is* a
 slot, `TargetCoverageRatio` math. w03 + w04 verifiers green.
 
-### S04 — Faction-level scout profile  *(→ data/V2/handoff/05, "Faction-level profile")*  — DONE (branch `feat/m007-s04-faction-scout-profile`, stacked on S03)
+### S04 — Faction-level scout profile  *(→ workspace/V2/handoff/05, "Faction-level profile")*  — DONE (branch `feat/m007-s04-faction-scout-profile`, stacked on S03)
 
 `FactionScoutProfile` gained the faction summary the hand-off names, all computed in
 `OpponentProfileEngine.BuildFactionMetrics` from stored history + report rows:
 - **`WinRate`** + `WarsWithKnownOutcome` — wars won ÷ wars with a recorded
   `WinnerFactionId`.
 - **`TypicalTargetScore`** — the scouted faction's *own* median final score = what an
-  opponent must outscore to beat them (`data/V2/reference/data-layer.md`, "Against a 7300
+  opponent must outscore to beat them (`workspace/V2/reference/data-layer.md`, "Against a 7300
   target"). Not `max(both finals)` — a timeout win can end behind on raw points.
 - **`PointsPerHour`** (`decimal?`) — median of the scouted faction's own final score ÷
   war duration; `null` when no war carries both.
@@ -183,7 +184,7 @@ concentration, concentration-is-not-an-all-time-aggregate, roster-size median, g
 degradation) + 1 SQLite-backed `WarScoutServiceTests` proving the metrics survive the EF
 round-trip.
 
-### S05 — scouting-contract verify script  *(→ data/V2/handoff/05)*  — DONE (branch `feat/m007-s05-scouting-verify`, stacked on S04)
+### S05 — scouting-contract verify script  *(→ workspace/V2/handoff/05)*  — DONE (branch `feat/m007-s05-scouting-verify`, stacked on S04)
 
 `scripts/verify/w05-scouting-contract.sh` (the hand-off's `w04-` name collides with GSD's
 existing `w04-war-api-hub-board.sh`, so it takes the next w-number; **chain's verifier
@@ -203,7 +204,7 @@ exists (expect a low single-digit % of `(member, war)` rows flagged).
 
 ---
 
-## M008 — Chain command  *(→ data/V2/handoff/06)*
+## M008 — Chain command  *(→ workspace/V2/handoff/06)*
 
 Live chain tracking with milestone countdown and **crossing-hit reservation**, chain
 watchers, and a filler-target policy. This is early on purpose: the chain multiplier
@@ -214,7 +215,7 @@ no third-party data.
 - **S01 — chain-endpoint lookup sweep (GATE).** — **BLOCKED ON USER.** Needs a live
   Limited key + network to `api.torn.com`, which this environment doesn't have. Run the
   `chain`, `chainreport`, `chains` selections against `/v2/faction/lookup`, paste what
-  each returns, and it gets recorded in `data/V2/reference/data-layer.md`. Until then S03
+  each returns, and it gets recorded in `workspace/V2/reference/data-layer.md`. Until then S03
   (timer source) cannot start; S02/S04–S08 do not depend on it.
 - **S02 — `ChainTracker` in `Core/War`.** — DONE (branch `feat/m008-s02-chain-tracker`,
   off the M007 stack). Pure `static ChainTracker.Evaluate(chainLength,
@@ -244,7 +245,7 @@ no third-party data.
   chain). Never a confident full timer. The board renders "~mm:ss ago (±Ns)", not a
   ticking clock. Chain command is derived for **our faction only** (the poller stamps
   each sample with its own faction id) — the enemy card shows no orders and no alert.
-  - **4th unverified assumption.** `data/V2/handoff/00-brief.md`'s ledger names three
+  - **4th unverified assumption.** `workspace/V2/handoff/00-brief.md`'s ledger names three
     unknowns (FF formula, hospital duration, energy model). `ChainLapseInference`
     `.TornChainLapseTimeoutSeconds = 300` adds a fourth, *not* pre-blessed by the brief.
     Named const + comment pointing at the ledger + a loud test
@@ -301,13 +302,13 @@ Out of scope: target *selection* among eligible targets — that is M010.
 
 ---
 
-## M009 — Member linking and the key vault  *(→ data/V2/handoff/07)*
+## M009 — Member linking and the key vault  *(→ workspace/V2/handoff/07)*
 
 Identity, consent, secrets, and the tier-1 data they unlock (`/v2/user/bars`,
 `/v2/user/cooldowns`, `/v2/user/attacksfull`). Has a **compliance gate before any code
 ships**.
 
-- **S01 — compliance gate.** `docs/TORN-API-TOS.md` in the repo **and live on the site**;
+- **S01 — compliance gate.** `docs/torn-api/terms-of-service.md` in the repo **and live on the site**;
   active, timestamped, versioned member consent recorded **before the first key row is
   written**. `ConsentRecordEntity` (`PlayerId`, `DocumentVersion`, `AcceptedAtUtc`,
   `Purpose`) + migration. Storing a key while the published disclosure says keys are not
@@ -339,7 +340,7 @@ ships**.
 
 ---
 
-## M010 — Targeting, λ*, and hit calling  *(→ data/V2/handoff/08)*
+## M010 — Targeting, λ*, and hit calling  *(→ workspace/V2/handoff/08)*
 
 The assignment engine the project is named for. Fifth on purpose — it depends on
 FFScouter and on the still-unverified fair-fight formula.
@@ -349,7 +350,7 @@ FFScouter and on the still-unverified fair-fight formula.
   Refresh at the cache boundary, not per poll.
 - **S02 — FF-formula validation (GATE).** Compare the formula against FFScouter's own
   fair-fight figure across a full roster. Disagreement halts the milestone. Outcome
-  recorded in `data/V2/reference/scoring-formula.md` regardless.
+  recorded in `workspace/V2/reference/scoring-formula.md` regardless.
 - **S03 — `TargetScorer` in `Core/War`.** Pure. Implements `g_ij` and the rule directly:
   **assign the weakest enemy whose stats are ≥ 0.75× the attacker's; if none clears it,
   take the strongest available.** Carries provenance (exact vs estimated stats) through
@@ -383,7 +384,7 @@ FFScouter and on the still-unverified fair-fight formula.
 
 ---
 
-## M011 — The userscript  *(→ data/V2/handoff/09)*
+## M011 — The userscript  *(→ workspace/V2/handoff/09)*
 
 A thin Tampermonkey / TornPDA userscript overlaying the board's output onto Torn's own
 pages. **Thin is the design** — all state, maths, and persistence stay server-side; two
@@ -410,7 +411,7 @@ implementations of the scoring formula will drift and one will be wrong during a
 - **S08 — "Torn — War Roster Tools" v5.1.0 inventory and selective port.** Inventory
   every feature first; anything the server can compute moves server-side; anything that
   needed scraping or an undocumented endpoint is **dropped** and recorded as an open
-  question in `data/V2/reference/data-layer.md`. Do not port as-is.
+  question in `workspace/V2/reference/data-layer.md`. Do not port as-is.
 - **S09 — version check** against the server's minimum supported version on connect.
 
 Acceptance: works in Tampermonkey **and** TornPDA; survives React re-renders; makes
@@ -419,7 +420,7 @@ no token/key in the console at any level.
 
 ---
 
-## M012 — Comms, timeline, and the strategy map  *(→ data/V2/handoff/10)*
+## M012 — Comms, timeline, and the strategy map  *(→ workspace/V2/handoff/10)*
 
 The leadership layer. Built on the existing hub — no new transport, no third-party
 service.
@@ -452,7 +453,7 @@ service.
   (premium, 100/min, single-target) is a cross-check for members already `Traveling` /
   `Abroad` only.
 - **S09 — gear-tracker spike (GATE).** Written finding into
-  `data/V2/reference/data-layer.md`: is enemy gear obtainable through the documented API
+  `workspace/V2/reference/data-layer.md`: is enemy gear obtainable through the documented API
   at all? If only by scraping an attack-log page, it is **out of scope** and that is
   stated plainly — a feature that cannot be built within the constraints is a finding,
   not a failure.
@@ -460,7 +461,7 @@ service.
 
 ---
 
-## M013 — The Investigator  *(→ data/V2/handoff/11)*
+## M013 — The Investigator  *(→ workspace/V2/handoff/11)*
 
 A backend service that proposes **strategies**, simulates each forward, and lets planners
 compare them. The most speculative part of the project — do not start it until M008 and
@@ -513,7 +514,7 @@ holding them at position 7.
 
 Everything else keeps the pack's ordering. Its two load-bearing sequencing arguments —
 chain (M008) before targeting (M010), and the M013 gate — are backed by numbers, and
-`data/V2/handoff/00-brief.md` says not to override them.
+`workspace/V2/handoff/00-brief.md` says not to override them.
 
 ---
 

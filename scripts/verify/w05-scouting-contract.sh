@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # w05-scouting-contract.sh — canonical verifier for the ranked-war scouting slice
-# (GSD milestone M006; data/V2/handoff/05-milestone-2-scouting.md).
+# (GSD milestone M006; workspace/V2/handoff/05-milestone-2-scouting.md).
 #
 # Pins the hand-off's acceptance criteria:
 #   - backfill is resumable and idempotent

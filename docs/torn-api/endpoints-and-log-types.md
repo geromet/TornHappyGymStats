@@ -227,4 +227,4 @@ sudo journalctl -u happygymstats-api -n 200 --no-pager
 - `src/HappyGymStats.Core/Fetch/PerkLogTypes.cs`
 - `src/HappyGymStats.Core/Reconstruction/LogEventExtractor.cs`
 - `src/HappyGymStats.Core/Reconstruction/ReconstructionRunner.cs`
-- `docs/TORN-API-TOS.md`
+- `docs/torn-api/terms-of-service.md`

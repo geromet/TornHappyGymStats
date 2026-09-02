@@ -4,11 +4,11 @@ setlocal ENABLEDELAYEDEXPANSION
 REM Fetch Torn log samples for selected underused log types into a SINGLE redacted JSON file.
 REM Usage:
 REM   scripts\helpers\fetch-underused-log-samples.bat
-REM   scripts\helpers\fetch-underused-log-samples.bat --api-key your_key --limit 100 --out .\torn-log-samples.json
+REM   scripts\helpers\fetch-underused-log-samples.bat --api-key your_key --limit 100 --out .\workspace\archive\torn-log-samples.json
 
 set "API_KEY="
 set "LIMIT=100"
-set "OUT_FILE=.\torn-log-samples.json"
+set "OUT_FILE=.\workspace\archive\torn-log-samples.json"
 set "BASE_URL=https://api.torn.com/v2/user/log"
 
 :parse_args
@@ -123,5 +123,5 @@ goto :eof
 :usage
 echo Usage:
 echo   scripts\helpers\fetch-underused-log-samples.bat
-echo   scripts\helpers\fetch-underused-log-samples.bat [--api-key key] [--limit 100] [--out .\torn-log-samples.json]
+echo   scripts\helpers\fetch-underused-log-samples.bat [--api-key key] [--limit 100] [--out .\workspace\archive\torn-log-samples.json]
 exit /b 2

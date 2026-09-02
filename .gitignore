@@ -11,6 +11,7 @@ dist/
 TestResults/
 
 ## Runtime/local data (never commit)
+/workspace/
 data/
 *.db
 *.db-shm
