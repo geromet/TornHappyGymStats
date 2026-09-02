@@ -55,6 +55,9 @@ tmp/
 .gsd/
 .gsd
 .gsd-id
+GSD/
+GSD-BACKUPS/
+ARTIFACTS/
 
 ## MCP local config
 .mcp.json
