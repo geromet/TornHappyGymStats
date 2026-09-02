@@ -1,5 +1,10 @@
-namespace HappyGymStats.Blazor.Models;
+namespace HappyGymStats.Core.Models;
 
+/// <summary>
+/// Surfaces-cache read models consumed by the Blazor frontend (single definition).
+/// The cache payload itself is written by <c>SurfacesCacheWriter</c>; these records
+/// cover the subset the frontend renders (extra JSON fields are ignored on read).
+/// </summary>
 public sealed record SurfacesDatasetDto(
     string Dataset,
     string Version,
@@ -37,13 +42,3 @@ public sealed record MyStatsSeriesDto(
 public sealed record MyStatsMetaDto(
     int GymPointCount,
     int RecordCount);
-
-public sealed record ImportStatusDto(
-    string Id,
-    string Outcome,
-    DateTimeOffset StartedAtUtc,
-    DateTimeOffset? CompletedAtUtc,
-    int PagesFetched,
-    long LogsFetched,
-    long LogsAppended,
-    string? ErrorMessage);

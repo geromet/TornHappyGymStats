@@ -4,6 +4,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using HappyGymStats.Api;
 using HappyGymStats.Api.Models;
+using HappyGymStats.Core.Models;
 using HappyGymStats.Data;
 using HappyGymStats.Data.Entities;
 using Microsoft.AspNetCore.Authentication;

@@ -1,4 +1,5 @@
 using HappyGymStats.Api.Models;
+using HappyGymStats.Core.Models;
 using HappyGymStats.Core.War;
 using Microsoft.AspNetCore.SignalR;
 
