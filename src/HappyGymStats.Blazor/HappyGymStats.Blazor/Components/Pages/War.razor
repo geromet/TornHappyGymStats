@@ -45,9 +45,18 @@
             <MudItem xs="12" md="3">
                 <MudCard Class="war-summary-card">
                     <MudCardContent>
-                        <MudText Typo="Typo.overline">Coverage ratio</MudText>
+                        <MudText Typo="Typo.overline">Participation</MudText>
                         <MudText Typo="Typo.h5">@FormatPercent(state.CoverageRatio)</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">@state.MemberCount fighters across @state.FactionCount rosters</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Available members who are swinging</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudCard Class="war-summary-card">
+                    <MudCardContent>
+                        <MudText Typo="Typo.overline">Open targets</MudText>
+                        <MudText Typo="Typo.h5">@state.OpenTargetCount</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Attackable enemy slots on the board</MudText>
                     </MudCardContent>
                 </MudCard>
             </MudItem>
@@ -112,8 +121,12 @@
                                             <MudText Typo="Typo.body1">@FormatAttacksToFinish(faction.AttacksToFinish)</MudText>
                                         </MudItem>
                                         <MudItem xs="6">
-                                            <MudText Typo="Typo.overline">Coverage ratio</MudText>
+                                            <MudText Typo="Typo.overline">Participation</MudText>
                                             <MudText Typo="Typo.body1">@FormatPercent(faction.CoverageRatio)</MudText>
+                                        </MudItem>
+                                        <MudItem xs="6">
+                                            <MudText Typo="Typo.overline">Coverage ratio</MudText>
+                                            <MudText Typo="Typo.body1">@faction.OpenTargetCount open · @FormatPercent(faction.TargetCoverageRatio) of available attackers</MudText>
                                         </MudItem>
                                         <MudItem xs="6">
                                             <MudText Typo="Typo.overline">Availability</MudText>

@@ -37,7 +37,15 @@ public sealed record WarDerivedState
     public DateTimeOffset? HeartbeatStaleAfterUtc { get; init; }
     public bool IsHeartbeatStale { get; init; }
     public string? HeartbeatLastError { get; init; }
+
+    /// <summary>Roster participation: fraction of available members who are actually swinging
+    /// (available minus idle, over available). Not the hand-off's "coverage ratio" - see
+    /// <see cref="WarDerivedFactionState.TargetCoverageRatio"/> for that.</summary>
     public decimal CoverageRatio { get; init; }
+
+    /// <summary>Total attackable opponent targets across both factions - the board's "open slots".</summary>
+    public int OpenTargetCount { get; init; }
+
     public IReadOnlyList<WarDerivedFactionState> Factions { get; init; } = [];
     public IReadOnlyList<WarHoleRecord> Holes { get; init; } = [];
     public IReadOnlyList<string> Warnings { get; init; } = [];
@@ -54,7 +62,22 @@ public sealed record WarDerivedFactionState
     public int AvailableMemberCount { get; init; }
     public int HospitalizedMemberCount { get; init; }
     public int UnavailableMemberCount { get; init; }
+
+    /// <summary>Roster participation for this faction: (available - idle) / available.</summary>
     public decimal CoverageRatio { get; init; }
+
+    /// <summary>Attackable members of the opposing faction - open slots this faction can hit.</summary>
+    public int OpenTargetCount { get; init; }
+
+    /// <summary>
+    /// The hand-off's coverage ratio (<c>data/V2/handoff/04</c>): attackable opponent targets over
+    /// this faction's available attackers. <c>0</c> when the faction has no available attacker (it
+    /// can cover nothing). <b>Proxy</b> - the denominator should be "members with energy", which
+    /// needs tier-1 key data (M009); until then it is the available-member count, so a faction whose
+    /// available members are all idle still reads as fully covered.
+    /// </summary>
+    public decimal TargetCoverageRatio { get; init; }
+
     public WarScoreRateWindow ScoreRate { get; init; } = new();
     public WarEtaEstimate Eta { get; init; } = new();
     public WarAttacksToFinishEstimate AttacksToFinish { get; init; } = new();

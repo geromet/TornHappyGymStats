@@ -20,6 +20,9 @@ fi
 echo "==> verify: no raw player-id log templates"
 bash scripts/verify/no-raw-playerid-log-templates.sh
 
+echo "==> verify: ranked-war scouting contract (w05)"
+bash scripts/verify/w05-scouting-contract.sh
+
 echo "==> dotnet build"
 dotnet build
 

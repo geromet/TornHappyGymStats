@@ -26,6 +26,13 @@ public sealed class ChainEngine(double a = ChainEngine.DefaultA, double b = Chai
 
     public static readonly int[] Milestones = BonusTable.Select(x => x.Milestone).ToArray();
 
+    /// <summary>
+    /// The one-off point bonus credited to whoever lands each milestone-crossing hit
+    /// (10, 20, 40, 80, 160, 320, 640, ...). Used by opponent scouting to detect wars whose
+    /// score was inflated by a chain-milestone lump rather than sustained hitting.
+    /// </summary>
+    public static readonly int[] MilestoneBonuses = BonusTable.Select(x => x.Bonus).ToArray();
+
     private static readonly int[] _bonusPrefix;
 
     static ChainEngine()

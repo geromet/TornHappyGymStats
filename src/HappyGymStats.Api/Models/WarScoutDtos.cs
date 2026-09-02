@@ -10,6 +10,14 @@ public sealed record FactionScoutDto(
     DateTimeOffset? LatestWarStartedAtUtc,
     int ActiveMemberCount,
     int IdleProneMemberCount,
+    decimal MedianScorePerAttack,
+    decimal WinRate,
+    int WarsWithKnownOutcome,
+    int TypicalTargetScore,
+    decimal? PointsPerHour,
+    int TypicalRosterSize,
+    decimal Top5ScoreShare,
+    decimal Top10ScoreShare,
     IReadOnlyList<OpponentMemberProfileDto> Members);
 
 public sealed record OpponentMemberProfileDto(
@@ -19,7 +27,10 @@ public sealed record OpponentMemberProfileDto(
     int TotalAttacks,
     int TotalScore,
     decimal AverageScorePerAttack,
+    decimal LumpAdjustedScorePerAttack,
+    decimal RawMedianScorePerWar,
     decimal LumpAdjustedScorePerWar,
+    int LumpWarCount,
     int MaxScoreInAWar,
     int MinScoreInAWar,
     decimal ParticipationRate,
@@ -39,6 +50,14 @@ public static class WarScoutDtoMapper
             LatestWarStartedAtUtc: profile.LatestWarStartedAtUtc,
             ActiveMemberCount: profile.ActiveMemberCount,
             IdleProneMemberCount: profile.IdleProneMemberCount,
+            MedianScorePerAttack: profile.MedianScorePerAttack,
+            WinRate: profile.WinRate,
+            WarsWithKnownOutcome: profile.WarsWithKnownOutcome,
+            TypicalTargetScore: profile.TypicalTargetScore,
+            PointsPerHour: profile.PointsPerHour,
+            TypicalRosterSize: profile.TypicalRosterSize,
+            Top5ScoreShare: profile.Top5ScoreShare,
+            Top10ScoreShare: profile.Top10ScoreShare,
             Members: profile.Members.Select(ToMemberDto).ToArray());
 
     private static OpponentMemberProfileDto ToMemberDto(OpponentMemberProfile member)
@@ -49,7 +68,10 @@ public static class WarScoutDtoMapper
             TotalAttacks: member.TotalAttacks,
             TotalScore: member.TotalScore,
             AverageScorePerAttack: member.AverageScorePerAttack,
+            LumpAdjustedScorePerAttack: member.LumpAdjustedScorePerAttack,
+            RawMedianScorePerWar: member.RawMedianScorePerWar,
             LumpAdjustedScorePerWar: member.LumpAdjustedScorePerWar,
+            LumpWarCount: member.LumpWarCount,
             MaxScoreInAWar: member.MaxScoreInAWar,
             MinScoreInAWar: member.MinScoreInAWar,
             ParticipationRate: member.ParticipationRate,

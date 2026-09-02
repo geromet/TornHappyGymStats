@@ -76,6 +76,58 @@ public sealed class WarScoutServiceTests
             () => scope.Service.GetProfileAsync(0, CancellationToken.None));
     }
 
+    [Fact]
+    public async Task GetProfileAsync_surfaces_faction_level_record_pace_and_concentration_through_the_repository()
+    {
+        await using var scope = await TestScope.CreateAsync();
+
+        // Two decided wars with finals and durations; the scouted faction won war 1, lost war 2.
+        scope.Db.RankedWarHistory.AddRange(
+            FullWar(warId: 1, factionId: ScoutedFactionId, opponentFactionId: OtherFactionId,
+                factionScore: 6000, opponentScore: 4000, winnerFactionId: ScoutedFactionId, durationHours: 6),
+            FullWar(warId: 2, factionId: OtherFactionId, opponentFactionId: ScoutedFactionId,
+                factionScore: 5000, opponentScore: 3000, winnerFactionId: OtherFactionId, durationHours: 5));
+        scope.Db.RankedWarReportMembers.AddRange(
+            Member(1, ScoutedFactionId, 9001, "Ace", score: 5000, attacks: 50),
+            Member(1, ScoutedFactionId, 9002, "Filler", score: 1000, attacks: 40),
+            Member(2, ScoutedFactionId, 9001, "Ace", score: 2000, attacks: 30),
+            Member(2, ScoutedFactionId, 9002, "Filler", score: 1000, attacks: 30));
+        await scope.Db.SaveChangesAsync();
+
+        var profile = await scope.Service.GetProfileAsync(ScoutedFactionId, CancellationToken.None);
+
+        Assert.NotNull(profile);
+        Assert.Equal(2, profile!.WarsWithKnownOutcome);
+        Assert.Equal(0.5m, profile.WinRate);
+        Assert.Equal(4500, profile.TypicalTargetScore);          // scouted faction's own finals [6000, 3000] -> median 4500
+        Assert.Equal(800m, profile.PointsPerHour);                // scouted score/duration: war1 6000/6=1000, war2 3000/5=600 -> median 800
+        Assert.Equal(1m, profile.Top5ScoreShare);                 // only two scorers, both in the top five
+    }
+
+    private static RankedWarHistoryEntity FullWar(
+        long warId, long factionId, long opponentFactionId,
+        int factionScore, int opponentScore, long winnerFactionId, double durationHours)
+    {
+        var start = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero).AddDays(warId);
+        return new RankedWarHistoryEntity
+        {
+            WarId = warId,
+            FactionId = factionId,
+            FactionName = "Chain Breakers",
+            OpponentFactionId = opponentFactionId,
+            OpponentFactionName = "Opponent",
+            StartedAtUtc = start,
+            EndedAtUtc = start.AddHours(durationHours),
+            WinnerFactionId = winnerFactionId,
+            FactionScore = factionScore,
+            OpponentScore = opponentScore,
+            CapturedAtUtc = DateTimeOffset.UtcNow,
+            IngestedAtUtc = DateTimeOffset.UtcNow,
+            ReportCapturedAtUtc = DateTimeOffset.UtcNow,
+            ReportIngestedAtUtc = DateTimeOffset.UtcNow,
+        };
+    }
+
     private static async Task SeedCapturedWarAsync(
         HappyGymStatsDbContext db,
         long warId,
