@@ -2,13 +2,14 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using HappyGymStats.Blazor.Models;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
 
 namespace HappyGymStats.Blazor.Services;
 
 public sealed class WarBoardService(
     HttpClient http,
-    IHttpContextAccessor httpContextAccessor,
+    IServerAccessTokenProvider accessTokenProvider,
     ILogger<WarBoardService> logger) : IAsyncDisposable
 {
     private const string CurrentEndpoint = "/api/v1/war/current";
@@ -104,6 +105,7 @@ public sealed class WarBoardService(
         HttpResponseMessage response;
         try
         {
+            await ApplyAccessTokenAsync();
             response = await http.GetAsync(CurrentEndpoint, ct);
         }
         catch (HttpRequestException ex)
@@ -161,13 +163,7 @@ public sealed class WarBoardService(
             ConnectionState = hubConnection.State.ToString().ToLowerInvariant();
             await hubConnection.InvokeAsync(HubRequestMethod, ct);
         }
-        catch (HttpRequestException ex)
-        {
-            ConnectionError = $"Hub connection failed: {ex.Message}";
-            ConnectionState = "disconnected";
-            logger.LogWarning(ex, "War board hub connect failed for {Endpoint}", HubEndpoint);
-        }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (ex is HttpRequestException or HubException or InvalidOperationException or TimeoutException or OperationCanceledException)
         {
             ConnectionError = $"Hub connection failed: {ex.Message}";
             ConnectionState = "disconnected";
@@ -233,15 +229,15 @@ public sealed class WarBoardService(
         NotifyStateChanged();
     }
 
-    private async Task<string?> GetAccessTokenAsync()
-    {
-        var httpContext = httpContextAccessor.HttpContext;
-        if (httpContext is null)
-        {
-            return null;
-        }
+    private Task<string?> GetAccessTokenAsync() => accessTokenProvider.GetAccessTokenAsync();
 
-        return await httpContext.GetTokenAsync("access_token");
+    private async Task ApplyAccessTokenAsync()
+    {
+        var accessToken = await GetAccessTokenAsync();
+        if (!string.IsNullOrWhiteSpace(accessToken))
+        {
+            http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        }
     }
 
     private static bool ContainsOperationalWarning(IReadOnlyList<string>? warnings)
@@ -267,18 +263,14 @@ public sealed class WarBoardService(
     private void NotifyStateChanged() => StateChanged?.Invoke();
 }
 
-internal sealed class AccessTokenForwardingHandler(IHttpContextAccessor httpContextAccessor) : DelegatingHandler
+internal sealed class AccessTokenForwardingHandler(IServerAccessTokenProvider accessTokenProvider) : DelegatingHandler
 {
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        var httpContext = httpContextAccessor.HttpContext;
-        if (httpContext is not null)
+        var accessToken = await accessTokenProvider.GetAccessTokenAsync();
+        if (!string.IsNullOrWhiteSpace(accessToken))
         {
-            var accessToken = await httpContext.GetTokenAsync("access_token");
-            if (!string.IsNullOrWhiteSpace(accessToken))
-            {
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-            }
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         }
 
         return await base.SendAsync(request, cancellationToken);

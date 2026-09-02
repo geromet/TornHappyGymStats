@@ -3,6 +3,7 @@ using HappyGymStats.Blazor.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using HappyGymStats.Identity.Authentication;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.AspNetCore.HttpOverrides;
 using System.Net;
@@ -17,6 +18,7 @@ builder.Services.AddRazorComponents()
 builder.Services.AddMudServices();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IServerAccessTokenProvider, ServerAccessTokenProvider>();
 builder.Services.AddTransient<AccessTokenForwardingHandler>();
 
 // Policy scaffold for future RBAC rollout.
@@ -26,63 +28,55 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("RequireRole", policy => policy.RequireRole("hgs-user"));
 });
 
-var keycloakSection = builder.Configuration.GetSection("Keycloak");
-var keycloakAuthority = keycloakSection["Authority"]
-    ?? throw new InvalidOperationException("Missing required configuration key: Keycloak:Authority");
-var keycloakClientId = keycloakSection["ClientId"]
-    ?? throw new InvalidOperationException("Missing required configuration key: Keycloak:ClientId");
-var keycloakClientSecret = keycloakSection["ClientSecret"];
+var developmentAuthEnabled = DevelopmentAuthenticationExtensions.IsEnabled(builder.Configuration);
+if (developmentAuthEnabled)
+{
+    DevelopmentAuthenticationExtensions.ValidateCanEnable(builder.Environment);
+    builder.Services.AddDevelopmentHeaderAuthentication();
+}
+else
+{
+    var keycloakSection = builder.Configuration.GetSection("Keycloak");
+    var keycloakAuthority = keycloakSection["Authority"]
+        ?? throw new InvalidOperationException("Missing required configuration key: Keycloak:Authority");
+    var keycloakClientId = keycloakSection["ClientId"]
+        ?? throw new InvalidOperationException("Missing required configuration key: Keycloak:ClientId");
+    var keycloakClientSecret = keycloakSection["ClientSecret"];
 
-builder.Services
-    .AddAuthentication(options =>
-    {
-        options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
-    })
-    .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
-    {
-        options.Cookie.Name = "hgs_auth";
-        options.LoginPath = "/auth/login";
-        options.LogoutPath = "/auth/logout";
-    })
-    .AddOpenIdConnect(OpenIdConnectDefaults.AuthenticationScheme, options =>
-    {
-        options.Authority = keycloakAuthority.TrimEnd('/');
-        options.ClientId = keycloakClientId;
-        options.ClientSecret = string.IsNullOrWhiteSpace(keycloakClientSecret) ? null : keycloakClientSecret;
-        options.ResponseType = OpenIdConnectResponseType.Code;
-        options.UsePkce = true;
-        options.SaveTokens = true;
-        options.GetClaimsFromUserInfoEndpoint = true;
-
-        options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
-        options.MapInboundClaims = false;
-
-        options.Scope.Clear();
-        options.Scope.Add("openid");
-        options.Scope.Add("profile");
-        options.Scope.Add("email");
-
-        options.TokenValidationParameters.NameClaimType = "preferred_username";
-        options.TokenValidationParameters.RoleClaimType = "roles";
-
-        options.CallbackPath = "/signin-oidc";
-        options.SignedOutCallbackPath = "/signout-callback-oidc";
-        options.SignedOutRedirectUri = "/";
-        options.Events.OnRemoteFailure = context =>
+    builder.Services
+        .AddAuthentication(options =>
         {
-            context.HandleResponse();
-            var error = Uri.EscapeDataString(context.Failure?.Message ?? "Authentication error");
-            context.Response.Redirect($"/login?authError={error}");
-            return Task.CompletedTask;
-        };
-    });
+            options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+            options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
+        })
+        .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
+        {
+            options.LoginPath = "/login";
+            options.AccessDeniedPath = "/login";
+        })
+        .AddOpenIdConnect(OpenIdConnectDefaults.AuthenticationScheme, options =>
+        {
+            options.Authority = keycloakAuthority;
+            options.ClientId = keycloakClientId;
+            options.ClientSecret = keycloakClientSecret;
+            options.ResponseType = OpenIdConnectResponseType.Code;
+            options.SaveTokens = true;
+            options.GetClaimsFromUserInfoEndpoint = true;
+            options.RequireHttpsMetadata = true;
+            options.Scope.Clear();
+            options.Scope.Add("openid");
+            options.Scope.Add("profile");
+            options.Scope.Add("email");
+            options.Scope.Add("roles");
+            options.TokenValidationParameters.NameClaimType = "preferred_username";
+            options.TokenValidationParameters.RoleClaimType = "roles";
+        });
+}
 
-var apiBaseUrl = builder.Configuration["ApiBaseUrl"]
-    ?? throw new InvalidOperationException("Missing required configuration key: ApiBaseUrl");
-
-// Server-side Blazor executes this HttpClient on the app host, not in the browser.
 // In production we intentionally target API loopback (127.0.0.1:5047) to avoid external proxy/CDN hops.
+var apiBaseUrl = builder.Configuration["ApiBaseUrl"]
+    ?? throw new InvalidOperationException("Missing required configuration key: ApiBaseUrl.");
+
 builder.Services.AddHttpClient<SurfacesService>(client =>
     client.BaseAddress = new Uri(apiBaseUrl));
 
@@ -101,6 +95,11 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 var app = builder.Build();
+
+if (developmentAuthEnabled)
+{
+    app.Logger.LogWarning("Development authentication bypass is ENABLED. This host must never handle production traffic.");
+}
 
 if (app.Environment.IsDevelopment())
     app.UseWebAssemblyDebugging();

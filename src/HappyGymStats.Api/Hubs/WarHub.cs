@@ -9,8 +9,9 @@ namespace HappyGymStats.Api.Hubs;
 [Authorize(Roles = Roles.User)]
 public sealed class WarHub(WarDerivedStateService warDerivedStateService) : Hub
 {
-    public async Task RequestCurrentState(CancellationToken ct = default)
+    public async Task RequestCurrentState()
     {
+        var ct = Context.ConnectionAborted;
         var dto = (await warDerivedStateService.GetCurrentAsync(WarHubBroadcaster.ScopeKey, ct: ct)).ToStateDto();
         await Clients.Caller.SendAsync(WarHubBroadcaster.EventName, dto, ct);
     }

@@ -4,9 +4,9 @@ using System;
 using System.Net;
 using System.Net.Http;
 using System.Text;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using ApiFailureCategory = blazor::HappyGymStats.Blazor.Services.ApiFailureCategory;
+using IServerAccessTokenProvider = blazor::HappyGymStats.Blazor.Services.IServerAccessTokenProvider;
 using WarBoardService = blazor::HappyGymStats.Blazor.Services.WarBoardService;
 using Xunit;
 
@@ -18,7 +18,7 @@ public sealed class WarBoardServiceTests
     public async Task Refresh_classifies_service_unavailable_bootstrap_failures()
     {
         using var http = CreateHttpClient(_ => throw new HttpRequestException("boom"));
-        await using var sut = new WarBoardService(http, new HttpContextAccessor(), NullLogger<WarBoardService>.Instance);
+        await using var sut = new WarBoardService(http, new TestAccessTokenProvider(), NullLogger<WarBoardService>.Instance);
 
         await sut.RefreshAsync();
 
@@ -31,7 +31,7 @@ public sealed class WarBoardServiceTests
     public async Task Refresh_classifies_unauthorized_bootstrap_responses()
     {
         using var http = CreateHttpClient(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized));
-        await using var sut = new WarBoardService(http, new HttpContextAccessor(), NullLogger<WarBoardService>.Instance);
+        await using var sut = new WarBoardService(http, new TestAccessTokenProvider(), NullLogger<WarBoardService>.Instance);
 
         await sut.RefreshAsync();
 
@@ -46,7 +46,7 @@ public sealed class WarBoardServiceTests
         {
             Content = new StringContent("{ not-json }", Encoding.UTF8, "application/json")
         });
-        await using var sut = new WarBoardService(http, new HttpContextAccessor(), NullLogger<WarBoardService>.Instance);
+        await using var sut = new WarBoardService(http, new TestAccessTokenProvider(), NullLogger<WarBoardService>.Instance);
 
         await sut.RefreshAsync();
 
@@ -68,4 +68,9 @@ public sealed class WarBoardServiceTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             => Task.FromResult(callback(request));
     }
+}
+
+internal sealed class TestAccessTokenProvider(string? accessToken = null) : IServerAccessTokenProvider
+{
+    public Task<string?> GetAccessTokenAsync() => Task.FromResult(accessToken);
 }

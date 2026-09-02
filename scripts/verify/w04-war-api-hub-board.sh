@@ -138,7 +138,7 @@ run_cmd "WarBoardStaticContractTests" dotnet test "$TEST_PROJECT" --nologo --fil
 run_cmd "WarFinalAssemblyGuardrailTests" dotnet test "$TEST_PROJECT" --nologo --filter FullyQualifiedName~WarFinalAssemblyGuardrailTests
 run_cmd "dotnet build HappyGymStats.sln" dotnet build "$SOLUTION_FILE" --nologo
 
-require_literal 'builder.Services.AddSignalR();' "$API_PROGRAM" 'SignalR registered in HappyGymStats.Api'
+require_literal 'builder.Services.AddSignalR(options =>' "$API_PROGRAM" 'SignalR registered in HappyGymStats.Api'
 require_literal 'app.MapHub<WarHub>("/api/hub/war");' "$API_PROGRAM" 'War hub mapped at /api/hub/war'
 require_literal 'location /api/hub/war {' "$NGINX_CONF" 'Dedicated nginx /api/hub/war location present'
 check_hub_route_order

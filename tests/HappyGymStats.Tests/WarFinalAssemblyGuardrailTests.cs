@@ -12,7 +12,8 @@ public sealed class WarFinalAssemblyGuardrailTests
     {
         var content = ReadRepoFile("src/HappyGymStats.Api/Program.cs");
 
-        Assert.Contains("builder.Services.AddSignalR();", content, StringComparison.Ordinal);
+        Assert.Contains("builder.Services.AddSignalR(options =>", content, StringComparison.Ordinal);
+        Assert.Contains("builder.Services.AddScoped<IWarHubBroadcaster, WarHubBroadcaster>();", content, StringComparison.Ordinal);
         Assert.Contains("app.MapHub<WarHub>(\"/api/hub/war\");", content, StringComparison.Ordinal);
     }
 

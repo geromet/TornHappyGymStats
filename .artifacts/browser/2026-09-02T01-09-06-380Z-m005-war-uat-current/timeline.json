@@ -1,0 +1,26 @@
+{
+  "entries": [
+    {
+      "id": 1,
+      "tool": "browser_navigate",
+      "status": "success",
+      "durationMs": 5646,
+      "beforeUrl": "about:blank",
+      "afterUrl": "http://127.0.0.1:5137/war",
+      "line": "#1 | browser_navigate | success | 5646ms | url=\"http://127.0.0.1:5137/war\", screenshot=true | URL changed to http://127.0.0.1:5137/war; title changed to War board · Happy Gym Stats; landmarks 0→4; buttons 0→5"
+    },
+    {
+      "id": 2,
+      "tool": "browser_navigate",
+      "status": "success",
+      "durationMs": 4433,
+      "beforeUrl": "http://127.0.0.1:5137/war",
+      "afterUrl": "http://127.0.0.1:5137/war",
+      "line": "#2 | browser_navigate | success | 4433ms | url=\"http://127.0.0.1:5137/war\", screenshot=true | visible text changed"
+    }
+  ],
+  "retained": 2,
+  "totalRecorded": 2,
+  "bounded": false,
+  "summary": "Timeline: 2 browser actions recorded."
+}

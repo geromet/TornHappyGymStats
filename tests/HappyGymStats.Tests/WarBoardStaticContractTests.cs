@@ -34,7 +34,12 @@ public sealed class WarBoardStaticContractTests
         Assert.Contains("WarStateUpdated", content, StringComparison.Ordinal);
         Assert.Contains("RequestCurrentState", content, StringComparison.Ordinal);
         Assert.Contains("WithAutomaticReconnect", content, StringComparison.Ordinal);
-        Assert.Contains("GetTokenAsync(\"access_token\")", content, StringComparison.Ordinal);
+        Assert.Contains("IServerAccessTokenProvider", content, StringComparison.Ordinal);
+
+        var tokenProvider = ReadRepoFile("src/HappyGymStats.Blazor/HappyGymStats.Blazor/Services/ServerAccessTokenProvider.cs");
+        Assert.Contains("GetTokenAsync(\"access_token\")", tokenProvider, StringComparison.Ordinal);
+        Assert.Contains("PersistAsJson", tokenProvider, StringComparison.Ordinal);
+        Assert.Contains("TryTakeFromJson", tokenProvider, StringComparison.Ordinal);
     }
 
     [Fact]
