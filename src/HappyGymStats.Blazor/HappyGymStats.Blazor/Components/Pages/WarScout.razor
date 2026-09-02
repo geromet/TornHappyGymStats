@@ -69,8 +69,47 @@
                 <MudCard Class="war-summary-card">
                     <MudCardContent>
                         <MudText Typo="Typo.overline">Roster size</MudText>
-                        <MudText Typo="Typo.h5">@profile.Members.Count</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Members seen across captured wars</MudText>
+                        <MudText Typo="Typo.h5">@profile.TypicalRosterSize</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Typical fielded per war (@profile.Members.Count seen total)</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+
+        <MudGrid>
+            <MudItem xs="12" md="3">
+                <MudCard Class="war-summary-card">
+                    <MudCardContent>
+                        <MudText Typo="Typo.overline">Record</MudText>
+                        <MudText Typo="Typo.h5">@(profile.WarsWithKnownOutcome > 0 ? FormatPercent(profile.WinRate) : "—")</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Win rate — @profile.WarsWithKnownOutcome of @profile.TotalWarsObserved observed wars have a recorded outcome</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudCard Class="war-summary-card">
+                    <MudCardContent>
+                        <MudText Typo="Typo.overline">Typical target score</MudText>
+                        <MudText Typo="Typo.h5">@(profile.TypicalTargetScore > 0 ? profile.TypicalTargetScore.ToString("N0") : "—")</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Their median final score — what you must beat</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudCard Class="war-summary-card">
+                    <MudCardContent>
+                        <MudText Typo="Typo.overline">Score pace</MudText>
+                        <MudText Typo="Typo.h5">@(profile.PointsPerHour is { } pph ? $"{pph:N0}/h" : "—")</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Median points per hour of war</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudCard Class="war-summary-card">
+                    <MudCardContent>
+                        <MudText Typo="Typo.overline">Scoring concentration</MudText>
+                        <MudText Typo="Typo.h5">@FormatPercent(profile.Top5ScoreShare) top 5</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@FormatPercent(profile.Top10ScoreShare) from the top 10 — high share favours lockdown</MudText>
                     </MudCardContent>
                 </MudCard>
             </MudItem>

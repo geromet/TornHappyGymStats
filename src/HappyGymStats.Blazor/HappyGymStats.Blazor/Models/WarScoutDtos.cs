@@ -9,6 +9,13 @@ public sealed record FactionScoutDto(
     int ActiveMemberCount,
     int IdleProneMemberCount,
     decimal MedianScorePerAttack,
+    decimal WinRate,
+    int WarsWithKnownOutcome,
+    int TypicalTargetScore,
+    decimal? PointsPerHour,
+    int TypicalRosterSize,
+    decimal Top5ScoreShare,
+    decimal Top10ScoreShare,
     IReadOnlyList<OpponentMemberProfileDto> Members);
 
 public sealed record OpponentMemberProfileDto(

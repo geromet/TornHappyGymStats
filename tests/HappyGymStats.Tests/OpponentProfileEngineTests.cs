@@ -282,9 +282,139 @@ public sealed class OpponentProfileEngineTests
         Assert.Empty(profile.Members);
     }
 
+    [Fact]
+    public void BuildProfile_summarises_faction_record_typical_target_score_and_pace()
+    {
+        // The scouted faction sits on the FactionId side of wars 1-2 and the OpponentFactionId
+        // side of wars 3-4, so score attribution is exercised both ways.
+        var wars = new[]
+        {
+            CreateWar(1, factionSideId: ScoutedFactionId, opponentSideId: 111, factionScore: 5000, opponentScore: 3000, winnerFactionId: ScoutedFactionId, durationHours: 5),
+            CreateWar(2, factionSideId: ScoutedFactionId, opponentSideId: 111, factionScore: 4000, opponentScore: 6000, winnerFactionId: 111, durationHours: 8),
+            CreateWar(3, factionSideId: 111, opponentSideId: ScoutedFactionId, factionScore: 2000, opponentScore: 8000, winnerFactionId: ScoutedFactionId, durationHours: 10),
+            CreateWar(4, factionSideId: 111, opponentSideId: ScoutedFactionId, factionScore: 7000, opponentScore: 3500, winnerFactionId: 111, durationHours: 7),
+        };
+        var members = new[]
+        {
+            Member(1, 9001, "A", score: 100, attacks: 10),
+            Member(1, 9002, "B", score: 200, attacks: 10),
+        };
+
+        var profile = OpponentProfileEngine.BuildProfile(ScoutedFactionId, "Chain Breakers", wars, members);
+
+        Assert.Equal(4, profile.WarsWithKnownOutcome);
+        Assert.Equal(0.5m, profile.WinRate); // won wars 1 and 3
+        // Scouted faction's own finals: [5000, 4000, 8000, 3500] -> sorted median (4000+5000)/2.
+        Assert.Equal(4500, profile.TypicalTargetScore);
+        // Scouted-side score / duration per war: 1000, 500, 800, 500 -> median 650.
+        Assert.Equal(650m, profile.PointsPerHour);
+    }
+
+    [Fact]
+    public void BuildProfile_computes_top5_and_top10_scoring_concentration()
+    {
+        var wars = new[] { CreateWar(1, ScoutedFactionId, 111) };
+
+        // Top five score 4000/3000/2500/2000/1500 (=13000); nine more at 1000 each (=9000).
+        var members = new List<RankedWarReportMemberEntity>
+        {
+            Member(1, 1, "m1", 4000, 40),
+            Member(1, 2, "m2", 3000, 40),
+            Member(1, 3, "m3", 2500, 40),
+            Member(1, 4, "m4", 2000, 40),
+            Member(1, 5, "m5", 1500, 40),
+        };
+        for (var i = 6; i <= 14; i++)
+        {
+            members.Add(Member(1, i, $"m{i}", 1000, 40));
+        }
+
+        var profile = OpponentProfileEngine.BuildProfile(ScoutedFactionId, "Chain Breakers", wars, members);
+
+        // 13000 / 22000
+        Assert.Equal(0.5909m, profile.Top5ScoreShare);
+        // 18000 / 22000
+        Assert.Equal(0.8182m, profile.Top10ScoreShare);
+    }
+
+    [Fact]
+    public void BuildProfile_concentration_is_a_per_war_median_not_an_all_time_aggregate()
+    {
+        // Two wars with different roster sizes. Per-war top-5 share: war 1 = 5000/6000, war 2 = 1.0.
+        // Median of those two -> ~0.9167. An all-time aggregate (top 5 members' totals over 9000)
+        // would instead read ~0.667 and drift with history length.
+        var wars = new[] { CreateWar(1, ScoutedFactionId, 111), CreateWar(2, ScoutedFactionId, 111) };
+        var members = new List<RankedWarReportMemberEntity>();
+        for (var i = 1; i <= 6; i++) members.Add(Member(1, 10 + i, $"w1-{i}", 1000, 20));
+        for (var i = 1; i <= 3; i++) members.Add(Member(2, 20 + i, $"w2-{i}", 1000, 20));
+
+        var profile = OpponentProfileEngine.BuildProfile(ScoutedFactionId, "Chain Breakers", wars, members);
+
+        Assert.Equal(0.9167m, profile.Top5ScoreShare);
+        Assert.Equal(1m, profile.Top10ScoreShare); // both wars have <= 10 scorers
+    }
+
+    [Fact]
+    public void BuildProfile_typical_roster_size_is_the_median_members_fielded_per_war()
+    {
+        var wars = new[] { CreateWar(1, ScoutedFactionId, 111), CreateWar(2, ScoutedFactionId, 111), CreateWar(3, ScoutedFactionId, 111) };
+        var members = new List<RankedWarReportMemberEntity>();
+        for (var i = 1; i <= 3; i++) members.Add(Member(1, 100 + i, $"w1-{i}", 50, 5));
+        for (var i = 1; i <= 5; i++) members.Add(Member(2, 200 + i, $"w2-{i}", 50, 5));
+        for (var i = 1; i <= 7; i++) members.Add(Member(3, 300 + i, $"w3-{i}", 50, 5));
+
+        var profile = OpponentProfileEngine.BuildProfile(ScoutedFactionId, "Chain Breakers", wars, members);
+
+        Assert.Equal(5, profile.TypicalRosterSize); // median of [3, 5, 7]
+    }
+
+    [Fact]
+    public void BuildProfile_faction_metrics_degrade_gracefully_when_history_rows_lack_outcome_data()
+    {
+        // CreateWars leaves winner, scores and end time null - a sparsely backfilled war.
+        var wars = CreateWars(warIds: [1, 2, 3]);
+        var members = new[] { Member(1, 9001, "A", score: 100, attacks: 10) };
+
+        var profile = OpponentProfileEngine.BuildProfile(ScoutedFactionId, "Chain Breakers", wars, members);
+
+        Assert.Equal(0, profile.WarsWithKnownOutcome);
+        Assert.Equal(0m, profile.WinRate);
+        Assert.Equal(0, profile.TypicalTargetScore);
+        Assert.Null(profile.PointsPerHour);
+    }
+
     private static IEnumerable<RankedWarReportMemberEntity> FillerMemberAcrossWars(
         long memberId, string name, IEnumerable<long> warIds, int score, int attacks)
         => warIds.Select(warId => Member(warId, memberId, name, score, attacks));
+
+    private static RankedWarHistoryEntity CreateWar(
+        long warId,
+        long factionSideId,
+        long opponentSideId,
+        int? factionScore = null,
+        int? opponentScore = null,
+        long? winnerFactionId = null,
+        double durationHours = 0)
+    {
+        var start = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero).AddDays(warId);
+        return new RankedWarHistoryEntity
+        {
+            WarId = warId,
+            FactionId = factionSideId,
+            FactionName = "Chain Breakers",
+            OpponentFactionId = opponentSideId,
+            OpponentFactionName = "Happy Gym",
+            StartedAtUtc = start,
+            EndedAtUtc = durationHours > 0 ? start.AddHours(durationHours) : null,
+            WinnerFactionId = winnerFactionId,
+            FactionScore = factionScore,
+            OpponentScore = opponentScore,
+            CapturedAtUtc = DateTimeOffset.UtcNow,
+            IngestedAtUtc = DateTimeOffset.UtcNow,
+            ReportCapturedAtUtc = DateTimeOffset.UtcNow,
+            ReportIngestedAtUtc = DateTimeOffset.UtcNow,
+        };
+    }
 
     private static IReadOnlyList<RankedWarHistoryEntity> CreateWars(IEnumerable<long> warIds)
         => warIds.Select(id => new RankedWarHistoryEntity

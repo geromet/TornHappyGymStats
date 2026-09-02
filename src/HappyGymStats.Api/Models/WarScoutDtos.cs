@@ -11,6 +11,13 @@ public sealed record FactionScoutDto(
     int ActiveMemberCount,
     int IdleProneMemberCount,
     decimal MedianScorePerAttack,
+    decimal WinRate,
+    int WarsWithKnownOutcome,
+    int TypicalTargetScore,
+    decimal? PointsPerHour,
+    int TypicalRosterSize,
+    decimal Top5ScoreShare,
+    decimal Top10ScoreShare,
     IReadOnlyList<OpponentMemberProfileDto> Members);
 
 public sealed record OpponentMemberProfileDto(
@@ -44,6 +51,13 @@ public static class WarScoutDtoMapper
             ActiveMemberCount: profile.ActiveMemberCount,
             IdleProneMemberCount: profile.IdleProneMemberCount,
             MedianScorePerAttack: profile.MedianScorePerAttack,
+            WinRate: profile.WinRate,
+            WarsWithKnownOutcome: profile.WarsWithKnownOutcome,
+            TypicalTargetScore: profile.TypicalTargetScore,
+            PointsPerHour: profile.PointsPerHour,
+            TypicalRosterSize: profile.TypicalRosterSize,
+            Top5ScoreShare: profile.Top5ScoreShare,
+            Top10ScoreShare: profile.Top10ScoreShare,
             Members: profile.Members.Select(ToMemberDto).ToArray());
 
     private static OpponentMemberProfileDto ToMemberDto(OpponentMemberProfile member)

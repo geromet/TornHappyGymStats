@@ -66,6 +66,7 @@ public static class OpponentProfileEngine
             .ToArray();
 
         var idleProneCount = profiles.Count(p => p.ThreatTier == OpponentThreatTier.IdleProne);
+        var factionMetrics = BuildFactionMetrics(factionId, wars, members);
 
         return new FactionScoutProfile(
             factionId,
@@ -76,8 +77,100 @@ public static class OpponentProfileEngine
             ActiveMemberCount: profiles.Length - idleProneCount,
             IdleProneMemberCount: idleProneCount,
             MedianScorePerAttack: factionMedianScorePerAttack,
+            WinRate: factionMetrics.WinRate,
+            WarsWithKnownOutcome: factionMetrics.WarsWithKnownOutcome,
+            TypicalTargetScore: factionMetrics.TypicalTargetScore,
+            PointsPerHour: factionMetrics.PointsPerHour,
+            TypicalRosterSize: factionMetrics.TypicalRosterSize,
+            Top5ScoreShare: factionMetrics.Top5ScoreShare,
+            Top10ScoreShare: factionMetrics.Top10ScoreShare,
             profiles);
     }
+
+    private static (
+        decimal WinRate,
+        int WarsWithKnownOutcome,
+        int TypicalTargetScore,
+        decimal? PointsPerHour,
+        int TypicalRosterSize,
+        decimal Top5ScoreShare,
+        decimal Top10ScoreShare) BuildFactionMetrics(
+        long factionId,
+        IReadOnlyList<RankedWarHistoryEntity> wars,
+        IReadOnlyList<RankedWarReportMemberEntity> members)
+    {
+        var distinctWars = wars
+            .GroupBy(w => w.WarId)
+            .Select(g => g.First())
+            .ToArray();
+
+        var decided = distinctWars.Where(w => w.WinnerFactionId is not null).ToArray();
+        var winRate = decided.Length > 0
+            ? Math.Round(decided.Count(w => w.WinnerFactionId == factionId) / (decimal)decided.Length, 4)
+            : 0m;
+
+        // "Typical target score" = this faction's own median final score - what an opponent must
+        // outscore to beat them (data/V2/reference/data-layer.md, "Against a 7300 target").
+        var finalScores = distinctWars
+            .Select(w => ScoutedFactionScore(w, factionId))
+            .Where(score => score > 0)
+            .OrderBy(score => score)
+            .ToArray();
+        var typicalTargetScore = (int)Math.Round(Median(finalScores));
+
+        var paces = distinctWars
+            .Select(w => (Score: ScoutedFactionScore(w, factionId), Hours: (w.EndedAtUtc - w.StartedAtUtc)?.TotalHours ?? 0d))
+            .Where(x => x.Score > 0 && x.Hours > 0)
+            .Select(x => x.Score / (decimal)x.Hours)
+            .OrderBy(pace => pace)
+            .ToArray();
+        decimal? pointsPerHour = paces.Length > 0 ? Math.Round(Median(paces), 2) : null;
+
+        var rosterSizes = members
+            .GroupBy(m => m.WarId)
+            .Select(g => g.Select(r => r.MemberId).Distinct().Count())
+            .OrderBy(size => size)
+            .ToArray();
+        var typicalRosterSize = (int)Math.Round(Median(rosterSizes));
+
+        // Concentration is a per-war property - the hand-off's cited "top 5 produced 60%" is a
+        // single war (48377). For each war take the top-5 / top-10 share of that war's points, then
+        // the median across wars. Aggregating each member's total across all wars instead would
+        // drift upward with history length as long-tenured members accumulate more points than a
+        // larger rotating cast.
+        var perWarShares = members
+            .GroupBy(m => m.WarId)
+            .Select(warGroup =>
+            {
+                var memberScores = warGroup
+                    .GroupBy(r => r.MemberId)
+                    .Select(memberGroup => memberGroup.Sum(r => r.Score))
+                    .Where(score => score > 0)
+                    .OrderByDescending(score => score)
+                    .ToArray();
+                var warTotal = memberScores.Sum();
+                return warTotal == 0
+                    ? ((decimal Top5, decimal Top10)?)null
+                    : (memberScores.Take(5).Sum() / (decimal)warTotal, memberScores.Take(10).Sum() / (decimal)warTotal);
+            })
+            .Where(share => share is not null)
+            .Select(share => share!.Value)
+            .ToArray();
+
+        var top5Share = perWarShares.Length > 0
+            ? Math.Round(Median(perWarShares.Select(s => s.Top5).OrderBy(v => v).ToArray()), 4)
+            : 0m;
+        var top10Share = perWarShares.Length > 0
+            ? Math.Round(Median(perWarShares.Select(s => s.Top10).OrderBy(v => v).ToArray()), 4)
+            : 0m;
+
+        return (winRate, decided.Length, typicalTargetScore, pointsPerHour, typicalRosterSize, top5Share, top10Share);
+    }
+
+    private static int ScoutedFactionScore(RankedWarHistoryEntity war, long factionId)
+        => war.FactionId == factionId ? war.FactionScore ?? 0
+         : war.OpponentFactionId == factionId ? war.OpponentScore ?? 0
+         : 0;
 
     private static OpponentMemberProfile BuildMemberProfile(
         long memberId,

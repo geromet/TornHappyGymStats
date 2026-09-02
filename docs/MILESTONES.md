@@ -152,13 +152,36 @@ holes incl. 2 open slots from the side with available members), plus new focused
 open slots without our idlers, hospitalised/abroad enemy is not a slot, idle enemy *is* a
 slot, `TargetCoverageRatio` math. w03 + w04 verifiers green.
 
-### S04 — Faction-level scout profile  *(→ data/V2/handoff/05, "Faction-level profile")*
+### S04 — Faction-level scout profile  *(→ data/V2/handoff/05, "Faction-level profile")*  — DONE (branch `feat/m007-s04-faction-scout-profile`, stacked on S03)
 
-`FactionScoutDto` carries per-member rows but none of the faction summary the hand-off
-names: win rate, typical target score, score pace (points/hour), roster size, and
-**scoring concentration** (top-5 and top-10 share). DEATH WATCH's top 5 produced 60% of
-their score — that number is what makes lockdown viable, and M010 consumes it. Add the
-fields, the aggregation, and the summary block on `/war/scout/{factionId}`.
+`FactionScoutProfile` gained the faction summary the hand-off names, all computed in
+`OpponentProfileEngine.BuildFactionMetrics` from stored history + report rows:
+- **`WinRate`** + `WarsWithKnownOutcome` — wars won ÷ wars with a recorded
+  `WinnerFactionId`.
+- **`TypicalTargetScore`** — the scouted faction's *own* median final score = what an
+  opponent must outscore to beat them (`data/V2/reference/data-layer.md`, "Against a 7300
+  target"). Not `max(both finals)` — a timeout win can end behind on raw points.
+- **`PointsPerHour`** (`decimal?`) — median of the scouted faction's own final score ÷
+  war duration; `null` when no war carries both.
+- **`TypicalRosterSize`** — median distinct members fielded per war.
+- **`Top5ScoreShare` / `Top10ScoreShare`** — **per-war** top-5 / top-10 share of that
+  war's points, median across wars. The hand-off's "top 5 produced 60%" is a single-war
+  (48377) figure; an all-time aggregate would drift upward with history length as
+  long-tenured members accumulate. A high value makes lockdown viable — M010 consumes it.
+
+Every metric **degrades to `0` / `null`** when the history rows are sparse (no winner,
+no finals, no end time) — a real condition for a lightly-backfilled war, and asserted.
+Score attribution follows which side the scouted faction was on in each row
+(`FactionId` vs `OpponentFactionId`).
+
+DTOs (`FactionScoutDto` in both `Api/Models` and `Blazor/Models`) + mapper updated. The
+scout page gains a second summary row: Record, Typical target score, Score pace, Scoring
+concentration (top-5 / top-10). Existing "Roster size" card now shows `TypicalRosterSize`.
+
+Tests: 6 engine tests (record/pace with the scouted faction on either side, per-war
+concentration, concentration-is-not-an-all-time-aggregate, roster-size median, graceful
+degradation) + 1 SQLite-backed `WarScoutServiceTests` proving the metrics survive the EF
+round-trip.
 
 ### S05 — `w04-scouting-contract` verify script
 
