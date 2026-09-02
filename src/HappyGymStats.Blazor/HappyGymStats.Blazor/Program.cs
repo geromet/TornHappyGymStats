@@ -130,6 +130,12 @@ public sealed class Program
         app.UseHttpsRedirection();
         app.UseAuthentication();
         app.UseAuthorization();
+
+        // Opt-in whole-site admin gate (Access:RestrictToAdmins). Off unless the
+        // deployment sets it, so production behaviour is unchanged; the dev host
+        // at torndev.geromet.com turns it on via its systemd unit.
+        app.UseAdminOnlyAccessWhenConfigured(builder.Configuration);
+
         app.UseAntiforgery();
         app.MapStaticAssets();
 

@@ -1,0 +1,29 @@
+[Unit]
+Description=HappyGymStats API backend (dev host — torndev.geromet.com)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/happygymstats-dev/current
+ExecStart=/var/www/happygymstats-dev/current/HappyGymStats.Api
+Restart=on-failure
+RestartSec=5
+
+# Runtime contract source (secrets are server-local; never committed):
+# /etc/happygymstats/api-dev.env must define:
+# - ConnectionStrings__HappyGymStats  MUST point at a database separate from
+#   production. The API runs migrations at startup, so a shared connection
+#   string would let a dev build mutate the production schema.
+# - ProvisionalToken__SigningKey      MUST differ from production, otherwise
+#   tokens minted here are accepted by the production API.
+# - HAPPYGYMSTATS_SURFACES_CACHE_DIR  should point under /var/www/happygymstats-dev.
+EnvironmentFile=/etc/happygymstats/api-dev.env
+
+# Non-secret service defaults.
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5147
+
+[Install]
+WantedBy=multi-user.target
