@@ -84,6 +84,10 @@ builder.Services.AddHttpClient<WarBoardService>(client =>
         client.BaseAddress = new Uri(apiBaseUrl))
     .AddHttpMessageHandler<AccessTokenForwardingHandler>();
 
+builder.Services.AddHttpClient<WarScoutService>(client =>
+        client.BaseAddress = new Uri(apiBaseUrl))
+    .AddHttpMessageHandler<AccessTokenForwardingHandler>();
+
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders =

@@ -82,6 +82,7 @@ builder.Services.AddScoped<ILogTypeRepository, LogTypeRepository>();
 builder.Services.AddScoped<IFactionIdMapRepository, FactionIdMapRepository>();
 builder.Services.AddScoped<IFactionMembershipRepository, FactionMembershipRepository>();
 builder.Services.AddScoped<IWarStateRepository, WarStateRepository>();
+builder.Services.AddScoped<IWarHistoryRepository, WarHistoryRepository>();
 
 builder.Services.AddScoped<LogFetcher>();
 builder.Services.AddScoped<PerkLogFetcher>();
@@ -89,6 +90,7 @@ builder.Services.AddScoped<ReconstructionRunner>();
 builder.Services.AddScoped<GymTrainsService>();
 builder.Services.AddScoped<FactionService>();
 builder.Services.AddScoped<WarDerivedStateService>();
+builder.Services.AddScoped<WarScoutService>();
 builder.Services.AddScoped<IFactionOwnershipVerifier, StubFactionOwnershipVerifier>();
 builder.Services.AddScoped<IWarHubBroadcaster, WarHubBroadcaster>();
 

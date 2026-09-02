@@ -1,0 +1,181 @@
+@page "/war/scout/{FactionId:long}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using HappyGymStats.Blazor.Models
+@inject WarScoutService ScoutService
+
+<PageTitle>Scout faction @FactionId · Happy Gym Stats</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <div>
+            <MudText Typo="Typo.h4">Pre-war briefing</MudText>
+            <MudText Typo="Typo.body1" Color="Color.Secondary">
+                Faction @FactionId scored from real ranked-war outcomes, not stat guesses.
+            </MudText>
+        </div>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="@_isLoading">
+            Refresh
+        </MudButton>
+    </MudStack>
+
+    @if (_isLoading && _profile is null && _failure is null)
+    {
+        <MudAlert Severity="Severity.Info" Dense="true">Loading scouting report...</MudAlert>
+    }
+
+    @if (_failure is not null)
+    {
+        <MudAlert Severity="@(_failure.Category == ApiFailureCategory.NotFound ? Severity.Warning : Severity.Error)" Dense="true" Variant="Variant.Filled">
+            <strong>@(_failure.Category == ApiFailureCategory.NotFound ? "No history yet." : "Scouting report unavailable.")</strong>
+            @(_failure.Category == ApiFailureCategory.NotFound
+                ? "No captured ranked-war history exists yet for this faction. Backfill may still be in progress."
+                : _failure.SafeMessage)
+        </MudAlert>
+    }
+
+    @if (_profile is { } profile)
+    {
+        <MudGrid>
+            <MudItem xs="12" md="3">
+                <MudCard Class="war-summary-card">
+                    <MudCardContent>
+                        <MudText Typo="Typo.overline">@profile.FactionName</MudText>
+                        <MudText Typo="Typo.h5">@profile.TotalWarsObserved wars observed</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@FormatDateRange(profile.EarliestWarStartedAtUtc, profile.LatestWarStartedAtUtc)</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudCard Class="war-summary-card">
+                    <MudCardContent>
+                        <MudText Typo="Typo.overline">Active members</MudText>
+                        <MudText Typo="Typo.h5">@profile.ActiveMemberCount</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Consistent + occasional swingers</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudCard Class="war-summary-card">
+                    <MudCardContent>
+                        <MudText Typo="Typo.overline">Idle-prone members</MudText>
+                        <MudText Typo="Typo.h5">@profile.IdleProneMemberCount</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Idle in half or more of their wars</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudCard Class="war-summary-card">
+                    <MudCardContent>
+                        <MudText Typo="Typo.overline">Roster size</MudText>
+                        <MudText Typo="Typo.h5">@profile.Members.Count</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Members seen across captured wars</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+
+        <MudCard>
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Per-member war history</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Ranked by lump-adjusted score per war (median), which resists distortion from one-off chain-bonus wars.
+                    </MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudTable Dense="true" Hover="true" Breakpoint="Breakpoint.Md" Items="@profile.Members">
+                    <HeaderContent>
+                        <MudTh>Member</MudTh>
+                        <MudTh>Threat tier</MudTh>
+                        <MudTh>Wars</MudTh>
+                        <MudTh>Participation</MudTh>
+                        <MudTh>Lump-adjusted score/war</MudTh>
+                        <MudTh>Avg score/attack</MudTh>
+                        <MudTh>Score range</MudTh>
+                        <MudTh>Idle rate</MudTh>
+                        <MudTh>Last seen</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Member">@context.MemberName</MudTd>
+                        <MudTd DataLabel="Threat tier">
+                            <MudChip T="string" Size="Size.Small" Color="@GetTierColor(context.ThreatTier)">
+                                @FormatTier(context.ThreatTier)
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Wars">@context.WarsParticipated</MudTd>
+                        <MudTd DataLabel="Participation">@FormatPercent(context.ParticipationRate)</MudTd>
+                        <MudTd DataLabel="Lump-adjusted score/war">@context.LumpAdjustedScorePerWar</MudTd>
+                        <MudTd DataLabel="Avg score/attack">@context.AverageScorePerAttack</MudTd>
+                        <MudTd DataLabel="Score range">@context.MinScoreInAWar – @context.MaxScoreInAWar</MudTd>
+                        <MudTd DataLabel="Idle rate">@FormatPercent(context.IdleRate)</MudTd>
+                        <MudTd DataLabel="Last seen">@FormatTimestamp(context.LastSeenAtUtc)</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudCardContent>
+        </MudCard>
+    }
+</MudStack>
+
+@code {
+    [Parameter]
+    public long FactionId { get; set; }
+
+    private FactionScoutDto? _profile;
+    private ApiFailure? _failure;
+    private bool _isLoading;
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _profile = null;
+        _failure = null;
+        StateHasChanged();
+
+        try
+        {
+            var (profile, failure) = await ScoutService.GetProfileAsync(FactionId);
+            _profile = profile;
+            _failure = failure;
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string FormatPercent(decimal value) => $"{value:P0}";
+
+    private static string FormatTimestamp(DateTimeOffset? value) => value?.ToLocalTime().ToString("yyyy-MM-dd") ?? "unknown";
+
+    private static string FormatDateRange(DateTimeOffset? earliest, DateTimeOffset? latest)
+    {
+        if (earliest is null || latest is null)
+        {
+            return "No dated wars";
+        }
+
+        return $"{earliest.Value.ToLocalTime():yyyy-MM-dd} to {latest.Value.ToLocalTime():yyyy-MM-dd}";
+    }
+
+    private static string FormatTier(string tier) => tier switch
+    {
+        "ConsistentSwinger" => "Consistent swinger",
+        "OccasionalSwinger" => "Occasional swinger",
+        "IdleProne" => "Idle-prone",
+        _ => tier
+    };
+
+    private static Color GetTierColor(string tier) => tier switch
+    {
+        "ConsistentSwinger" => Color.Error,
+        "OccasionalSwinger" => Color.Warning,
+        "IdleProne" => Color.Default,
+        _ => Color.Default
+    };
+}

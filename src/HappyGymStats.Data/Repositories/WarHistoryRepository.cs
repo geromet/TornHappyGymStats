@@ -101,6 +101,29 @@ public sealed class WarHistoryRepository(HappyGymStatsDbContext db) : IWarHistor
             .AnyAsync(e => e.WarId == warId && e.ReportCapturedAtUtc != null, ct);
     }
 
+    public async Task<IReadOnlyList<RankedWarHistoryEntity>> GetWarsByFactionAsync(long factionId, CancellationToken ct)
+    {
+        EnsurePositive(nameof(factionId), factionId);
+
+        return await db.RankedWarHistory
+            .AsNoTracking()
+            .Where(e => (e.FactionId == factionId || e.OpponentFactionId == factionId) && e.ReportCapturedAtUtc != null)
+            .OrderByDescending(e => e.StartedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<RankedWarReportMemberEntity>> GetReportMembersByFactionAsync(long factionId, CancellationToken ct)
+    {
+        EnsurePositive(nameof(factionId), factionId);
+
+        return await db.RankedWarReportMembers
+            .AsNoTracking()
+            .Where(e => e.FactionId == factionId)
+            .OrderBy(e => e.MemberId)
+            .ThenBy(e => e.CapturedAtUtc)
+            .ToListAsync(ct);
+    }
+
     private static void ValidateWar(RankedWarHistoryEntity war)
     {
         EnsurePositive(nameof(war.WarId), war.WarId);
