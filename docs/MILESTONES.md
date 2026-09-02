@@ -41,7 +41,9 @@ were built as GSD milestones M004–M006.
 acceptance criteria (`data/V2/handoff/04`, `data/V2/handoff/05`) found stated
 deliverables that were not built or were built differently. This milestone closes them
 before new features stack on top. Slices are independent; size is set by the findings
-below, all confirmed against the tree.
+below. Two findings were re-scoped once checked against the tree: S01 (lump detection
+existed as a dampener, not real detection) and S03 (`OpenTarget` holes already existed
+but were mis-gated) — see each slice.
 
 **Branch layout.** The slices land as a **stack**, not on `main` yet: `feat/m007-s01-…`
 off `main` (carries this plan doc), `feat/m007-s02-…` off S01, etc. Look for completed
@@ -111,14 +113,44 @@ Build to the spec:
 **Not done here:** the poll *scheduler* (5s cycle, per-linked-member `attacksfull`) —
 that's M009/M010. This slice is the limiter primitive + universal wiring only.
 
-### S03 — Open-slot holes  *(→ data/V2/handoff/04, "Definition of a hole")*
+### S03 — Open-slot holes  *(→ data/V2/handoff/04, "Definition of a hole")*  — DONE (branch `feat/m007-s03-open-slot-holes`, stacked on S02)
 
-`WarHoleKind` has only `IdleAttacker`. Add the second first-class hole kind: an
-**open slot** — a war target currently attackable (`Okay`, not travelling/abroad) with
-no live claim against it. A hospitalised enemy is not a hole; it is a slot that
-regenerates at `status.until`. Coverage ratio (attackable targets vs our members with
-energy) already exists — wire the open-slot count into the same derivation. Give it the
-war-48377 roster shape as a fixture.
+**Premise was wrong.** `WarHoleKind.OpenTarget` already existed, was derived, mapped to
+the DTO, and asserted in two tests — the S01-planning grep (`hole|coverage|idle`) just
+couldn't match the string `OpenTarget`. So this slice is a **behavioural fix to a
+mis-gated derivation**, not an additive one.
+
+Two conflations fixed in `WarStateDerivationEngine.DeriveHoles`:
+- Open-target holes were emitted **only when our own faction had ≥ 1 idle attacker**
+  (`if (opponent is null || idleMembers.Length == 0) continue;`). The hand-off makes an
+  open slot a first-class board object — "who is free" and "who is available to hit" are
+  the same question — so it must not depend on our idlers. Gate removed.
+- The target filter excluded `!member.IsIdleAttacker`, silently dropping idle enemies —
+  who are *prime* targets. Removed; an idle enemy is now both faction A's idle-attacker
+  hole and faction B's open slot.
+- Hospitalised / abroad enemies were already excluded (they aren't `Available`); kept,
+  with a fixture proving a hospitalised enemy is a regenerating slot, not a hole.
+
+New fields (additive, so the shipped `CoverageRatio` = roster participation is untouched
+and re-labelled on the board, not repurposed):
+- `WarDerivedFactionState.OpenTargetCount` — attackable members of the opposing faction.
+- `WarDerivedFactionState.TargetCoverageRatio` — the hand-off's coverage ratio:
+  attackable enemies ÷ this faction's available attackers. **Proxy** — the denominator
+  should be "members with energy", which needs tier-1 key data (M009); until then it is
+  the available-member count. Labelled as a proxy in the model and on the board.
+- `WarDerivedState.OpenTargetCount` — board-wide total.
+- Board: top "Coverage ratio" tile → "Participation"; new "Open targets" tile; per-faction
+  card gains a correctly-defined "Coverage ratio" (= `TargetCoverageRatio`).
+
+**KNOWN INCOMPLETE:** the hand-off's open slot is "attackable ... with **no live claim**
+against them". Claims arrive with **M010** (`ClaimTarget` on `WarHub`). Until then every
+attackable target is reported; M010 must add a claim filter in `DeriveHoles` (comment
+left at the call site).
+
+Tests: the two fixture tests reworked to the corrected behaviour (war-48377 shape → 4
+holes incl. 2 open slots from the side with available members), plus new focused tests —
+open slots without our idlers, hospitalised/abroad enemy is not a slot, idle enemy *is* a
+slot, `TargetCoverageRatio` math. w03 + w04 verifiers green.
 
 ### S04 — Faction-level scout profile  *(→ data/V2/handoff/05, "Faction-level profile")*
 
@@ -400,7 +432,8 @@ M013 S01–S02 (backtest) ──┘   M009 (linking) ─> M010 ────┤  
                              M008 + M011 ─> M012 (comms/map)
 ```
 
-- M007 has no blockers; slices are mutually independent.
+- M007 has no blockers; slices land as a branch stack (S01 → S02 → S03 → …) but do not
+  depend on each other's behaviour.
 - M008 needs M007 S02 (`TornRateLimiter`) and its own S01 lookup-sweep gate.
 - M009 needs the compliance gate (S01) before any other slice.
 - M010 needs M009 (partly — tier-1 exact stats) and FFScouter; gated on S02.

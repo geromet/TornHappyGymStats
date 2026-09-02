@@ -77,6 +77,15 @@ public sealed class WarStateDerivationEngineTests
         Assert.Equal(13m, away.AttacksToFinish.AverageScorePerAttack);
         Assert.Equal(68, away.AttacksToFinish.RequiredAttacks);
 
+        // Faction 111 has two available members (1002 not-idle, 1003 idle), so from faction 222's
+        // side both are open slots - the idle one included. Faction 111 sees no open slots because
+        // faction 222 has zero available members (one hospital, one abroad).
+        Assert.Equal(0, home.OpenTargetCount);
+        Assert.Equal(0m, home.TargetCoverageRatio);
+        Assert.Equal(2, away.OpenTargetCount);
+        Assert.Equal(0m, away.TargetCoverageRatio); // 0 available attackers => 0 coverage, not 200%
+        Assert.Equal(2, state.OpenTargetCount);
+
         Assert.Collection(
             state.Holes,
             hole =>
@@ -99,6 +108,13 @@ public sealed class WarStateDerivationEngineTests
                 Assert.Equal(WarHoleSeverity.Medium, hole.Severity);
                 Assert.Equal(222, hole.FactionId);
                 Assert.Equal(1002, hole.MemberId);
+            },
+            hole =>
+            {
+                Assert.Equal(WarHoleKind.OpenTarget, hole.Kind);
+                Assert.Equal(WarHoleSeverity.Medium, hole.Severity);
+                Assert.Equal(222, hole.FactionId);
+                Assert.Equal(1003, hole.MemberId);
             });
     }
 
@@ -219,11 +235,13 @@ public sealed class WarStateDerivationEngineTests
     }
 
     [Fact]
-    public void Derive_with_no_available_opponent_targets_emits_only_idle_attacker_holes()
+    public void Derive_with_no_available_members_on_either_side_emits_only_idle_attacker_holes()
     {
         var report = DeserializeFixture<RankedWarReportResponse>("tests/fixtures/war/ranked-war-report-48377.json");
+        // Send faction 111's only two available members (1002, 1003) abroad, so neither faction
+        // has an attackable target left.
         var roster = MapRoster(report, FixtureCapturedAtUtc)
-            .Select(row => row.MemberId == 1002
+            .Select(row => row.MemberId is 1002 or 1003
                 ? new WarRosterSnapshotEntity
                 {
                     WarId = row.WarId,
@@ -245,7 +263,114 @@ public sealed class WarStateDerivationEngineTests
 
         Assert.Equal(2, state.Holes.Count);
         Assert.DoesNotContain(state.Holes, hole => hole.Kind == WarHoleKind.OpenTarget);
+        Assert.Equal(0, state.OpenTargetCount);
     }
+
+    [Fact]
+    public void Derive_emits_open_target_holes_for_attackable_enemies_even_when_our_side_has_no_idlers()
+    {
+        // No idle attackers anywhere. Faction 1 has two available members; faction 2 has one
+        // available plus one hospitalised and one abroad.
+        var roster = new[]
+        {
+            Roster(1, 10, "A1", "okay"),
+            Roster(1, 11, "A2", "okay"),
+            Roster(2, 20, "B1", "okay"),
+            Roster(2, 21, "B2", "hospital", FixtureNowUtc.AddMinutes(20)),
+            Roster(2, 22, "B3", "abroad"),
+        };
+
+        var state = new WarStateDerivationEngine().Derive(roster, [], FixtureNowUtc);
+
+        var f1 = state.Factions.Single(f => f.FactionId == 1);
+        var f2 = state.Factions.Single(f => f.FactionId == 2);
+
+        Assert.Empty(state.Holes.Where(h => h.Kind == WarHoleKind.IdleAttacker));
+        // Faction 1 can hit B1 only; faction 2 can hit A1 and A2.
+        Assert.Equal(1, f1.OpenTargetCount);
+        Assert.Equal(2, f2.OpenTargetCount);
+        Assert.Equal(3, state.OpenTargetCount);
+        Assert.Equal(WarHoleKind.OpenTarget, Assert.Single(state.Holes, h => h.FactionId == 1).Kind);
+        Assert.All(state.Holes.Where(h => h.FactionId == 2), h => Assert.Equal(WarHoleKind.OpenTarget, h.Kind));
+        // A hospitalised / abroad enemy is a regenerating slot, not an open target.
+        Assert.DoesNotContain(state.Holes, h => h.MemberId is 21 or 22);
+    }
+
+    [Fact]
+    public void Derive_treats_an_idle_enemy_as_an_open_target()
+    {
+        var roster = new[]
+        {
+            Roster(1, 10, "A1", "okay"),
+            Roster(2, 20, "B1", "idle"),
+        };
+
+        var state = new WarStateDerivationEngine().Derive(roster, [], FixtureNowUtc);
+
+        var openTarget = Assert.Single(state.Holes, h => h.Kind == WarHoleKind.OpenTarget && h.FactionId == 1);
+        Assert.Equal(20, openTarget.MemberId);
+        Assert.Contains("idle", openTarget.Reason, StringComparison.OrdinalIgnoreCase);
+        // The same member is also faction 2's idle-attacker hole - both are first-class.
+        Assert.Contains(state.Holes, h => h.Kind == WarHoleKind.IdleAttacker && h.FactionId == 2 && h.MemberId == 20);
+    }
+
+    [Fact]
+    public void Derive_target_coverage_ratio_is_attackable_enemies_over_available_attackers()
+    {
+        var roster = new[]
+        {
+            Roster(1, 10, "A1", "okay"),
+            Roster(1, 11, "A2", "okay"),
+            Roster(1, 12, "A3", "okay"),
+            Roster(1, 13, "A4", "okay"),
+            Roster(2, 20, "B1", "okay"),
+            Roster(2, 21, "B2", "okay"),
+        };
+
+        var state = new WarStateDerivationEngine().Derive(roster, [], FixtureNowUtc);
+
+        var f1 = state.Factions.Single(f => f.FactionId == 1);
+        // 2 attackable enemies over 4 available attackers = 0.5.
+        Assert.Equal(2, f1.OpenTargetCount);
+        Assert.Equal(4, f1.AvailableMemberCount);
+        Assert.Equal(0.5m, f1.TargetCoverageRatio);
+    }
+
+    [Fact]
+    public void Derive_target_coverage_ratio_is_zero_when_a_faction_has_no_available_attacker()
+    {
+        var roster = new[]
+        {
+            Roster(1, 10, "A1", "hospital", FixtureNowUtc.AddMinutes(15)),
+            Roster(1, 11, "A2", "abroad"),
+            Roster(2, 20, "B1", "okay"),
+            Roster(2, 21, "B2", "okay"),
+        };
+
+        var state = new WarStateDerivationEngine().Derive(roster, [], FixtureNowUtc);
+        var f1 = state.Factions.Single(f => f.FactionId == 1);
+
+        Assert.Equal(0, f1.AvailableMemberCount);
+        Assert.Equal(2, f1.OpenTargetCount); // both enemies are attackable
+        Assert.Equal(0m, f1.TargetCoverageRatio); // ...but this faction can cover none of them
+    }
+
+    private static WarRosterSnapshotEntity Roster(
+        long factionId, long memberId, string name, string state, DateTimeOffset? until = null)
+        => new()
+        {
+            WarId = 48377,
+            FactionId = factionId,
+            FactionName = factionId == 1 ? "Alpha" : "Bravo",
+            MemberId = memberId,
+            MemberName = name,
+            Score = 10,
+            Chain = 0,
+            Attacks = 1,
+            StatusState = state,
+            StatusUntilUtc = until,
+            CapturedAtUtc = FixtureCapturedAtUtc,
+        };
 
     private static T DeserializeFixture<T>(string relativePath)
     {

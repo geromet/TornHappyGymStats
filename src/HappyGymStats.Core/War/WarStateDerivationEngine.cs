@@ -89,6 +89,30 @@ public sealed class WarStateDerivationEngine(int winningScore = WarStateDerivati
             .ThenBy(hole => hole.MemberId)
             .ToArray();
 
+        // Fold each faction's open-slot count (and the handoff's "attackable targets vs our
+        // available attackers" coverage ratio) back onto the faction state now that holes exist.
+        var openTargetsByFactionId = holes
+            .Where(hole => hole.Kind == WarHoleKind.OpenTarget)
+            .GroupBy(hole => hole.FactionId)
+            .ToDictionary(group => group.Key, group => group.Count());
+
+        derivedFactions = derivedFactions
+            .Select(faction =>
+            {
+                var openTargets = openTargetsByFactionId.GetValueOrDefault(faction.FactionId, 0);
+                // No available attacker => zero coverage. Never divide by a fudged 1: that would
+                // report the highest ratio exactly when the faction can act least.
+                var targetCoverage = faction.AvailableMemberCount == 0
+                    ? 0m
+                    : decimal.Round(openTargets / (decimal)faction.AvailableMemberCount, 4, MidpointRounding.AwayFromZero);
+                return faction with
+                {
+                    OpenTargetCount = openTargets,
+                    TargetCoverageRatio = targetCoverage,
+                };
+            })
+            .ToList();
+
         var totalAvailable = derivedFactions.Sum(faction => faction.AvailableMemberCount);
         var totalCovered = derivedFactions.Sum(faction => (int)Math.Round(faction.CoverageRatio * faction.AvailableMemberCount, MidpointRounding.AwayFromZero));
         var overallCoverage = totalAvailable == 0
@@ -104,6 +128,7 @@ public sealed class WarStateDerivationEngine(int winningScore = WarStateDerivati
             ScoreWindowEndedAtUtc = boundedSamples.LastOrDefault()?.SampledAtUtc,
             ScoreSampleCount = boundedSamples.Length,
             CoverageRatio = overallCoverage,
+            OpenTargetCount = derivedFactions.Sum(faction => faction.OpenTargetCount),
             Factions = derivedFactions,
             Holes = holes,
             Warnings = warnings,
@@ -308,9 +333,8 @@ public sealed class WarStateDerivationEngine(int winningScore = WarStateDerivati
         {
             var opponent = factions.FirstOrDefault(candidate => candidate.FactionId != faction.FactionId);
             var members = memberStateByFactionId[faction.FactionId];
-            var idleMembers = members.Where(member => member.IsIdleAttacker).ToArray();
 
-            foreach (var member in idleMembers)
+            foreach (var member in members.Where(member => member.IsIdleAttacker))
             {
                 holes.Add(new WarHoleRecord
                 {
@@ -327,12 +351,20 @@ public sealed class WarStateDerivationEngine(int winningScore = WarStateDerivati
                 });
             }
 
-            if (opponent is null || idleMembers.Length == 0)
+            if (opponent is null)
             {
                 continue;
             }
 
-            foreach (var target in opponent.Members.Where(member => member.Availability == WarMemberAvailabilityKind.Available && !member.IsIdleAttacker))
+            // An open slot is a first-class board object per data/V2/handoff/04: an attackable
+            // opponent target. "Who is free" and "who is available to hit" are the same question,
+            // so this does NOT depend on this faction having idle attackers, and a target being
+            // idle does not disqualify it - an idle enemy is a prime target. A hospitalised enemy
+            // is a slot that regenerates at status.until, not a hole; that is already handled here
+            // by requiring Availability == Available (hospital -> Hospitalized).
+            // KNOWN INCOMPLETE: the handoff's "with no live claim against them" cannot be applied
+            // until M010 adds ClaimTarget - every attackable target is reported until then.
+            foreach (var target in opponent.Members.Where(member => member.Availability == WarMemberAvailabilityKind.Available))
             {
                 holes.Add(new WarHoleRecord
                 {
@@ -343,7 +375,9 @@ public sealed class WarStateDerivationEngine(int winningScore = WarStateDerivati
                     OpponentFactionId = opponent.FactionId,
                     MemberId = target.MemberId,
                     MemberName = target.MemberName,
-                    Reason = $"Opponent target {target.MemberName} is available while {faction.FactionName} still has idle attackers.",
+                    Reason = target.IsIdleAttacker
+                        ? $"Opponent {target.MemberName} is attackable and idle."
+                        : $"Opponent {target.MemberName} is attackable with no claim recorded.",
                 });
             }
         }
