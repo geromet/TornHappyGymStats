@@ -211,13 +211,25 @@ watchers, and a filler-target policy. This is early on purpose: the chain multip
 maths is already in `ChainEngine` (confirmed against 54 records to 0.005), and it needs
 no third-party data.
 
-- **S01 — chain-endpoint lookup sweep (GATE).** Run the `chain` / `chainreport` /
-  `chains` selections; record results in `data/V2/reference/data-layer.md`. Decides
-  timer source before any UI is designed around a timer that may not exist.
-- **S02 — `ChainTracker` in `Core/War`.** Pure. Given chain length, war-target
-  availability, and the bonus table → multiplier, next milestone, hits remaining,
-  reservation state, forfeited value. Tested against `ChainEngine.BonusTable` and the
-  54-record multiplier fixture; the two must never disagree.
+- **S01 — chain-endpoint lookup sweep (GATE).** — **BLOCKED ON USER.** Needs a live
+  Limited key + network to `api.torn.com`, which this environment doesn't have. Run the
+  `chain`, `chainreport`, `chains` selections against `/v2/faction/lookup`, paste what
+  each returns, and it gets recorded in `data/V2/reference/data-layer.md`. Until then S03
+  (timer source) cannot start; S02/S04–S08 do not depend on it.
+- **S02 — `ChainTracker` in `Core/War`.** — DONE (branch `feat/m008-s02-chain-tracker`,
+  off the M007 stack). Pure `static ChainTracker.Evaluate(chainLength,
+  attackableWarTargetCount, reservationWindowHits = 5)` → `ChainTrackerState`:
+  `CurrentMultiplier` (= `max(1, ChainEngine.DefaultA·log10(n) + DefaultB)`, referencing
+  the engine constants so the two can't drift — asserted against
+  `SigmaMult(n) − SigmaMult(n−1)` across a length sweep), `NextMilestone` (smallest
+  `ChainEngine.Milestones` entry strictly above `n` — agrees with `CumBonus` treating
+  "at a milestone" as already banked), `HitsToNextMilestone`, `NextMilestoneBonus` /
+  `ForfeitedValueIfCrossedOutside` (from `ChainEngine.MilestoneBonuses`),
+  `IsInReservationWindow` (`hits ≤ window`, inclusive — 995 in, 994 out), and a
+  `ChainBoardMode` eligibility verdict: `OutsideTargetsAllowed` / `WarTargetsOnly` (in
+  window + war targets) / `HoldForWarTarget` (in window, none — wait/revive, forfeit
+  named in `Reason`) / `SustainWithFiller` (out of window, none). No timer — that is S03.
+  16 tests / 32 cases. **`w06` verifier will be S08.** No I/O, so no gate dependency.
 - **S03 — chain timer source.** Real endpoint if S01 found one; otherwise derived from
   the timestamp of the most recent hit, **labelled "inferred" on screen**.
 - **S04 — `ChainAlert` on `WarHub`.** Fires on reservation-window entry and on the timer
