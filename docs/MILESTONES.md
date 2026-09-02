@@ -82,8 +82,8 @@ Build to the spec:
   10/20/40/80 bonuses is within ordinary per-war variance against a faction-median
   baseline and would false-positive normal above-average wars. **Known blind spot:** a war
   that crossed several milestones at once has a residual near a *sum* of bonuses and is
-  not detected. Both choices are `const`s in `OpponentProfileEngine`, retunable, and
-  should get a real flag-rate measurement against a full roster in **S05**.
+  not detected. Both choices are `const`s in `OpponentProfileEngine`, retunable. A real
+  flag-rate measurement against a full roster is **deferred** (no local data) — see S05.
 
 ### S02 — `TornRateLimiter`  *(→ data/V2/handoff/04, task 3; data/V2/handoff/03 "Rate limiting")*  — DONE (branch `feat/m007-s02-rate-limiter`, stacked on S01)
 
@@ -183,12 +183,23 @@ concentration, concentration-is-not-an-all-time-aggregate, roster-size median, g
 degradation) + 1 SQLite-backed `WarScoutServiceTests` proving the metrics survive the EF
 round-trip.
 
-### S05 — `w04-scouting-contract` verify script
+### S05 — scouting-contract verify script  *(→ data/V2/handoff/05)*  — DONE (branch `feat/m007-s05-scouting-verify`, stacked on S04)
 
-GSD's `scripts/verify/w04-war-api-hub-board.sh` covers the board, not scouting. Hand-off
-M2 calls for `w04-scouting-contract.sh`: backfill resumability, no war id stored twice,
-faction profile renders from stored data with **no live Torn calls**, lump flag fires on
-the DerDoruk fixture. Wire it into `build-and-test.sh`.
+`scripts/verify/w05-scouting-contract.sh` (the hand-off's `w04-` name collides with GSD's
+existing `w04-war-api-hub-board.sh`, so it takes the next w-number; **chain's verifier
+shifts to `w06`**). Follows the w01–w04 pattern: required files present → hand-off
+acceptance criteria pinned to named tests (no war id stored twice, backfill resumable +
+inert-while-disabled, ingest idempotent, DerDoruk / war-48377 lump fixture, both lump
+tolerance edges, profile built only from captured history) → source-only boundary check
+that the scouting read path (`OpponentProfileEngine`, Core `WarScoutService`,
+`WarScoutController`, `WarScout.razor`) references no `TornApiClient` / `HttpClient` /
+`api.torn.com` / centrifugo → targeted test run (59 tests). Wired into
+`scripts/verify/build-and-test.sh`.
+
+**Deferred (needs data, not code):** the real-roster flag-rate check for the lump
+tolerance. No backfilled war history exists locally; the tolerance is fixture-validated
+only. The script carries a `KNOWN GAP` note with the check to run once a populated DB
+exists (expect a low single-digit % of `(member, war)` rows flagged).
 
 ---
 
@@ -221,7 +232,7 @@ no third-party data.
   targets to sustain the chain, but filler must stop short of a crossing (chain at 997,
   no war target free → advise *wait or revive*, not *hit three randoms*). Show the
   `war = 1` vs `war = 2` score trade honestly.
-- **S08 — `scripts/verify/w05-chain-contract.sh`.**
+- **S08 — `scripts/verify/w06-chain-contract.sh`.**
 
 Out of scope: target *selection* among eligible targets — that is M010.
 
@@ -258,7 +269,7 @@ ships**.
 - **S08 — data tiers become real.** Linked / stale / inference-only badges wired to
   actual key state; coverage percentage on the board ("attack visibility: 12 of 71
   members (17%)"). An estimate and a fact must not look the same on screen.
-- **S09 — `scripts/verify/w06-key-vault-contract.sh`**, including negative tests: key
+- **S09 — `scripts/verify/w07-key-vault-contract.sh`**, including negative tests: key
   unreadable by any role incl. admin; revocation deletes readings (queried afterward);
   Full key refused; no key in any log at any level (greps captured output of a failing
   call).
@@ -305,7 +316,7 @@ FFScouter and on the still-unverified fair-fight formula.
   members cannot hold a live claim on the same target.
 - **S10 — endgame lockdown mode.** Entered with hysteresis when `t_them < t_us`. A mode
   switch (covering, not rate-maximising), not a parameter change.
-- **S11 — `scripts/verify/w07-targeting-contract.sh`.**
+- **S11 — `scripts/verify/w08-targeting-contract.sh`.**
 
 ---
 
@@ -382,7 +393,7 @@ service.
   at all? If only by scraping an attack-log page, it is **out of scope** and that is
   stated plainly — a feature that cannot be built within the constraints is a finding,
   not a failure.
-- **S10 — `scripts/verify/w08-comms-map-contract.sh`.**
+- **S10 — `scripts/verify/w09-comms-map-contract.sh`.**
 
 ---
 
@@ -421,7 +432,7 @@ confident random-number generator.
   strategy is chosen.
 - **S09 — post-war counterfactual report.** What the unchosen strategies predicted, so
   the tool earns or loses trust on its record. Every proposal logged with its inputs.
-- **S10 — `scripts/verify/w09-investigator-contract.sh`.**
+- **S10 — `scripts/verify/w10-investigator-contract.sh`.**
 
 Governance: the Investigator proposes, a planner decides, **nothing auto-executes**.
 
