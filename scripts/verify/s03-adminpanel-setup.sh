@@ -5,7 +5,8 @@ set -euo pipefail
 # Resolved 2026-09 from the prior merge-conflict state: the sudoers-based
 # bootstrap was abandoned (deploys use manual sudo authing); this gate now
 # pins the nginx-bootstrap script as it exists, the systemd loopback binding,
-# and the public admin health route. The sudoers file must stay gone.
+# and the public admin health route. The sudoers file must stay gone, both on
+# disk and in the git index.
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 SETUP_SCRIPT="${ROOT_DIR}/scripts/setup-adminpanel-server.sh"
@@ -61,5 +62,16 @@ if [[ -f "${SUDOERS_FILE}" ]]; then
   exit 1
 fi
 assert_not_contains "$SETUP_SCRIPT" "sudoers"
+
+echo "S03_VERIFY: sudoers file untracked by git"
+if git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if git -C "$ROOT_DIR" ls-files --error-unmatch -- infra/sudoers-happygymstats >/dev/null 2>&1; then
+    echo "S03_VERIFY_FAIL: sudoers file still tracked by git: infra/sudoers-happygymstats" >&2
+    exit 1
+  fi
+  echo "S03_VERIFY: confirmed untracked by git (ls-files --error-unmatch: no match)"
+else
+  echo "S03_VERIFY: not a git worktree, skipping git tracking check"
+fi
 
 echo "S03_VERIFY_PASS: setup verifier checks passed"
