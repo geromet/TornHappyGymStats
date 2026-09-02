@@ -1,17 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-<<<<<<< Updated upstream
+# S03 gate: AdminPanel server setup contract.
+# Resolved 2026-09 from the prior merge-conflict state: the sudoers-based
+# bootstrap was abandoned (deploys use manual sudo authing); this gate now
+# pins the nginx-bootstrap script as it exists, the systemd loopback binding,
+# and the public admin health route. The sudoers file must stay gone, both on
+# disk and in the git index.
+
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 SETUP_SCRIPT="${ROOT_DIR}/scripts/setup-adminpanel-server.sh"
+NGINX_CONF="${ROOT_DIR}/infra/nginx-adminpanel.conf"
 SERVICE_FILE="${ROOT_DIR}/infra/happygymstats-adminpanel.service"
 HEALTH_CONTROLLER="${ROOT_DIR}/src/HappyGymStats.AdminPanel/Controllers/AdminHealthController.cs"
+SUDOERS_FILE="${ROOT_DIR}/infra/sudoers-happygymstats"
 
 assert_contains() {
   local file="$1"
   local needle="$2"
-  if ! grep -Fq "$needle" "$file"; then
+  if ! grep -Fq -- "$needle" "$file"; then
     echo "S03_VERIFY_FAIL: missing_token file=${file} token=${needle}" >&2
+    exit 1
+  fi
+}
+
+assert_not_contains() {
+  local file="$1"
+  local needle="$2"
+  if grep -Fq -- "$needle" "$file"; then
+    echo "S03_VERIFY_FAIL: unexpected_token file=${file} token=${needle}" >&2
     exit 1
   fi
 }
@@ -19,14 +36,14 @@ assert_contains() {
 echo "S03_VERIFY: bash syntax check"
 bash -n "$SETUP_SCRIPT"
 
-echo "S03_VERIFY: setup script static checks"
-assert_contains "$SETUP_SCRIPT" "verify-service-active"
-assert_contains "$SETUP_SCRIPT" "service-inactive:"
-assert_contains "$SETUP_SCRIPT" "port-unavailable"
-assert_contains "$SETUP_SCRIPT" "http-non-2xx"
-assert_contains "$SETUP_SCRIPT" "HEALTH_URL=\"http://127.0.0.1:5048/admin/health\""
-assert_contains "$SETUP_SCRIPT" "systemctl is-active --quiet '\${SERVICE_NAME}'"
-assert_contains "$SETUP_SCRIPT" "systemctl status '\${SERVICE_NAME}' --no-pager"
+echo "S03_VERIFY: setup script safety gating checks"
+assert_contains "$SETUP_SCRIPT" "SCRIPT_AUTOMATION_SAFE_DEFAULT=1"
+assert_contains "$SETUP_SCRIPT" "--execute"
+assert_contains "$SETUP_SCRIPT" "--confirm-remote-setup"
+assert_contains "$SETUP_SCRIPT" "only when both flags are present"
+assert_contains "$SETUP_SCRIPT" "nginx-adminpanel.conf"
+assert_contains "$SETUP_SCRIPT" "\${SUDO_CMD} systemctl reload nginx"
+assert_contains "$SETUP_SCRIPT" "\${SUDO_CMD} nginx -t"
 
 echo "S03_VERIFY: systemd unit loopback binding checks"
 assert_contains "$SERVICE_FILE" "Environment=ASPNETCORE_URLS=http://127.0.0.1:5048"
@@ -36,55 +53,25 @@ echo "S03_VERIFY: admin health route checks"
 assert_contains "$HEALTH_CONTROLLER" "[Route(\"admin/health\")]"
 assert_contains "$HEALTH_CONTROLLER" "public IActionResult Get() => Ok"
 
-echo "S03_VERIFY_PASS: setup verifier checks passed"
-=======
-readonly ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-readonly SETUP_SCRIPT="${ROOT_DIR}/scripts/setup-adminpanel-server.sh"
-readonly SUDOERS_FILE="${ROOT_DIR}/infra/sudoers-happygymstats"
+echo "S03_VERIFY: nginx config sanity"
+assert_contains "$NGINX_CONF" "127.0.0.1:5048"
 
-failures=0
+echo "S03_VERIFY: sudoers bootstrap stays removed"
+if [[ -f "${SUDOERS_FILE}" ]]; then
+  echo "S03_VERIFY_FAIL: sudoers file unexpectedly present: ${SUDOERS_FILE}" >&2
+  exit 1
+fi
+assert_not_contains "$SETUP_SCRIPT" "sudoers"
 
-pass() { printf 'PASS %s\n' "$1"; }
-fail() { printf 'FAIL %s\n' "$1"; failures=$((failures + 1)); }
-
-require_token() {
-  local file="$1" token="$2" label="$3"
-  if rg -F -q "$token" "$file"; then
-    pass "$label"
-  else
-    fail "$label (missing token: $token)"
+echo "S03_VERIFY: sudoers file untracked by git"
+if git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if git -C "$ROOT_DIR" ls-files --error-unmatch -- infra/sudoers-happygymstats >/dev/null 2>&1; then
+    echo "S03_VERIFY_FAIL: sudoers file still tracked by git: infra/sudoers-happygymstats" >&2
+    exit 1
   fi
-}
-
-[[ -f "${SETUP_SCRIPT}" ]] && pass "setup script exists" || fail "missing setup script"
-[[ -f "${SUDOERS_FILE}" ]] && pass "sudoers file exists" || fail "missing sudoers file"
-
-if bash -n "${SETUP_SCRIPT}"; then
-  pass "setup script bash -n"
+  echo "S03_VERIFY: confirmed untracked by git (ls-files --error-unmatch: no match)"
 else
-  fail "setup script bash -n"
+  echo "S03_VERIFY: not a git worktree, skipping git tracking check"
 fi
 
-if rg -n -- "--dry-run" "${SETUP_SCRIPT}" >/dev/null; then
-  pass "dry-run flag supported"
-else
-  fail "dry-run flag supported"
-fi
-
-if rg -n -- "--execute" "${SETUP_SCRIPT}" >/dev/null && rg -n -- "--confirm-remote-setup" "${SETUP_SCRIPT}" >/dev/null; then
-  pass "mutating path explicitly gated"
-else
-  fail "mutating path explicitly gated"
-fi
-
-require_token "${SETUP_SCRIPT}" "SCRIPT_AUTOMATION_SAFE_DEFAULT=1" "automation-safe token present"
-
-if rg -n "NOPASSWD: (/usr/bin/|/bin/)?(install|chown|chmod|rm|ln|rsync|find)$|NOPASSWD: ALL|/bin/bash|/usr/bin/bash|sh -c" "${SUDOERS_FILE}" >/dev/null; then
-  fail "sudoers contains forbidden broad grants"
-else
-  pass "sudoers excludes forbidden broad grants"
-fi
-
-printf 'RESULT failures=%s\n' "${failures}"
-(( failures == 0 ))
->>>>>>> Stashed changes
+echo "S03_VERIFY_PASS: setup verifier checks passed"

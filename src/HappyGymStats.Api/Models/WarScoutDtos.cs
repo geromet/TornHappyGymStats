@@ -1,44 +1,13 @@
+using HappyGymStats.Core.Models;
 using HappyGymStats.Core.War;
 
 namespace HappyGymStats.Api.Models;
 
-public sealed record FactionScoutDto(
-    long FactionId,
-    string FactionName,
-    int TotalWarsObserved,
-    DateTimeOffset? EarliestWarStartedAtUtc,
-    DateTimeOffset? LatestWarStartedAtUtc,
-    int ActiveMemberCount,
-    int IdleProneMemberCount,
-    decimal MedianScorePerAttack,
-    decimal WinRate,
-    int WarsWithKnownOutcome,
-    int TypicalTargetScore,
-    decimal? PointsPerHour,
-    int TypicalRosterSize,
-    decimal Top5ScoreShare,
-    decimal Top10ScoreShare,
-    IReadOnlyList<OpponentMemberProfileDto> Members);
-
-public sealed record OpponentMemberProfileDto(
-    long MemberId,
-    string MemberName,
-    int WarsParticipated,
-    int TotalAttacks,
-    int TotalScore,
-    decimal AverageScorePerAttack,
-    decimal LumpAdjustedScorePerAttack,
-    decimal RawMedianScorePerWar,
-    decimal LumpAdjustedScorePerWar,
-    int LumpWarCount,
-    int MaxScoreInAWar,
-    int MinScoreInAWar,
-    decimal ParticipationRate,
-    int IdleWarCount,
-    decimal IdleRate,
-    DateTimeOffset? LastSeenAtUtc,
-    string ThreatTier);
-
+/// <summary>
+/// Maps Core scouting profiles to the shared scout DTOs
+/// (<see cref="HappyGymStats.Core.Models"/>). The DTO record definitions are owned by
+/// the Contracts assembly; only the mapping lives here.
+/// </summary>
 public static class WarScoutDtoMapper
 {
     public static FactionScoutDto ToDto(this FactionScoutProfile profile)

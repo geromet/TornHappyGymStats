@@ -81,6 +81,20 @@ public sealed record WarDerivedFactionState
     public WarScoreRateWindow ScoreRate { get; init; } = new();
     public WarEtaEstimate Eta { get; init; } = new();
     public WarAttacksToFinishEstimate AttacksToFinish { get; init; } = new();
+
+    /// <summary>Chain-command snapshot for this faction (<c>data/V2/handoff/06</c>): multiplier,
+    /// next milestone, reservation window, filler-eligibility mode. <c>null</c> only before the
+    /// derivation engine has run chain evaluation.</summary>
+    public ChainTrackerState? ChainState { get; init; }
+
+    /// <summary>Inferred chain-lapse timer from score-poll history. <c>null</c> when there is no
+    /// live chain; <see cref="ChainLapseConfidence.None"/> inside it when the last hit is older
+    /// than the score window.</summary>
+    public ChainLapseEstimate? ChainTimer { get; init; }
+
+    /// <summary>The single loudest chain signal the board should surface for this faction.</summary>
+    public ChainAlertLevel ChainAlert { get; init; }
+
     public IReadOnlyList<WarDerivedMemberState> Members { get; init; } = [];
 }
 

@@ -23,6 +23,9 @@ bash scripts/verify/no-raw-playerid-log-templates.sh
 echo "==> verify: ranked-war scouting contract (w05)"
 bash scripts/verify/w05-scouting-contract.sh
 
+echo "==> verify: chain command contract (w06)"
+bash scripts/verify/w06-chain-contract.sh
+
 echo "==> dotnet build"
 dotnet build
 

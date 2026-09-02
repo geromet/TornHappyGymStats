@@ -1,112 +1,12 @@
+using HappyGymStats.Core.Models;
 using HappyGymStats.Core.War;
 
 namespace HappyGymStats.Api.Models;
 
-public sealed record WarStateDto(
-    string Status,
-    bool IsReady,
-    long? WarId,
-    DateTimeOffset AsOfUtc,
-    bool HasRoster,
-    int FactionCount,
-    int MemberCount,
-    decimal CoverageRatio,
-    int OpenTargetCount,
-    int HoleCount,
-    WarHeartbeatDto Heartbeat,
-    IReadOnlyList<string> Warnings,
-    IReadOnlyList<string> Errors,
-    IReadOnlyList<WarFactionDto> Factions,
-    IReadOnlyList<WarHoleDto> Holes);
-
-public sealed record WarHealthDto(
-    string Status,
-    bool IsReady,
-    long? WarId,
-    DateTimeOffset AsOfUtc,
-    bool HasRoster,
-    int FactionCount,
-    int MemberCount,
-    decimal CoverageRatio,
-    int OpenTargetCount,
-    int HoleCount,
-    WarHeartbeatDto Heartbeat,
-    IReadOnlyList<string> Warnings,
-    IReadOnlyList<string> Errors);
-
-public sealed record WarHeartbeatDto(
-    string? Phase,
-    DateTimeOffset? UpdatedAtUtc,
-    DateTimeOffset? PollStartedAtUtc,
-    DateTimeOffset? PollCompletedAtUtc,
-    DateTimeOffset? StaleAfterUtc,
-    bool IsStale,
-    string? LastError);
-
-public sealed record WarFactionDto(
-    long FactionId,
-    string FactionName,
-    int Score,
-    int Chain,
-    int RemainingScoreToWin,
-    int AvailableMemberCount,
-    int HospitalizedMemberCount,
-    int UnavailableMemberCount,
-    decimal CoverageRatio,
-    int OpenTargetCount,
-    decimal TargetCoverageRatio,
-    WarScoreRateDto ScoreRate,
-    WarEtaDto Eta,
-    WarAttacksToFinishDto AttacksToFinish,
-    IReadOnlyList<WarMemberDto> Members);
-
-public sealed record WarMemberDto(
-    long MemberId,
-    string MemberName,
-    int Score,
-    int Chain,
-    int Attacks,
-    string? StatusState,
-    DateTimeOffset? StatusUntilUtc,
-    string Availability,
-    int HospitalCountdownSeconds,
-    bool IsIdleAttacker,
-    DateTimeOffset CapturedAtUtc);
-
-public sealed record WarScoreRateDto(
-    int SampleCount,
-    DateTimeOffset? StartedAtUtc,
-    DateTimeOffset? EndedAtUtc,
-    int WindowSeconds,
-    int ScoreDelta,
-    decimal? PointsPerMinute,
-    bool IsAvailable,
-    string? Diagnostic);
-
-public sealed record WarEtaDto(
-    int RemainingScore,
-    int? SecondsUntilWin,
-    bool IsAvailable,
-    string? Diagnostic);
-
-public sealed record WarAttacksToFinishDto(
-    decimal? AverageScorePerAttack,
-    int? RequiredAttacks,
-    bool IsAvailable,
-    string? Diagnostic);
-
-public sealed record WarHoleDto(
-    string Kind,
-    string Severity,
-    long FactionId,
-    string FactionName,
-    long? OpponentFactionId,
-    long MemberId,
-    string MemberName,
-    string Reason);
-
-public sealed record WarNotifyAcceptedDto(string Status, WarStateDto State);
-
+/// <summary>
+/// Maps Core war derived state to the shared war DTOs (<see cref="HappyGymStats.Core.Models"/>).
+/// The DTO record definitions are owned by the Contracts assembly; only the mapping lives here.
+/// </summary>
 public static class WarDtoMapper
 {
     public static WarStateDto ToStateDto(this WarDerivedState state)
@@ -188,6 +88,7 @@ public static class WarDtoMapper
             CoverageRatio: faction.CoverageRatio,
             OpenTargetCount: faction.OpenTargetCount,
             TargetCoverageRatio: faction.TargetCoverageRatio,
+            ChainCommand: ToChainCommandDto(faction),
             ScoreRate: new WarScoreRateDto(
                 faction.ScoreRate.SampleCount,
                 faction.ScoreRate.StartedAtUtc,
@@ -219,6 +120,33 @@ public static class WarDtoMapper
                 member.HospitalCountdownSeconds,
                 member.IsIdleAttacker,
                 member.CapturedAtUtc)).ToArray());
+
+    private static WarChainCommandDto? ToChainCommandDto(WarDerivedFactionState faction)
+    {
+        if (faction.ChainState is not { } chain)
+        {
+            return null;
+        }
+
+        var timer = faction.ChainTimer;
+        return new WarChainCommandDto(
+            ChainLength: chain.ChainLength,
+            CurrentMultiplier: chain.CurrentMultiplier,
+            NextMilestone: chain.NextMilestone,
+            HitsToNextMilestone: chain.HitsToNextMilestone,
+            NextMilestoneBonus: chain.NextMilestoneBonus,
+            IsInReservationWindow: chain.IsInReservationWindow,
+            ForfeitedValueIfCrossedOutside: chain.ForfeitedValueIfCrossedOutside,
+            AttackableWarTargetCount: chain.AttackableWarTargetCount,
+            Mode: chain.Mode.ToString(),
+            Advice: chain.Reason,
+            Alert: faction.ChainAlert.ToString(),
+            TimerIsInferred: timer?.IsInferred ?? false,
+            SecondsSinceLastHit: timer?.SecondsSinceLastIncrease,
+            SecondsUntilLapse: timer?.SecondsUntilLapse,
+            TimerSpacingSeconds: timer?.SampleSpacingSeconds ?? 0,
+            TimerDiagnostic: timer?.Diagnostic);
+    }
 
     private static WarHoleDto ToHoleDto(WarHoleRecord hole)
         => new(

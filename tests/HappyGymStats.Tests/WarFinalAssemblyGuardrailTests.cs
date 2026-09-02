@@ -51,7 +51,7 @@ public sealed class WarFinalAssemblyGuardrailTests
             "src/HappyGymStats.Api/Controllers/WarController.cs",
             "src/HappyGymStats.Api/Hubs/WarHub.cs",
             "src/HappyGymStats.Api/Hubs/WarHubBroadcaster.cs",
-            "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Models/WarDtos.cs",
+            "src/HappyGymStats.Contracts/Models/WarDtos.cs",
             "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Services/WarBoardService.cs",
             "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/War.razor"
         };

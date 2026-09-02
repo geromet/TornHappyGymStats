@@ -355,6 +355,88 @@ public sealed class WarStateDerivationEngineTests
         Assert.Equal(0m, f1.TargetCoverageRatio); // ...but this faction can cover none of them
     }
 
+    [Fact]
+    public void Derive_attaches_chain_command_with_an_inferred_lapse_timer()
+    {
+        var roster = new[]
+        {
+            Roster(1, 10, "A1", "okay"),
+            Roster(1, 11, "A2", "okay"),
+            Roster(2, 20, "B1", "okay"),
+            Roster(2, 21, "B2", "okay"),
+        };
+        var samples = new[]
+        {
+            ChainSample(id: 1, factionChain: 8, at: FixtureNowUtc.AddSeconds(-30)),
+            ChainSample(id: 2, factionChain: 9, at: FixtureNowUtc),
+        };
+
+        var state = new WarStateDerivationEngine().Derive(roster, samples, FixtureNowUtc);
+        var f1 = state.Factions.Single(f => f.FactionId == 1);
+
+        Assert.NotNull(f1.ChainState);
+        Assert.Equal(9, f1.ChainState!.ChainLength);
+        Assert.Equal(10, f1.ChainState.NextMilestone);
+        Assert.Equal(ChainBoardMode.WarTargetsOnly, f1.ChainState.Mode); // in window, enemies attackable
+
+        Assert.NotNull(f1.ChainTimer);
+        Assert.Equal(ChainLapseConfidence.Inferred, f1.ChainTimer!.Confidence);
+        Assert.Equal(0, f1.ChainTimer.SecondsSinceLastIncrease); // chain rose at "now"
+        Assert.Equal(30, f1.ChainTimer.SampleSpacingSeconds);
+
+        Assert.Equal(ChainAlertLevel.ReservationWindow, f1.ChainAlert);
+
+        // The opponent card carries no chain command - advice like "wait or revive" is addressed
+        // to us, and an enemy chain nearing lapse must not paint as our red alert.
+        var f2 = state.Factions.Single(f => f.FactionId == 2);
+        Assert.Null(f2.ChainState);
+        Assert.Null(f2.ChainTimer);
+        Assert.Equal(ChainAlertLevel.None, f2.ChainAlert);
+    }
+
+    [Fact]
+    public void Derive_chain_command_holds_for_a_war_target_when_none_is_attackable_in_the_window()
+    {
+        // data/V2/handoff/06 S07 acceptance, at the board's data layer: chain in the reservation
+        // window with nothing attackable -> advise waiting, name the forfeited milestone bonus.
+        var roster = new[]
+        {
+            Roster(1, 10, "A1", "okay"),
+            Roster(2, 20, "B1", "hospital", FixtureNowUtc.AddMinutes(30)),
+            Roster(2, 21, "B2", "abroad"),
+        };
+        var samples = new[]
+        {
+            ChainSample(id: 1, factionChain: 996, at: FixtureNowUtc.AddSeconds(-30)),
+            ChainSample(id: 2, factionChain: 997, at: FixtureNowUtc),
+        };
+
+        var state = new WarStateDerivationEngine().Derive(roster, samples, FixtureNowUtc);
+        var f1 = state.Factions.Single(f => f.FactionId == 1);
+
+        Assert.Equal(0, f1.ChainState!.AttackableWarTargetCount);
+        Assert.Equal(ChainBoardMode.HoldForWarTarget, f1.ChainState.Mode);
+        Assert.Contains("Wait or revive", f1.ChainState.Reason);
+        Assert.Contains("640", f1.ChainState.Reason);
+        Assert.Equal(1000, f1.ChainState.NextMilestone);
+    }
+
+    private static WarScoreSampleEntity ChainSample(long id, int factionChain, DateTimeOffset at)
+        => new()
+        {
+            Id = id,
+            WarId = 48377,
+            FactionId = 1,
+            FactionName = "Alpha",
+            FactionScore = 100 + (int)id,
+            FactionChain = factionChain,
+            OpponentFactionId = 2,
+            OpponentFactionName = "Bravo",
+            OpponentScore = 90,
+            OpponentChain = 5,
+            SampledAtUtc = at,
+        };
+
     private static WarRosterSnapshotEntity Roster(
         long factionId, long memberId, string name, string state, DateTimeOffset? until = null)
         => new()

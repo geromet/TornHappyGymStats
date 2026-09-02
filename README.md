@@ -21,14 +21,18 @@ HappyGymStats is a Torn telemetry pipeline with a production ASP.NET API, a Blaz
 
 ## Repo layout
 
-- `src/HappyGymStats.Api` — production API (`/api/v1/torn/*`) and import/surfaces endpoints
+- `src/HappyGymStats.Api` — production API (`/api/v1/torn/*`), import/surfaces endpoints, and the SignalR war hub
 - `src/HappyGymStats.Blazor` — primary frontend for production user flows
 - `src/HappyGymStats.AdminPanel` — operations/admin surface
-- `src/HappyGymStats.Core` — fetch and reconstruction logic
+- `src/HappyGymStats.Core` — Torn fetch, reconstruction, and war-engine logic
 - `src/HappyGymStats.Data` — EF Core data layer (Postgres + provider integration)
-- `src/HappyGymStats.Cli` — CLI workflows and local utilities
-- `web/data/surfaces/` — generated local surfaces cache artifacts used by API/local verification scripts
-- `tests/` — unit/integration/web verification suites
+- `src/HappyGymStats.Contracts` — shared entities and repository interfaces
+- `src/HappyGymStats.Identity` — Keycloak auth extensions
+- `src/HappyGymStats.Encryption` — ECIES pseudonymization primitives
+- `src/HappyGymStats.WarPoller` — Torn war polling host
+- `web/data/surfaces/` — generated local surfaces cache artifacts (gitignored) used by local verification scripts
+- `tests/` — unit/integration verification suites
+- `scripts/verify/` — bash gate harness (the project's CI equivalent)
 
 ## License
 

@@ -1,10 +1,9 @@
-extern alias blazor;
 
 using System.Net;
 using System.Text;
-using ApiFailure = blazor::HappyGymStats.Blazor.Services.ApiFailure;
-using ApiFailureCategory = blazor::HappyGymStats.Blazor.Services.ApiFailureCategory;
-using SurfacesService = blazor::HappyGymStats.Blazor.Services.SurfacesService;
+using ApiFailure = HappyGymStats.Blazor.Services.ApiFailure;
+using ApiFailureCategory = HappyGymStats.Blazor.Services.ApiFailureCategory;
+using SurfacesService = HappyGymStats.Blazor.Services.SurfacesService;
 using Xunit;
 
 namespace HappyGymStats.Tests;

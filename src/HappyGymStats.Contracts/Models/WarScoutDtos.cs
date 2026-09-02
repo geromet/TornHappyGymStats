@@ -1,5 +1,9 @@
-namespace HappyGymStats.Blazor.Models;
+namespace HappyGymStats.Core.Models;
 
+/// <summary>
+/// Shared scouting DTOs (single definition for Api and Blazor). Mapping from Core
+/// profiles lives in <c>HappyGymStats.Api.Models.WarScoutDtoMapper</c>.
+/// </summary>
 public sealed record FactionScoutDto(
     long FactionId,
     string FactionName,
