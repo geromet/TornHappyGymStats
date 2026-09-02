@@ -5,14 +5,28 @@ namespace HappyGymStats.Tests;
 public sealed class WarHistoryScopeGuardTests
 {
     [Fact]
-    public void WarPoller_program_does_not_register_ranked_war_history_backfill_service()
+    public void WarPoller_program_registers_the_disabled_by_default_ranked_war_history_backfill_service()
     {
         var source = ReadSource("src/HappyGymStats.WarPoller/Program.cs");
 
-        Assert.DoesNotContain("WarHistoryBackfill", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("RankedWarHistoryBackfill", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("AddHostedService<WarHistory", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("AddHostedService<RankedWarHistory", source, StringComparison.Ordinal);
+        Assert.Contains("AddHostedService<RankedWarHistoryBackfillHostedService>", source, StringComparison.Ordinal);
+
+        var optionsSource = ReadSource("src/HappyGymStats.WarPoller/WarPollerOptions.cs");
+        Assert.Contains("RankedWarHistoryBackfillEnabled { get; set; }", optionsSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("RankedWarHistoryBackfillEnabled { get; set; } = true", optionsSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WarPoller_backfill_service_does_not_introduce_opponent_profile_scoring()
+    {
+        var workerSource = ReadSource("src/HappyGymStats.WarPoller/RankedWarHistoryBackfillWorker.cs");
+        var hostedServiceSource = ReadSource("src/HappyGymStats.WarPoller/RankedWarHistoryBackfillHostedService.cs");
+
+        Assert.DoesNotContain("OpponentProfile", workerSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("LumpAdjusted", workerSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("OpponentProfile", hostedServiceSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("/war/scout", workerSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("/war/scout", hostedServiceSource, StringComparison.Ordinal);
     }
 
     [Fact]

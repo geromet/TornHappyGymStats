@@ -15,6 +15,15 @@ public sealed class WarPollerOptions
     public string? HubNotifyUrl { get; set; }
     public int HubNotifyTimeoutSeconds { get; set; } = 5;
 
+    public bool RankedWarHistoryBackfillEnabled { get; set; }
+    public string RankedWarHistoryBackfillScopeKey { get; set; } = "ranked-war-history-backfill";
+    public int RankedWarHistoryBackfillMaxPagesPerIteration { get; set; } = 1;
+    public int RankedWarHistoryBackfillMaxReportsPerIteration { get; set; } = 10;
+    public int RankedWarHistoryBackfillIterationDelaySeconds { get; set; } = 5;
+    public int RankedWarHistoryBackfillFailureBackoffSeconds { get; set; } = 60;
+    public int RankedWarHistoryBackfillMaxFailureBackoffSeconds { get; set; } = 900;
+    public string? RankedWarHistoryBackfillStartUrl { get; set; }
+
     internal void Validate()
     {
         if (string.IsNullOrWhiteSpace(ScopeKey))
@@ -69,6 +78,50 @@ public sealed class WarPollerOptions
         if (HubNotifyTimeoutSeconds <= 0)
         {
             throw new InvalidOperationException("War poller hub notify timeout must be greater than zero seconds.");
+        }
+
+        if (RankedWarHistoryBackfillEnabled)
+        {
+            if (string.IsNullOrWhiteSpace(RankedWarHistoryBackfillScopeKey))
+            {
+                throw new InvalidOperationException("Ranked-war history backfill scope key must be configured when the backfill service is enabled.");
+            }
+
+            if (string.IsNullOrWhiteSpace(ApiKey))
+            {
+                throw new InvalidOperationException("Ranked-war history backfill requires a war poller API key.");
+            }
+
+            if (RankedWarHistoryBackfillMaxPagesPerIteration <= 0)
+            {
+                throw new InvalidOperationException("Ranked-war history backfill max pages per iteration must be greater than zero.");
+            }
+
+            if (RankedWarHistoryBackfillMaxReportsPerIteration <= 0)
+            {
+                throw new InvalidOperationException("Ranked-war history backfill max reports per iteration must be greater than zero.");
+            }
+
+            if (RankedWarHistoryBackfillIterationDelaySeconds <= 0)
+            {
+                throw new InvalidOperationException("Ranked-war history backfill iteration delay must be greater than zero seconds.");
+            }
+
+            if (RankedWarHistoryBackfillFailureBackoffSeconds <= 0)
+            {
+                throw new InvalidOperationException("Ranked-war history backfill failure backoff must be greater than zero seconds.");
+            }
+
+            if (RankedWarHistoryBackfillMaxFailureBackoffSeconds < RankedWarHistoryBackfillFailureBackoffSeconds)
+            {
+                throw new InvalidOperationException("Ranked-war history backfill max failure backoff must be greater than or equal to the base failure backoff.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(RankedWarHistoryBackfillStartUrl)
+                && !Uri.TryCreate(RankedWarHistoryBackfillStartUrl, UriKind.RelativeOrAbsolute, out _))
+            {
+                throw new InvalidOperationException("Ranked-war history backfill start URL must be a valid URL when configured.");
+            }
         }
     }
 }

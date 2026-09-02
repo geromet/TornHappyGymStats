@@ -13,10 +13,23 @@ public sealed class WarHistoryIngestWriter(IWarHistoryRepository repository, IUn
     {
         ArgumentNullException.ThrowIfNull(page);
 
-        var rows = page.Wars.Select(war => MapHistoryEntry(war, capturedAtUtc, ingestedAtUtc)).ToArray();
-        foreach (var row in rows)
+        var rows = new List<RankedWarHistoryEntity>(page.Wars.Count);
+        foreach (var war in page.Wars)
         {
+            var row = MapHistoryEntry(war, capturedAtUtc, ingestedAtUtc);
+
+            // A history page never carries report data. Preserve any previously captured report
+            // timestamps so re-ingesting a page (e.g. resumable backfill re-fetching a not-yet-drained
+            // page) doesn't wipe out report capture state recorded by a prior WriteReportAsync call.
+            var existing = await repository.GetWarAsync(row.WarId, ct);
+            if (existing is not null)
+            {
+                row.ReportCapturedAtUtc = existing.ReportCapturedAtUtc;
+                row.ReportIngestedAtUtc = existing.ReportIngestedAtUtc;
+            }
+
             await repository.UpsertWarAsync(row, ct);
+            rows.Add(row);
         }
 
         await unitOfWork.SaveChangesAsync(ct);
