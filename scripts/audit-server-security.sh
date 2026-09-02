@@ -235,6 +235,100 @@ if (( ROOT_OK == 1 )); then
 fi
 
 # ─────────────────────────────────────────────────────────────
+section "Keycloak version and CVE posture"
+note "Keycloak fronts every authorization decision in this stack — the admin-only"
+note "dev host and AdminPanel are both only as strong as it is. Version and the"
+note "reset-credentials setting are checked here so they are not left to memory."
+blank
+probe_sh "running image" \
+  "${SUDO} docker ps --format '{{.Names}}\t{{.Image}}' 2>/dev/null | grep -i keycloak || docker ps --format '{{.Names}}\t{{.Image}}' 2>/dev/null | grep -i keycloak || echo '(no keycloak container visible)'"
+blank
+probe_priv "image digest and creation date" \
+  "docker ps --filter 'name=keycloak' --format '{{.Image}}' 2>/dev/null | head -1 | xargs -r docker image inspect --format '{{.Id}} created={{.Created}}' 2>/dev/null"
+
+KC_IMAGE="$(bash -c "${SUDO} docker ps --format '{{.Image}}' 2>/dev/null" 2>/dev/null | grep -i keycloak | head -1)"
+[[ -z "${KC_IMAGE}" ]] && KC_IMAGE="$(docker ps --format '{{.Image}}' 2>/dev/null | grep -i keycloak | head -1)"
+
+if [[ -n "${KC_IMAGE}" ]]; then
+  KC_TAG="${KC_IMAGE##*:}"
+  note "detected Keycloak tag: ${KC_TAG}"
+  KC_MAJOR="${KC_TAG%%.*}"
+  KC_REST="${KC_TAG#*.}"
+  KC_MINOR="${KC_REST%%.*}"
+  if [[ "${KC_MAJOR}" =~ ^[0-9]+$ && "${KC_MINOR}" =~ ^[0-9]+$ ]]; then
+    # CVE-2026-18963 (CVSS 9.1, unauthenticated account takeover via the
+    # reset-credentials flow) is fixed upstream in 26.7.2. Anything older on the
+    # 26.x line is affected, and 26.0 is additionally end-of-life.
+    # Fix line is exactly 26.7.2, so 26.7.0 and 26.7.1 are still affected.
+    KC_PATCH="${KC_TAG##*.}"
+    [[ "${KC_PATCH}" == "${KC_TAG}" || ! "${KC_PATCH}" =~ ^[0-9]+$ ]] && KC_PATCH=0
+    if (( KC_MAJOR < 26 )) \
+       || { (( KC_MAJOR == 26 )) && (( KC_MINOR < 7 )); } \
+       || { (( KC_MAJOR == 26 )) && (( KC_MINOR == 7 )) && (( KC_PATCH < 2 )); }; then
+      finding HIGH "Keycloak ${KC_TAG} predates 26.7.2 — affected by CVE-2026-18963 (CVSS 9.1, unauthenticated account takeover). Exploitation requires the realm's Forgot-password flow to be enabled; see the reset-credentials probe below."
+      if (( KC_MAJOR == 26 )) && (( KC_MINOR == 0 )); then
+        finding HIGH "Keycloak 26.0 is end-of-life and receives no security updates at all — upgrade to a supported 26.7.x"
+      fi
+    else
+      note "Keycloak ${KC_TAG} is at or beyond the CVE-2026-18963 fix line (26.7.2)"
+    fi
+  else
+    finding LOW "could not parse Keycloak version from tag '${KC_TAG}' — check it by hand against 26.7.2"
+  fi
+else
+  note "no Keycloak container detected; version checks skipped"
+fi
+
+blank
+note "Reset-credentials (Forgot password) — the precondition for CVE-2026-18963."
+note "Probed over loopback only; this never leaves the host."
+probe_sh "realm login page advertises password reset?" \
+  "for realm in torn master; do
+     body=\"\$(curl -fsS --max-time 8 \"http://127.0.0.1:8080/realms/\${realm}/protocol/openid-connect/auth?client_id=account&response_type=code&redirect_uri=http://127.0.0.1:8080/realms/\${realm}/account/\" 2>/dev/null)\"
+     if [ -z \"\$body\" ]; then
+       echo \"  \${realm}: (no response — realm may not exist or client_id differs)\"
+     elif printf '%s' \"\$body\" | grep -qi 'reset-credentials\\|forgot'; then
+       echo \"  \${realm}: PASSWORD RESET APPEARS ENABLED\"
+     else
+       echo \"  \${realm}: no password-reset link found (flow likely disabled)\"
+     fi
+   done"
+blank
+note "A disabled Forgot-password flow removes the CVE-2026-18963 attack path, and"
+note "admin 2FA blunts credential-based takeover generally. Neither is a substitute"
+note "for upgrading: 26.0 is EOL, and 26.7.2 also fixes CVE-2026-17048 (admin API"
+note "vault secret leak) and CVE-2026-14613 (fine-grained admin permission bypass),"
+note "which do not depend on the reset flow."
+blank
+note "Not checkable without admin credentials, so verify these in the console:"
+note "  - clients with a wildcard '*' in Valid Redirect URIs (CVE-2026-7504)"
+note "  - required actions / OTP policy on admin accounts"
+note "  - which accounts hold realm-admin"
+
+# ─────────────────────────────────────────────────────────────
+section "PostgreSQL version"
+probe_sh "running image" \
+  "${SUDO} docker ps --format '{{.Names}}\t{{.Image}}' 2>/dev/null | grep -i postgres || docker ps --format '{{.Names}}\t{{.Image}}' 2>/dev/null | grep -i postgres || echo '(no postgres container visible)'"
+blank
+probe_priv "server version" \
+  "docker ps --format '{{.Names}}' 2>/dev/null | grep -i postgres | head -1 | xargs -r -I{} docker exec {} postgres --version 2>/dev/null"
+blank
+note "PostgreSQL 16.15 (2026-08-13) fixes CVE-2026-14664 / 14669 (heap overflows"
+note "reaching arbitrary code as the postgres OS user), CVE-2026-14663 (pgcrypto"
+note "silently using cleartext for disabled ciphers) and CVE-2026-6473. All require"
+note "an authenticated database user or query authorship, and this server is bound"
+note "to loopback with no published port — escalation, not entry."
+
+PG_VER="$(bash -c "${SUDO} docker ps --format '{{.Names}}' 2>/dev/null" 2>/dev/null | grep -i postgres | head -1 | xargs -r -I{} bash -c "${SUDO} docker exec {} postgres --version 2>/dev/null" | grep -oE '[0-9]+\.[0-9]+' | head -1)"
+if [[ -n "${PG_VER}" ]]; then
+  PG_MAJ="${PG_VER%%.*}"; PG_MIN="${PG_VER#*.}"
+  note "detected PostgreSQL ${PG_VER}"
+  if [[ "${PG_MAJ}" == "16" ]] && [[ "${PG_MIN}" =~ ^[0-9]+$ ]] && (( PG_MIN < 15 )); then
+    finding MED "PostgreSQL ${PG_VER} predates 16.15 — patched CVEs are reachable only by an authenticated DB user, but this database holds the faction data"
+  fi
+fi
+
+# ─────────────────────────────────────────────────────────────
 section "nginx exposure surface"
 probe_sh "enabled sites" "ls -l /etc/nginx/sites-enabled/ 2>/dev/null"
 blank

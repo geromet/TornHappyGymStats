@@ -111,27 +111,51 @@ run_one() {
   echo "    output:    ${out}"
   echo
 
-  local remote_cmd ssh_flags
   if (( USE_SUDO )); then
-    remote_cmd='sudo -p "[sudo] password for %u on %h: " bash -s'
-    ssh_flags="-tt"   # sudo needs a TTY to prompt while the script arrives on stdin
-  else
-    remote_cmd='bash -s'
-    ssh_flags="-T"
-  fi
+    # sudo reads its password from STDIN. Piping the script on stdin therefore
+    # feeds the script to sudo as password guesses — which is exactly what
+    # happened on the first attempt: "sudo: 3 incorrect password attempts",
+    # a report full of echoed source, and no audit at all.
+    #
+    # So the script travels as a command ARGUMENT (base64, to survive quoting)
+    # and stdin is left free for the human to type the password on the TTY.
+    local payload
+    payload="$(cat "${LIB}" "${collector}" | base64 | tr -d '\n')"
+    local remote_cmd
+    remote_cmd="_p='${payload}'; _s=\$(printf '%s' \"\$_p\" | base64 -d); sudo -p '[sudo] password for %u on %h: ' bash -c \"\$_s\""
 
-  # shellcheck disable=SC2086
-  if cat "${LIB}" "${collector}" | ssh ${ssh_flags} \
+    ssh -tt \
       -i "${DEPLOY_SSH_KEY}" \
       -o "ProxyCommand=${DEPLOY_PROXY_COMMAND}" \
       "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}" \
-      "${remote_cmd}" > "${out}" 2>&1; then
-    :
+      "${remote_cmd}" > "${out}" 2>&1 || true
+
+    # A forced TTY leaves CRs behind.
+    [[ -s "${out}" ]] && { sed -i 's/\r$//' "${out}" 2>/dev/null || true; }
+  else
+    cat "${LIB}" "${collector}" | ssh -T \
+      -i "${DEPLOY_SSH_KEY}" \
+      -o "ProxyCommand=${DEPLOY_PROXY_COMMAND}" \
+      "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}" \
+      'bash -s' > "${out}" 2>&1 || true
   fi
 
-  # Reports carry \r when a TTY was forced; strip so they read cleanly.
-  if (( USE_SUDO )) && [[ -s "${out}" ]]; then
-    sed -i 's/\r$//' "${out}" 2>/dev/null || true
+  # Refuse to present a failed run as a report. The first --sudo attempt
+  # produced 12KB of echoed shell source and zero findings; nothing downstream
+  # noticed, because "the file is non-empty" was the only check.
+  if grep -qE 'incorrect password attempt|Sorry, try again|is not in the sudoers file' "${out}" 2>/dev/null; then
+    echo "RECON_FAIL category=sudo_auth_failed path=${out}" >&2
+    echo "    sudo rejected the password, so no audit ran. The file contains the" >&2
+    echo "    failed session, not a report. Re-run and enter the password when" >&2
+    echo "    prompted, or configure passwordless sudo for this account." >&2
+    return 1
+  fi
+
+  if ! head -5 "${out}" 2>/dev/null | grep -q '^\(HappyGymStats dev-host reconnaissance\|Listening-port investigation\|Server security and health audit\)'; then
+    echo "RECON_FAIL category=no_report_header path=${out}" >&2
+    echo "    Output does not begin with a collector header, so the collector did" >&2
+    echo "    not run. Inspect the file — it holds the raw session, not a report." >&2
+    return 1
   fi
 
   if [[ ! -s "${out}" ]]; then
