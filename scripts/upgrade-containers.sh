@@ -149,8 +149,14 @@ echo "==> Surveying containers on ${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}"
 echo "    (read-only; nothing is changed in this phase)"
 echo
 
+# Command substitution captures stdout, which is where sudo writes its password
+# prompt — so "$(ssh ...)" hides the prompt and the run hangs waiting for input
+# the operator was never shown. Stream through tee instead: the prompt reaches
+# the terminal, and the survey is read back from the file.
+SURVEY_TMP="$(mktemp)"
+trap 'rm -f "${SURVEY_TMP}"' EXIT
 SURVEY_RC=0
-SURVEY="$(ssh_tty "bash -s" <<'REMOTE' || SURVEY_RC=$?
+ssh_tty "bash -s" <<'REMOTE' 2>&1 | tee "${SURVEY_TMP}" | sed 's/^/    /' || SURVEY_RC=$?
 set -uo pipefail
 SUDO=""
 if [ "$(id -u)" != "0" ]; then
@@ -178,9 +184,12 @@ echo "PG_NAME=${PG}"
 echo "DISK_AVAIL=$(df -BG --output=avail /var 2>/dev/null | tail -1 | tr -dc '0-9')"
 echo "SURVEY_OK=1"
 REMOTE
-)"
 
-echo "${SURVEY}" | grep -vE '^\s*$' | sed 's/^/    /'
+# Drop the sudo prompt line and CRs left by the forced TTY.
+sed -i 's/\r$//' "${SURVEY_TMP}" 2>/dev/null || true
+sed -i '/^\[sudo\] password for /d' "${SURVEY_TMP}" 2>/dev/null || true
+SURVEY="$(cat "${SURVEY_TMP}")"
+
 echo
 
 get() { echo "${SURVEY}" | grep "^$1=" | head -1 | cut -d= -f2- | tr -d '\r'; }

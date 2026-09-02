@@ -38,9 +38,12 @@ Options:
 Prerequisite:
   cloudflared access login https://ssh.geromet.com
 
-If --sudo prompts and the prompt does not appear correctly, run `sudo -v` on the
-host first, then re-run without --sudo: the collectors detect passwordless or
-recently-cached sudo on their own.
+With --sudo the report is streamed to your terminal as well as saved, so the
+sudo password prompt is visible. Everything still lands in the output file.
+
+Caching sudo in a separate session does not help: Ubuntu enables tty_tickets, so
+a sudo timestamp is tied to the terminal that created it and a later ssh session
+gets a different pty.
 
 Read-only on both ends. No collector installs, starts, enables, reloads or
 writes anything; every command is a query. Secrets are never printed —
@@ -124,14 +127,30 @@ run_one() {
     local remote_cmd
     remote_cmd="_p='${payload}'; _s=\$(printf '%s' \"\$_p\" | base64 -d); sudo -p '[sudo] password for %u on %h: ' bash -c \"\$_s\""
 
+    # sudo writes its prompt to the terminal through stdout/stderr. Redirecting
+    # both straight into the report file swallows the prompt: sudo waits for a
+    # password the operator was never shown, and the file ends up beginning with
+    # "[sudo] password for ...". That is exactly what happened.
+    #
+    # tee keeps stdout attached to the terminal AND saves it. Note the prompt
+    # has no trailing newline, so a line-buffered filter here would hold it back
+    # until the next newline — tee is byte-oriented and passes it straight
+    # through, which is why the output is not filtered.
+    echo "    (the report streams past below; enter your sudo password when asked)"
+    echo
     ssh -tt \
       -i "${DEPLOY_SSH_KEY}" \
       -o "ProxyCommand=${DEPLOY_PROXY_COMMAND}" \
       "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}" \
-      "${remote_cmd}" > "${out}" 2>&1 || true
+      "${remote_cmd}" 2>&1 | tee "${out}"
+    echo
 
-    # A forced TTY leaves CRs behind.
-    [[ -s "${out}" ]] && { sed -i 's/\r$//' "${out}" 2>/dev/null || true; }
+    # A forced TTY leaves CRs behind, and the prompt line is not part of the
+    # report — drop both so the saved file is clean.
+    if [[ -s "${out}" ]]; then
+      sed -i 's/\r$//' "${out}" 2>/dev/null || true
+      sed -i '1{/^\[sudo\] password for /d}' "${out}" 2>/dev/null || true
+    fi
   else
     cat "${LIB}" "${collector}" | ssh -T \
       -i "${DEPLOY_SSH_KEY}" \
@@ -151,7 +170,7 @@ run_one() {
     return 1
   fi
 
-  if ! head -5 "${out}" 2>/dev/null | grep -q '^\(HappyGymStats dev-host reconnaissance\|Listening-port investigation\|Server security and health audit\)'; then
+  if ! head -8 "${out}" 2>/dev/null | grep -q '^\(HappyGymStats dev-host reconnaissance\|Listening-port investigation\|Server security and health audit\)'; then
     echo "RECON_FAIL category=no_report_header path=${out}" >&2
     echo "    Output does not begin with a collector header, so the collector did" >&2
     echo "    not run. Inspect the file — it holds the raw session, not a report." >&2
