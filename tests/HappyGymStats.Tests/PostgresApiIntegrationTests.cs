@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using HappyGymStats.Api;
 using HappyGymStats.Data;
+using DotNet.Testcontainers.Builders;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -62,8 +63,11 @@ public sealed class PostgresApiIntegrationTests : IAsyncLifetime
                 $"Increase {StartupTimeoutEnvVar} or ensure Docker is healthy.";
             return;
         }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or DockerUnavailableException)
         {
+            // Testcontainers 3.x signalled a missing daemon with ArgumentException /
+            // InvalidOperationException; 4.x introduced DockerUnavailableException. Keep all
+            // three so the suite still skips rather than fails when Docker is absent.
             _skipReason =
                 $"[docker] Postgres integration tests require Docker. Start Docker locally and re-run. Details: {ex.Message}";
             return;
