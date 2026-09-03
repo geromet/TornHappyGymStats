@@ -16,3 +16,38 @@ html, body {
     border-radius: 0 !important;
     background-color: var(--mud-palette-surface);
 }
+
+/* ── Figure provenance markers (UX plan U001) ────────────────────────────────
+   A measured number carries no marker: marking everything is the same as
+   marking nothing. Only projected and inferred figures announce themselves, and
+   they do it in the caption rather than beside the value, so the number itself
+   stays scannable at a glance on a war night. */
+.hgs-figure-marker {
+    display: inline-block;
+    margin-left: 0.4em;
+    padding: 0 0.4em;
+    border-radius: 3px;
+    font-size: 0.72em;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    vertical-align: baseline;
+    cursor: help;
+    /* Not colour alone: the border carries the same information for anyone who
+       cannot distinguish the hues, and the label is a word, not a dot. */
+    border: 1px solid currentColor;
+}
+
+.hgs-figure-marker-projected {
+    color: var(--mud-palette-warning);
+}
+
+.hgs-figure-marker-inferred {
+    color: var(--mud-palette-info);
+    border-style: dashed;
+}
+
+.hgs-figure-note {
+    display: block;
+    margin-top: 0.15rem;
+}

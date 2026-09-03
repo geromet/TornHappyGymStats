@@ -238,6 +238,11 @@ reg_add verify-chain "Verify" \
   "verify/w06-chain-contract.sh" "-" "NONE" "" \
   "Pinned chain acceptance tests, board literals, and the Core boundary guardrail."
 
+reg_add verify-honest-signal "Verify" \
+  "U001 honest-signal contract (offline)" \
+  "verify/u001-honest-signal.sh" "-" "NONE" "" \
+  "Checks every war-board figure declares whether it is measured, projected or inferred."
+
 reg_add verify-vault "Verify" \
   "M009 key-vault contract" \
   "verify/w07-key-vault-contract.sh" "-" "NONE" "" \

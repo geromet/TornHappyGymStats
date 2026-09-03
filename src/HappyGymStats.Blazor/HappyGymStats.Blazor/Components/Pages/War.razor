@@ -105,32 +105,42 @@
                                 <MudCardContent>
                                     <MudGrid Class="mb-3">
                                         <MudItem xs="6">
-                                            <MudText Typo="Typo.overline">Score</MudText>
-                                            <MudText Typo="Typo.h5">@faction.Score</MudText>
+                                            <Figure Label="Score" Value="@faction.Score.ToString()"
+                                                    Kind="FigureKind.Measured" ValueTypo="Typo.h5" />
                                         </MudItem>
                                         <MudItem xs="6">
-                                            <MudText Typo="Typo.overline">Chain</MudText>
-                                            <MudText Typo="Typo.h5">@faction.Chain</MudText>
+                                            <Figure Label="Chain" Value="@faction.Chain.ToString()"
+                                                    Kind="FigureKind.Measured" ValueTypo="Typo.h5" />
                                         </MudItem>
                                         <MudItem xs="6">
-                                            <MudText Typo="Typo.overline">ETA</MudText>
-                                            <MudText Typo="Typo.body1">@FormatEta(faction.Eta)</MudText>
+                                            @* Projected, not measured: it runs the recent score rate forward, so it
+                                               moves on its own after a lull with no hits at all. *@
+                                            <Figure Label="ETA" Value="@FormatEta(faction.Eta)"
+                                                    Kind="FigureKind.Projected"
+                                                    Diagnostic="@faction.Eta.Diagnostic" />
                                         </MudItem>
                                         <MudItem xs="6">
-                                            <MudText Typo="Typo.overline">Attacks to finish</MudText>
-                                            <MudText Typo="Typo.body1">@FormatAttacksToFinish(faction.AttacksToFinish)</MudText>
+                                            <Figure Label="Attacks to finish" Value="@FormatAttacksToFinish(faction.AttacksToFinish)"
+                                                    Kind="FigureKind.Projected"
+                                                    Diagnostic="@faction.AttacksToFinish.Diagnostic" />
                                         </MudItem>
                                         <MudItem xs="6">
-                                            <MudText Typo="Typo.overline">Participation</MudText>
-                                            <MudText Typo="Typo.body1">@FormatPercent(faction.CoverageRatio)</MudText>
+                                            <Figure Label="Participation" Value="@FormatPercent(faction.CoverageRatio)"
+                                                    Kind="FigureKind.Measured" />
                                         </MudItem>
                                         <MudItem xs="6">
-                                            <MudText Typo="Typo.overline">Coverage ratio</MudText>
-                                            <MudText Typo="Typo.body1">@faction.OpenTargetCount open · @FormatPercent(faction.TargetCoverageRatio) of available attackers</MudText>
+                                            @* Measured despite being a ratio: both sides are counts Torn reported,
+                                               and polling again gives the same answer. *@
+                                            <Figure Label="Coverage ratio"
+                                                    Value="@($"{faction.OpenTargetCount} open")"
+                                                    Note="@($"{FormatPercent(faction.TargetCoverageRatio)} of available attackers")"
+                                                    Kind="FigureKind.Measured" />
                                         </MudItem>
                                         <MudItem xs="6">
-                                            <MudText Typo="Typo.overline">Availability</MudText>
-                                            <MudText Typo="Typo.body1">@faction.AvailableMemberCount ready · @faction.HospitalizedMemberCount hospital · @faction.UnavailableMemberCount unavailable</MudText>
+                                            <Figure Label="Availability"
+                                                    Value="@($"{faction.AvailableMemberCount} ready")"
+                                                    Note="@($"{faction.HospitalizedMemberCount} hospital · {faction.UnavailableMemberCount} unavailable")"
+                                                    Kind="FigureKind.Measured" />
                                         </MudItem>
                                     </MudGrid>
 
@@ -154,20 +164,24 @@
 
                                             <MudGrid>
                                                 <MudItem xs="6">
-                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Multiplier</MudText>
-                                                    <MudText Typo="Typo.body1">@chain.CurrentMultiplier.ToString("0.00")×</MudText>
+                                                    <Figure Label="Multiplier" Value="@($"{chain.CurrentMultiplier:0.00}×")"
+                                                            Kind="FigureKind.Measured" />
                                                 </MudItem>
                                                 <MudItem xs="6">
-                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Next milestone</MudText>
-                                                    <MudText Typo="Typo.body1">@FormatNextMilestone(chain)</MudText>
+                                                    <Figure Label="Next milestone" Value="@FormatNextMilestone(chain)"
+                                                            Kind="FigureKind.Measured" />
                                                 </MudItem>
                                                 <MudItem xs="6">
-                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">War targets attackable</MudText>
-                                                    <MudText Typo="Typo.body1">@chain.AttackableWarTargetCount</MudText>
+                                                    <Figure Label="War targets attackable" Value="@chain.AttackableWarTargetCount.ToString()"
+                                                            Kind="FigureKind.Measured" />
                                                 </MudItem>
                                                 <MudItem xs="6">
-                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@ChainTimerLabel(chain)</MudText>
-                                                    <MudText Typo="Typo.body1">@FormatChainTimer(chain)</MudText>
+                                                    @* The one figure that was already honest, now saying it in the
+                                                       same vocabulary as the rest: Torn's own deadline is measured,
+                                                       the poll-history estimate is inferred. *@
+                                                    <Figure Label="@ChainTimerLabel(chain)" Value="@FormatChainTimer(chain)"
+                                                            Kind="@ChainTimerKind(chain)"
+                                                            Diagnostic="@chain.TimerDiagnostic" />
                                                 </MudItem>
                                             </MudGrid>
 
@@ -228,8 +242,21 @@
                 <MudCard Class="war-hole-panel">
                     <MudCardHeader>
                         <CardHeaderContent>
-                            <MudText Typo="Typo.h6">Hole alerts</MudText>
-                            <MudText Typo="Typo.body2" Color="Color.Secondary">Idle attackers and open targets ranked by severity.</MudText>
+                            <MudText Typo="Typo.h6">
+                                Hole alerts
+                                @* Panel-level rather than per-row: every hole in this list is inferred
+                                   the same way, so marking each row would be noise. Severity leans on
+                                   idle time and open slots because real energy needs a linked key
+                                   (M009) — until then this is a proxy, and says so. *@
+                                <MudTooltip Text="@FigureKinds.Explanation(FigureKind.Inferred)" Arrow="true" Placement="Placement.Top">
+                                    <span class="hgs-figure-marker hgs-figure-marker-inferred"
+                                          aria-label="@($"inferred: {FigureKinds.Explanation(FigureKind.Inferred)}")">inferred</span>
+                                </MudTooltip>
+                            </MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                Idle attackers and open targets ranked by severity. Severity is judged from
+                                idle time and open slots, not measured energy — a linked key sharpens it.
+                            </MudText>
                         </CardHeaderContent>
                     </MudCardHeader>
                     <MudCardContent>
@@ -351,6 +378,12 @@
 
     // The label changes with the data source, so an exact countdown is never dressed up as a
     // guess and a guess is never dressed up as a countdown.
+    // Exact deadlines are measured; the poll-history estimate is inferred. This is
+    // the case the whole vocabulary was derived from — the board has carried both
+    // since M008 and this only renames what it already distinguished.
+    private static FigureKind ChainTimerKind(WarChainCommandDto chain)
+        => chain.TimerConfidence == "Exact" ? FigureKind.Measured : FigureKind.Inferred;
+
     private static string ChainTimerLabel(WarChainCommandDto chain)
         => chain.TimerConfidence == "Exact" ? "Chain lapses in" : "Last hit (inferred)";
 
