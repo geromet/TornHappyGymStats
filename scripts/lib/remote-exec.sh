@@ -50,15 +50,17 @@ readonly _REMOTE_EXEC_LOADED=1
 #
 #   --tee FILE   also save the session to FILE, cleaned of CRs and the sudo
 #                prompt line
-#   --indent     indent the terminal output by four spaces for readability
+#   --indent     accepted and IGNORED. Indenting means filtering the stream,
+#                and any line-buffered filter swallows sudo's newline-less
+#                prompt. Kept only so existing call sites do not break.
 #
 # Returns the remote script's exit status.
 remote_exec_script() {
-  local tee_file="" indent=0
+  local tee_file=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --tee) tee_file="${2:-}"; shift 2 ;;
-      --indent) indent=1; shift ;;
+      --indent) shift ;;   # ignored on purpose — see above
       *) echo "remote_exec_script: unknown option $1" >&2; return 2 ;;
     esac
   done
@@ -108,13 +110,17 @@ PREAMBLE
 
   local rc=0
   if [[ -n "${tee_file}" ]]; then
-    if (( indent )); then
-      # tee before any filter: the sudo prompt has no trailing newline and a
-      # line-buffered sed would hold it back until the next newline arrived.
-      ssh "${ssh_args[@]}" 2>&1 | tee "${tee_file}" | sed 's/^/    /'
-    else
-      ssh "${ssh_args[@]}" 2>&1 | tee "${tee_file}"
-    fi
+    # NOTHING may sit between ssh and the terminal except tee.
+    #
+    # An earlier version piped through `sed 's/^/    /'` to indent the output,
+    # directly under a comment warning that a line-buffered filter would swallow
+    # the prompt. It did exactly that: the preamble's echo has a trailing
+    # newline and appeared, the `sudo -v` prompt does not and never did, so the
+    # run hung with no visible question. tee is byte-oriented and passes a
+    # partial line straight through; sed cannot emit one until a newline
+    # arrives, and `sed -u` does not help because the substitution is still
+    # per-line. Cosmetic indentation is not worth a hang.
+    ssh "${ssh_args[@]}" 2>&1 | tee "${tee_file}"
     rc="${PIPESTATUS[0]}"
     if [[ -s "${tee_file}" ]]; then
       sed -i 's/\r$//' "${tee_file}" 2>/dev/null || true
