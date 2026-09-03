@@ -1,16 +1,102 @@
 @page "/terms"
+@using HappyGymStats.Contracts.Compliance
 
-<PageTitle>Terms of Use · Happy Gym Stats</PageTitle>
+@* The published key-terms disclosure (M009 S01). This page is the disclosure —
+   docs/torn-api/terms-of-service.md is the same text under version control, and
+   scripts/verify/w07-key-vault-contract.sh fails the build if the two versions
+   drift. Editing one without the other is how a service ends up storing keys
+   against a promise it no longer makes. *@
+
+<PageTitle>Torn API key terms · Happy Gym Stats</PageTitle>
 
 <MudPaper Class="pa-6">
-    <MudText Typo="Typo.h4" GutterBottom="true">Terms of use</MudText>
-    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
-        Initial terms placeholder for service usage and compliance boundaries.
+    <MudText Typo="Typo.h4" GutterBottom="true">Torn API key terms</MudText>
+
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-1">
+        Version @TermsDocument.Version · published @TermsDocument.PublishedOn
+    </MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+        Source policy: <MudLink Href="https://www.torn.com/api.html#" Target="_blank" Rel="noopener noreferrer">torn.com/api.html</MudLink>
     </MudText>
 
-    <ul>
-        <li>Use of Torn data must comply with Torn API terms.</li>
-        <li>Users are responsible for API key permissions they submit.</li>
-        <li>Service behavior and retention details will be expanded here.</li>
-    </ul>
+    <MudText Typo="Typo.body1" Class="mb-4">
+        This service uses Torn API keys in three distinct ways. They are listed separately
+        because they differ in access level, in whether the key is stored, and in what is
+        done with the data.
+    </MudText>
+
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-6">
+        Usages 2 and 3 store your key, encrypted. Version 1.0.0 of this document said keys
+        were never stored; that was true of usage 1 only. Nothing stores a key until you
+        have accepted this version.
+    </MudAlert>
+
+    <MudText Typo="Typo.h6" GutterBottom="true">1 · One-off import key</MudText>
+    <MudSimpleTable Dense="true" Bordered="true" Class="mb-6">
+        <tbody>
+            <tr><td><b>Access level requested</b></td><td>Full Access</td></tr>
+            <tr><td><b>Key storage</b></td><td><b>Not stored.</b> Sent over HTTPS for the import run and held in memory only for its duration.</td></tr>
+            <tr><td><b>Key sharing</b></td><td>Not shared.</td></tr>
+            <tr><td><b>Data storage</b></td><td>Persistent — imported and derived data is retained until removed on request.</td></tr>
+            <tr><td><b>Data sharing</b></td><td>Aggregated and anonymised data is shown publicly.</td></tr>
+            <tr><td><b>Purpose</b></td><td>Non-malicious statistical analysis: gym-gain reconstruction from your own logs.</td></tr>
+        </tbody>
+    </MudSimpleTable>
+
+    <MudText Typo="Typo.h6" GutterBottom="true">2 · War poller key</MudText>
+    <MudSimpleTable Dense="true" Bordered="true" Class="mb-6">
+        <tbody>
+            <tr><td><b>Access level requested</b></td><td>Limited</td></tr>
+            <tr><td><b>Key storage</b></td><td><b>Stored, encrypted.</b> AES-256-GCM under a master key held only in the server environment, never in the repository and never in configuration files.</td></tr>
+            <tr><td><b>Key sharing</b></td><td>Not shared. Not readable through any endpoint, by any role, including administrators.</td></tr>
+            <tr><td><b>Data storage</b></td><td>War state (scores, chains, membership) retained for war history.</td></tr>
+            <tr><td><b>Data sharing</b></td><td>Visible to members of the faction the war belongs to.</td></tr>
+            <tr><td><b>Purpose</b></td><td>Polling public faction and war endpoints during a ranked war, unattended, so the war board stays live.</td></tr>
+        </tbody>
+    </MudSimpleTable>
+
+    <MudText Typo="Typo.h6" GutterBottom="true">3 · Member key</MudText>
+    <MudSimpleTable Dense="true" Bordered="true" Class="mb-6">
+        <tbody>
+            <tr><td><b>Access level requested</b></td><td><b>Limited only.</b> A Full Access key is refused, not silently accepted.</td></tr>
+            <tr><td><b>Key storage</b></td><td><b>Stored, encrypted</b>, as in usage 2. Decrypted only for the duration of the call that uses it.</td></tr>
+            <tr><td><b>Key sharing</b></td><td>Not shared. Not readable through any endpoint, by any role, including administrators.</td></tr>
+            <tr><td><b>Data storage</b></td><td>Your bars, cooldowns and attack records, retained while your key is linked.</td></tr>
+            <tr><td><b>Data sharing</b></td><td>Derived war figures are visible to your faction. Raw personal readings are not.</td></tr>
+            <tr><td><b>Purpose</b></td><td>Turning guesses into facts on the war board: real energy instead of inferred hole severity, real cooldowns, and attacks made against you.</td></tr>
+        </tbody>
+    </MudSimpleTable>
+
+    <MudText Typo="Typo.h6" GutterBottom="true">Commitments that apply to every stored key</MudText>
+    <MudList T="string" Dense="true" Class="mb-6">
+        <MudListItem T="string" Icon="@Icons.Material.Filled.DeleteForever">
+            <b>Revocation is immediate and complete.</b> Unlinking a key removes it from service
+            at once and <b>deletes the identifiable personal readings taken with it</b>. It is not
+            a flag that hides the row.
+        </MudListItem>
+        <MudListItem T="string" Icon="@Icons.Material.Filled.VisibilityOff">
+            <b>A key is never readable back.</b> You can see that a key is linked and revoke it.
+            Nobody — including whoever runs the server — can read it through the application.
+        </MudListItem>
+        <MudListItem T="string" Icon="@Icons.Material.Filled.Report">
+            <b>A key never appears</b> in a log, an error message, an API response, or a command line.
+        </MudListItem>
+        <MudListItem T="string" Icon="@Icons.Material.Filled.Block">
+            <b>A key rejected by Torn is not retried.</b> It is marked invalid and its owner is told.
+        </MudListItem>
+        <MudListItem T="string" Icon="@Icons.Material.Filled.LockPerson">
+            <b>Least access.</b> Each usage asks for the lowest access level that works. Where a
+            Limited key is enough, a Full key is refused.
+        </MudListItem>
+    </MudList>
+
+    <MudText Typo="Typo.h6" GutterBottom="true">Consent</MudText>
+    <MudText Typo="Typo.body1" Class="mb-2">
+        Storing a key under usage 2 or 3 requires your active, recorded acceptance of this
+        document — a deliberate action, not implied by using the site. The record stores which
+        version you accepted, so a later material change can identify who needs asking again.
+    </MudText>
+    <MudText Typo="Typo.body1">
+        If you do not accept, usage 1 remains available and nothing about your account changes.
+    </MudText>
 </MudPaper>
