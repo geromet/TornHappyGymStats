@@ -5,7 +5,7 @@
 # Sourced, not executed. Expects DEPLOY_SSH_HOST / DEPLOY_SSH_USER /
 # DEPLOY_SSH_KEY / DEPLOY_PROXY_COMMAND to be set.
 #
-# ── FOUR TRAPS, ALL HIT IN PRACTICE ─────────────────────────────────────────
+# ── FIVE TRAPS, ALL HIT IN PRACTICE ─────────────────────────────────────────
 #
 # 1. Script on stdin.  ssh -tt host 'bash -s' <<'EOF' sends the script to the
 #    remote's STDIN, and sudo reads its PASSWORD from stdin — so sudo eats the
@@ -20,9 +20,24 @@
 #    while waiting. Measured: visible after 3.4s with sed, 0.3s without.
 #
 # 4. Piped stdout breaks the tty.  Even ssh -tt ... | tee file misbehaves: with
-#    stdout on a pipe the terminal is not handed to ssh cleanly, the typed
-#    password is ECHOED IN CLEAR and can arrive truncated. Unacceptable for a
-#    password.
+#    stdout on a pipe the terminal is not handed to ssh cleanly.
+#
+# 5. STDIN IS THE HEREDOC.  This is the one that actually caused the password to
+#    appear in clear text, and it is specific to taking the script on stdin.
+#    Callers write:
+#
+#        remote_exec_script --tee X <<REMOTE ... REMOTE
+#
+#    so the heredoc becomes the FUNCTION's stdin, `cat` drains it, and ssh then
+#    inherits an exhausted pipe. ssh only puts the local terminal into raw mode
+#    when its stdin is a tty; with a pipe it stays in cooked mode, so the local
+#    terminal echoes every keystroke and line-edits the paste. The remote sudo
+#    dutifully disables echo on the REMOTE pty, which is not where the echo was
+#    coming from.
+#
+#    The repo's own deploy-config.sh never hit this because it passes commands
+#    as ARGUMENTS with no heredoc, leaving ssh's stdin attached to the terminal.
+#    Fix: reconnect ssh's stdin to the controlling terminal explicitly.
 #
 # So the interactive session is NEVER piped. ssh owns the terminal completely,
 # exactly as a normal login would, and sudo suppresses echo the way it should.
@@ -125,8 +140,20 @@ PREAMBLE
     remote_cmd="_p='${payload}'; _s=\$(printf '%s' \"\$_p\" | base64 -d); bash -c \"\$_s\""
   fi
 
-  # UNPIPED on purpose. Never add | tee, | sed, > file or $( ) around this line.
-  ssh -tt "${opts[@]}" "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}" "${remote_cmd}" || rc=$?
+  # UNPIPED on purpose (trap 4). Never add | tee, | sed, > file or $( ) here.
+  #
+  # `< /dev/tty` is load-bearing (trap 5): without it ssh inherits the drained
+  # heredoc as stdin, never enters raw mode, and the sudo password is echoed in
+  # clear text locally.
+  if [[ -e /dev/tty ]] && { : >/dev/tty; } 2>/dev/null; then
+    ssh -tt "${opts[@]}" "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}" "${remote_cmd}" < /dev/tty || rc=$?
+  else
+    # No controlling terminal (CI, a pipeline). An interactive sudo cannot work
+    # here, so say so rather than echoing a password into a log.
+    echo "remote_exec_script: no controlling terminal; interactive sudo is not possible." >&2
+    echo "  Run this from an interactive shell, or configure passwordless sudo on the server." >&2
+    ssh -tt "${opts[@]}" "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}" "${remote_cmd}" </dev/null || rc=$?
+  fi
 
   if [[ -n "${tee_file}" ]]; then
     # Reuses the multiplexed connection, needs no sudo, removes the temp file.
