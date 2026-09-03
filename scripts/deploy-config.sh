@@ -134,7 +134,21 @@ deploy_precheck_require_executable_file() {
 deploy_precheck_remote_command() {
   local cmd="$1"
   local category="${2:-missing_remote_command}"
-  deploy_ssh_tty "set -euo pipefail; command -v '${cmd}' >/dev/null" >/dev/null 2>&1 || deploy_precheck_fail "${category}" "command=${cmd}"
+
+  # Probe with a sentinel rather than trusting ssh's exit status. Suppressing
+  # output to keep the precheck quiet also suppresses ssh's own passphrase
+  # prompt and error text, so an unreachable host or an unanswered key
+  # passphrase used to be reported as "this command is not installed" — which
+  # sends the operator to apt-get on a machine that already has it.
+  local probe
+  probe="$(deploy_ssh_tty "set -euo pipefail; if command -v '${cmd}' >/dev/null; then echo PROBE_FOUND; else echo PROBE_ABSENT; fi" 2>/dev/null | tr -d '\r')"
+
+  if [[ "${probe}" == *PROBE_ABSENT* ]]; then
+    deploy_precheck_fail "${category}" "command=${cmd}"
+  elif [[ "${probe}" != *PROBE_FOUND* ]]; then
+    deploy_precheck_fail "remote_probe_unreachable" \
+      "command=${cmd} detail=ssh_produced_no_answer hint=ssh-add_your_key_or_run_cloudflared_access_login"
+  fi
 }
 
 deploy_precheck_remote_service_exists() {
