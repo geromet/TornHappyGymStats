@@ -120,8 +120,10 @@ fi
 : "${DEPLOY_PROXY_COMMAND:=cloudflared access ssh --hostname ssh.geromet.com}"
 : "${DEPLOY_RUN_MAINTENANCE:=0}"
 
-SSH_OPTS=(-i "${DEPLOY_SSH_KEY}" -o "ProxyCommand=${DEPLOY_PROXY_COMMAND}")
-ssh_tty() { ssh -tt "${SSH_OPTS[@]}" "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}" "$@"; }
+# SSH is handled by remote_exec_script; do not add a raw `ssh ... bash -s`
+# helper here — that pattern feeds the script to sudo as passwords.
+# shellcheck source=lib/remote-exec.sh
+source "${SCRIPT_DIR}/lib/remote-exec.sh"
 
 # ── Survey / status ───────────────────────────────────────────────────────
 echo "==> Surveying ${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST} (read-only)"
@@ -130,7 +132,7 @@ echo
 SURVEY_TMP="$(mktemp)"
 trap 'rm -f "${SURVEY_TMP}"' EXIT
 
-ssh_tty "bash -s" <<'REMOTE' 2>&1 | tee "${SURVEY_TMP}" | sed 's/^/    /' || true
+remote_exec_script --tee "${SURVEY_TMP}" --indent <<'REMOTE' || true
 set -uo pipefail
 SUDO=""; [ "$(id -u)" != "0" ] && { sudo -n true 2>/dev/null && SUDO="sudo -n" || SUDO="sudo"; }
 
@@ -235,7 +237,7 @@ DO_NGINX=0; want_step nginx-catchall && DO_NGINX=1
 DO_SWAP=0;  want_step swap && DO_SWAP=1
 DO_HEAP=0;  want_step keycloak-heap && DO_HEAP=1
 
-ssh_tty "bash -s" <<REMOTE
+remote_exec_script <<REMOTE
 set -uo pipefail
 SUDO=""; [ "\$(id -u)" != "0" ] && { sudo -n true 2>/dev/null && SUDO="sudo -n" || SUDO="sudo"; }
 

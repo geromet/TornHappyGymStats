@@ -141,8 +141,10 @@ fi
 : "${DEPLOY_UPGRADE_CONTAINERS:=0}"
 : "${UPGRADE_BACKUP_DIR:=/var/backups/happygymstats}"
 
-SSH_OPTS=(-i "${DEPLOY_SSH_KEY}" -o "ProxyCommand=${DEPLOY_PROXY_COMMAND}")
-ssh_tty() { ssh -tt "${SSH_OPTS[@]}" "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}" "$@"; }
+# SSH is handled by remote_exec_script; do not add a raw `ssh ... bash -s`
+# helper here — that pattern feeds the script to sudo as passwords.
+# shellcheck source=lib/remote-exec.sh
+source "${SCRIPT_DIR}/lib/remote-exec.sh"
 
 # ── Survey ────────────────────────────────────────────────────────────────
 echo "==> Surveying containers on ${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}"
@@ -156,7 +158,7 @@ echo
 SURVEY_TMP="$(mktemp)"
 trap 'rm -f "${SURVEY_TMP}"' EXIT
 SURVEY_RC=0
-ssh_tty "bash -s" <<'REMOTE' 2>&1 | tee "${SURVEY_TMP}" | sed 's/^/    /' || SURVEY_RC=$?
+remote_exec_script --tee "${SURVEY_TMP}" --indent <<'REMOTE' || SURVEY_RC=$?
 set -uo pipefail
 SUDO=""
 if [ "$(id -u)" != "0" ]; then
@@ -295,7 +297,7 @@ echo "      Keycloak image was: ${KC_IMAGE:-n/a}"
 echo "      Postgres image was: ${PG_IMAGE:-n/a}"
 echo
 
-ssh_tty "bash -s" <<REMOTE
+remote_exec_script <<REMOTE
 set -euo pipefail
 SUDO=""
 if [ "\$(id -u)" != "0" ]; then

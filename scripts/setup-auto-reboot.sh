@@ -132,8 +132,10 @@ fi
 : "${DEPLOY_PROXY_COMMAND:=cloudflared access ssh --hostname ssh.geromet.com}"
 : "${DEPLOY_ENABLE_AUTO_REBOOT:=0}"
 
-SSH_OPTS=(-i "${DEPLOY_SSH_KEY}" -o "ProxyCommand=${DEPLOY_PROXY_COMMAND}")
-ssh_tty() { ssh -tt "${SSH_OPTS[@]}" "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}" "$@"; }
+# SSH is handled by remote_exec_script; do not add a raw `ssh ... bash -s`
+# helper here — that pattern feeds the script to sudo as passwords.
+# shellcheck source=lib/remote-exec.sh
+source "${SCRIPT_DIR}/lib/remote-exec.sh"
 
 readonly APT_CONF="/etc/apt/apt.conf.d/51happygymstats-auto-reboot"
 readonly TIMER_UNIT="happygymstats-auto-reboot.timer"
@@ -144,7 +146,7 @@ readonly REBOOT_HELPER="/usr/local/sbin/happygymstats-auto-reboot"
 if (( SHOW_STATUS )); then
   echo "==> Current auto-reboot configuration on ${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}"
   echo
-  ssh_tty "bash -s" <<REMOTE
+  remote_exec_script <<REMOTE
 set -uo pipefail
 SUDO=""; [ "\$(id -u)" != "0" ] && { sudo -n true 2>/dev/null && SUDO="sudo -n" || SUDO="sudo"; }
 echo "--- unattended-upgrades reboot settings (effective) ---"
@@ -178,7 +180,7 @@ echo
 PREFLIGHT_TMP="$(mktemp)"
 trap 'rm -f "${PREFLIGHT_TMP}"' EXIT
 
-ssh_tty "bash -s" <<'REMOTE' 2>&1 | tee "${PREFLIGHT_TMP}" | sed 's/^/    /' || true
+remote_exec_script --tee "${PREFLIGHT_TMP}" --indent <<'REMOTE' || true
 set -uo pipefail
 SUDO=""; [ "$(id -u)" != "0" ] && { sudo -n true 2>/dev/null && SUDO="sudo -n" || SUDO="sudo"; }
 
@@ -302,7 +304,7 @@ fi
 # ── Execute ───────────────────────────────────────────────────────────────
 echo "==> Applying"
 
-ssh_tty "bash -s" <<REMOTE
+remote_exec_script <<REMOTE
 set -euo pipefail
 SUDO=""; [ "\$(id -u)" != "0" ] && { sudo -n true 2>/dev/null && SUDO="sudo -n" || SUDO="sudo"; }
 
