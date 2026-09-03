@@ -89,7 +89,7 @@ deploy_ssh_tty "set -euo pipefail; \
   ${DEPLOY_SUDO_CMD} ln -sfn '${REMOTE_RELEASE_DIR}' '${REMOTE_CURRENT_DIR}'; \
   ${DEPLOY_SUDO_CMD} chown -R '${DEPLOY_BACKEND_OWNER}:${DEPLOY_BACKEND_GROUP}' '${REMOTE_RELEASE_DIR}' '${DEPLOY_REMOTE_ROOT}/data'; \
   ${DEPLOY_SUDO_CMD} find '${REMOTE_RELEASE_DIR}' -type d -exec chmod 755 {} \\;; \
-  ${DEPLOY_SUDO_CMD} find '${REMOTE_RELEASE_DIR}' -type f -exec chmod 644 {} \\;; \
+  ${DEPLOY_SUDO_CMD} find '${REMOTE_RELEASE_DIR}' -type f ! -name 'HappyGymStats.Api' -exec chmod 644 {} \\;; \
   if [[ -f '${REMOTE_RELEASE_DIR}/HappyGymStats.Api' ]]; then ${DEPLOY_SUDO_CMD} chmod 755 '${REMOTE_RELEASE_DIR}/HappyGymStats.Api'; fi; \
   rm -rf '${REMOTE_STAGING_DIR}'"
 

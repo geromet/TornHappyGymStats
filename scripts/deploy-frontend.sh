@@ -90,7 +90,7 @@ deploy_ssh_tty "set -euo pipefail; \
   ${DEPLOY_SUDO_CMD} ln -sfn '${REMOTE_RELEASE_DIR}' '${REMOTE_CURRENT_DIR}'; \
   ${DEPLOY_SUDO_CMD} chown -R '${DEPLOY_BLAZOR_OWNER}:${DEPLOY_BLAZOR_GROUP}' '${REMOTE_RELEASE_DIR}'; \
   ${DEPLOY_SUDO_CMD} find '${REMOTE_RELEASE_DIR}' -type d -exec chmod 755 {} \\;; \
-  ${DEPLOY_SUDO_CMD} find '${REMOTE_RELEASE_DIR}' -type f -exec chmod 644 {} \\;; \
+  ${DEPLOY_SUDO_CMD} find '${REMOTE_RELEASE_DIR}' -type f ! -name 'HappyGymStats.Blazor' -exec chmod 644 {} \\;; \
   if [[ -f '${REMOTE_RELEASE_DIR}/HappyGymStats.Blazor' ]]; then ${DEPLOY_SUDO_CMD} chmod 755 '${REMOTE_RELEASE_DIR}/HappyGymStats.Blazor'; fi; \
   rm -rf '${REMOTE_STAGING_DIR}'"
 
