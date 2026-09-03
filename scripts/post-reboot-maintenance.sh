@@ -134,7 +134,8 @@ trap 'rm -f "${SURVEY_TMP}"' EXIT
 
 remote_exec_script --tee "${SURVEY_TMP}" --indent <<'REMOTE' || true
 set -uo pipefail
-SUDO=""; [ "$(id -u)" != "0" ] && { sudo -n true 2>/dev/null && SUDO="sudo -n" || SUDO="sudo"; }
+# SUDO is supplied by remote_exec_script's preamble (already authenticated,
+# pinned to `sudo -n`). Do NOT redefine it here.
 
 echo "--- kernel ---"
 echo "  running:   $(uname -r)"
@@ -183,6 +184,15 @@ REMOTE
 sed -i 's/\r$//' "${SURVEY_TMP}" 2>/dev/null || true
 sed -i '/^\[sudo\] password for /d' "${SURVEY_TMP}" 2>/dev/null || true
 echo
+
+# Distinguish a refused sudo from an unreachable host: blaming Cloudflare for
+# a wrong password sends the operator to fix the wrong thing.
+if grep -q 'REMOTE_SUDO_FAILED\|Sorry, try again' "${SURVEY_TMP}" 2>/dev/null; then
+  echo "MAINTENANCE_FAIL category=sudo_auth_failed" >&2
+  echo "    sudo on the server refused the password, so nothing ran." >&2
+  echo "    Re-run and enter it when prompted." >&2
+  exit 1
+fi
 
 if ! grep -q '^SURVEY_OK=1' "${SURVEY_TMP}"; then
   echo "MAINTENANCE_FAIL category=survey_unreachable" >&2
@@ -239,7 +249,7 @@ DO_HEAP=0;  want_step keycloak-heap && DO_HEAP=1
 
 remote_exec_script <<REMOTE
 set -uo pipefail
-SUDO=""; [ "\$(id -u)" != "0" ] && { sudo -n true 2>/dev/null && SUDO="sudo -n" || SUDO="sudo"; }
+# SUDO comes from remote_exec_script's preamble; do NOT redefine it.
 
 DO_NGINX=${DO_NGINX}
 DO_SWAP=${DO_SWAP}

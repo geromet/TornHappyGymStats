@@ -109,10 +109,8 @@ trap 'rm -f "${SURVEY_TMP}"' EXIT
 SURVEY_RC=0
 remote_exec_script --tee "${SURVEY_TMP}" --indent <<REMOTE || SURVEY_RC=$?
 set -uo pipefail
-SUDO=""
-if [ "\$(id -u)" != "0" ]; then
-  if sudo -n true 2>/dev/null; then SUDO="sudo -n"; else SUDO="sudo"; fi
-fi
+# SUDO is supplied by remote_exec_script's preamble (already authenticated,
+# pinned to `sudo -n`). Do NOT redefine it here.
 
 # Prove docker is actually queryable before trusting an empty container list.
 # Without a TTY, interactive sudo cannot prompt, docker fails, and an empty
@@ -163,6 +161,15 @@ echo
 # Distinguish "the host said there is no container" from "we never reached the
 # host". Treating an unreachable host as "nothing to do" would report port 30033
 # as closed when it is still wide open.
+# Distinguish a refused sudo from an unreachable host: blaming Cloudflare for
+# a wrong password sends the operator to fix the wrong thing.
+if grep -q 'REMOTE_SUDO_FAILED\|Sorry, try again' "${SURVEY_TMP}" 2>/dev/null; then
+  echo "REMOVE_TEAMSPEAK_FAIL category=sudo_auth_failed" >&2
+  echo "    sudo on the server refused the password, so nothing ran." >&2
+  echo "    Re-run and enter it when prompted." >&2
+  exit 1
+fi
+
 if ! echo "${SURVEY}" | grep -q '^SURVEY_OK=1'; then
   echo "REMOVE_TEAMSPEAK_FAIL category=survey_unreachable ssh_rc=${SURVEY_RC}" >&2
   echo "    The survey did not complete, so nothing is known about the container" >&2
@@ -252,10 +259,8 @@ echo "==> Executing removal"
 
 remote_exec_script <<REMOTE
 set -euo pipefail
-SUDO=""
-if [ "\$(id -u)" != "0" ]; then
-  if sudo -n true 2>/dev/null; then SUDO="sudo -n"; else SUDO="sudo"; fi
-fi
+# SUDO is supplied by remote_exec_script's preamble (already authenticated,
+# pinned to `sudo -n`). Do NOT redefine it here.
 
 CONTAINER='${TS_CONTAINER_NAME}'
 BACKUP_DIR='${TS_BACKUP_DIR}'

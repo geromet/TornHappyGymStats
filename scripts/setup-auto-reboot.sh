@@ -148,7 +148,7 @@ if (( SHOW_STATUS )); then
   echo
   remote_exec_script <<REMOTE
 set -uo pipefail
-SUDO=""; [ "\$(id -u)" != "0" ] && { sudo -n true 2>/dev/null && SUDO="sudo -n" || SUDO="sudo"; }
+# SUDO comes from remote_exec_script's preamble; do NOT redefine it.
 echo "--- unattended-upgrades reboot settings (effective) ---"
 \${SUDO} apt-config dump 2>/dev/null | grep -i 'Unattended-Upgrade::Automatic-Reboot' || echo "(none set)"
 echo
@@ -182,7 +182,8 @@ trap 'rm -f "${PREFLIGHT_TMP}"' EXIT
 
 remote_exec_script --tee "${PREFLIGHT_TMP}" --indent <<'REMOTE' || true
 set -uo pipefail
-SUDO=""; [ "$(id -u)" != "0" ] && { sudo -n true 2>/dev/null && SUDO="sudo -n" || SUDO="sudo"; }
+# SUDO is supplied by remote_exec_script's preamble (already authenticated,
+# pinned to `sudo -n`). Do NOT redefine it here.
 
 problems=0
 
@@ -233,6 +234,15 @@ REMOTE
 sed -i 's/\r$//' "${PREFLIGHT_TMP}" 2>/dev/null || true
 sed -i '/^\[sudo\] password for /d' "${PREFLIGHT_TMP}" 2>/dev/null || true
 echo
+
+# Distinguish a refused sudo from an unreachable host: blaming Cloudflare for
+# a wrong password sends the operator to fix the wrong thing.
+if grep -q 'REMOTE_SUDO_FAILED\|Sorry, try again' "${PREFLIGHT_TMP}" 2>/dev/null; then
+  echo "AUTO_REBOOT_FAIL category=sudo_auth_failed" >&2
+  echo "    sudo on the server refused the password, so nothing ran." >&2
+  echo "    Re-run and enter it when prompted." >&2
+  exit 1
+fi
 
 if ! grep -q '^PREFLIGHT_OK=1' "${PREFLIGHT_TMP}"; then
   echo "AUTO_REBOOT_FAIL category=preflight_unreachable" >&2
@@ -306,7 +316,7 @@ echo "==> Applying"
 
 remote_exec_script <<REMOTE
 set -euo pipefail
-SUDO=""; [ "\$(id -u)" != "0" ] && { sudo -n true 2>/dev/null && SUDO="sudo -n" || SUDO="sudo"; }
+# SUDO comes from remote_exec_script's preamble; do NOT redefine it.
 
 DISABLE=${DISABLE}
 MODE='${MODE}'

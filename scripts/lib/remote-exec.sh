@@ -26,6 +26,20 @@
 #   must therefore tee rather than redirect, and must not filter — the prompt has
 #   no trailing newline, so a line-buffered filter would hold it back and
 #   reintroduce the hang.
+#
+#   A third: the prompt goes to STDERR, so the extremely ordinary
+#
+#       ${SUDO} docker ps -q 2>/dev/null
+#
+#   discards it too. sudo then waits for a password the operator was never
+#   asked for, and the run hangs on a line that looks completely harmless.
+#   There are dozens of such calls across these scripts, and auditing every one
+#   forever is not a plan.
+#
+#   So SUDO_PREAMBLE below authenticates ONCE, up front, with the prompt
+#   visible, and then pins SUDO to `sudo -n` for the rest of the script. `-n`
+#   never prompts, so from that point on every `2>/dev/null` is harmless. Remote
+#   scripts must use ${SUDO} and must NOT define it themselves.
 
 if [[ -n "${_REMOTE_EXEC_LOADED:-}" ]]; then
   return 0
@@ -49,12 +63,35 @@ remote_exec_script() {
     esac
   done
 
-  local payload
-  payload="$(base64 | tr -d '\n')"
-  if [[ -z "${payload}" ]]; then
+  local script preamble payload
+  script="$(cat)"
+  if [[ -z "${script}" ]]; then
     echo "remote_exec_script: empty script on stdin" >&2
     return 2
   fi
+
+  # Authenticate sudo once, visibly, before the script runs. Everything after
+  # uses `sudo -n`, which never prompts — so the many `2>/dev/null` calls in
+  # these scripts can no longer swallow a password prompt.
+  read -r -d '' preamble <<'PREAMBLE' || true
+if [ "$(id -u)" = "0" ]; then
+  SUDO=""
+else
+  if sudo -n true 2>/dev/null; then
+    SUDO="sudo -n"
+  else
+    echo "This step needs administrator rights on the server."
+    if sudo -v; then
+      SUDO="sudo -n"
+    else
+      echo "REMOTE_SUDO_FAILED" >&2
+      exit 77
+    fi
+  fi
+fi
+PREAMBLE
+
+  payload="$(printf '%s\n%s\n' "${preamble}" "${script}" | base64 | tr -d '\n')"
 
   # Base64 is [A-Za-z0-9+/=] only, so single-quoting it on the remote command
   # line is safe with no escaping.

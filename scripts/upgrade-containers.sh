@@ -160,10 +160,8 @@ trap 'rm -f "${SURVEY_TMP}"' EXIT
 SURVEY_RC=0
 remote_exec_script --tee "${SURVEY_TMP}" --indent <<'REMOTE' || SURVEY_RC=$?
 set -uo pipefail
-SUDO=""
-if [ "$(id -u)" != "0" ]; then
-  if sudo -n true 2>/dev/null; then SUDO="sudo -n"; else SUDO="sudo"; fi
-fi
+# SUDO is supplied by remote_exec_script's preamble (already authenticated,
+# pinned to `sudo -n`). Do NOT redefine it here.
 
 if ${SUDO} docker version --format '{{.Server.Version}}' >/dev/null 2>&1; then
   echo "DOCKER_OK=1"
@@ -195,6 +193,15 @@ SURVEY="$(cat "${SURVEY_TMP}")"
 echo
 
 get() { echo "${SURVEY}" | grep "^$1=" | head -1 | cut -d= -f2- | tr -d '\r'; }
+
+# Distinguish a refused sudo from an unreachable host: blaming Cloudflare for
+# a wrong password sends the operator to fix the wrong thing.
+if grep -q 'REMOTE_SUDO_FAILED\|Sorry, try again' "${SURVEY_TMP}" 2>/dev/null; then
+  echo "UPGRADE_FAIL category=sudo_auth_failed" >&2
+  echo "    sudo on the server refused the password, so nothing ran." >&2
+  echo "    Re-run and enter it when prompted." >&2
+  exit 1
+fi
 
 if ! echo "${SURVEY}" | grep -q '^SURVEY_OK=1'; then
   echo "UPGRADE_FAIL category=survey_unreachable ssh_rc=${SURVEY_RC}" >&2
@@ -299,10 +306,8 @@ echo
 
 remote_exec_script <<REMOTE
 set -euo pipefail
-SUDO=""
-if [ "\$(id -u)" != "0" ]; then
-  if sudo -n true 2>/dev/null; then SUDO="sudo -n"; else SUDO="sudo"; fi
-fi
+# SUDO is supplied by remote_exec_script's preamble (already authenticated,
+# pinned to `sudo -n`). Do NOT redefine it here.
 
 TARGET='${TARGET}'
 KC_NAME='${KC_NAME}'
