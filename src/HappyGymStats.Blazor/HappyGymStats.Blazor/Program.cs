@@ -92,6 +92,11 @@ public sealed class Program
         builder.Services.AddHttpClient<SurfacesService>(client =>
             client.BaseAddress = new Uri(apiBaseUrl));
 
+        // Writing a flag is admin-only, so this client forwards the access token.
+        builder.Services.AddHttpClient<UiSettingsService>(client =>
+                client.BaseAddress = new Uri(apiBaseUrl))
+            .AddHttpMessageHandler<AccessTokenForwardingHandler>();
+
         builder.Services.AddHttpClient<WarBoardService>(client =>
                 client.BaseAddress = new Uri(apiBaseUrl))
             .AddHttpMessageHandler<AccessTokenForwardingHandler>();
