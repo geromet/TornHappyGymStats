@@ -27,5 +27,17 @@ Environment=ApiBaseUrl=http://127.0.0.1:5047
 # falling back to a public client and failing later at the token exchange.
 Environment=Keycloak__RequireClientSecret=true
 
+# Data-protection key ring. systemd creates /var/lib/happygymstats-blazor as 0700
+# www-data and keeps it across restarts and deploys; the framework default
+# would put the keys under a path the release-symlink swap replaces, so every
+# deploy would invalidate every auth cookie. Keys are unencrypted at rest —
+# on Linux the only built-in encryptor is an X.509 cert, and the 0700
+# directory is the protection here. That is what the "No XML encryptor
+# configured" warning at startup refers to.
+StateDirectory=happygymstats-blazor
+StateDirectoryMode=0700
+Environment=DataProtection__KeyRingPath=/var/lib/happygymstats-blazor
+Environment=DataProtection__ApplicationName=HappyGymStats.Blazor
+
 [Install]
 WantedBy=multi-user.target

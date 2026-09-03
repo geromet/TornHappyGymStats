@@ -7,6 +7,8 @@ using HappyGymStats.Identity.Authentication;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.AspNetCore.HttpOverrides;
 using System.Net;
+using System.IO;
+using Microsoft.AspNetCore.DataProtection;
 using MudBlazor.Services;
 
 namespace HappyGymStats.Blazor;
@@ -26,6 +28,23 @@ public sealed class Program
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents()
             .AddInteractiveWebAssemblyComponents();
+
+        // Data-protection key ring. Unset (localhost) keeps the framework default;
+        // the server units point it at their systemd StateDirectory, which
+        // survives both a restart and the release-symlink swap of a deploy.
+        // Without a stable ring every deploy invalidates every auth cookie and
+        // signs the whole site out.
+        var keyRingPath = builder.Configuration["DataProtection:KeyRingPath"];
+        if (!string.IsNullOrWhiteSpace(keyRingPath))
+        {
+            builder.Services
+                .AddDataProtection()
+                .PersistKeysToFileSystem(new DirectoryInfo(keyRingPath))
+                // Pinned, so production and dev never derive different keys from
+                // a changing entry-assembly name, and so the two hosts stay
+                // distinguishable if a ring is ever shared by mistake.
+                .SetApplicationName(builder.Configuration["DataProtection:ApplicationName"] ?? "HappyGymStats.Blazor");
+        }
 
         builder.Services.AddMudServices();
         builder.Services.AddCascadingAuthenticationState();
