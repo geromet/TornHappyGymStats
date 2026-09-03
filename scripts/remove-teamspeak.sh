@@ -110,7 +110,9 @@ SURVEY_RC=0
 remote_exec_script --tee "${SURVEY_TMP}" --indent <<REMOTE || SURVEY_RC=$?
 set -uo pipefail
 # SUDO is supplied by remote_exec_script's preamble (already authenticated,
-# pinned to `sudo -n`). Do NOT redefine it here.
+# pinned to sudo -n). Do NOT redefine it here.
+# NOTE: no backticks in this heredoc — it is unquoted, so the LOCAL shell
+# would run them as command substitution.
 
 # Prove docker is actually queryable before trusting an empty container list.
 # Without a TTY, interactive sudo cannot prompt, docker fails, and an empty
@@ -121,7 +123,7 @@ else
   echo "DOCKER_OK=0"
 fi
 
-# grep -c already prints a count; a `|| echo 0` fallback would append a
+# grep -c already prints a count; an 'or echo 0' fallback would append a
 # SECOND zero and corrupt the parsed value.
 _all="\$(\${SUDO} docker ps -a --format '{{.Names}}' 2>/dev/null)"
 _run="\$(\${SUDO} docker ps --format '{{.Names}}' 2>/dev/null)"
@@ -260,7 +262,9 @@ echo "==> Executing removal"
 remote_exec_script <<REMOTE
 set -euo pipefail
 # SUDO is supplied by remote_exec_script's preamble (already authenticated,
-# pinned to `sudo -n`). Do NOT redefine it here.
+# pinned to sudo -n). Do NOT redefine it here.
+# NOTE: no backticks in this heredoc — it is unquoted, so the LOCAL shell
+# would run them as command substitution.
 
 CONTAINER='${TS_CONTAINER_NAME}'
 BACKUP_DIR='${TS_BACKUP_DIR}'

@@ -183,7 +183,9 @@ trap 'rm -f "${PREFLIGHT_TMP}"' EXIT
 remote_exec_script --tee "${PREFLIGHT_TMP}" --indent <<'REMOTE' || true
 set -uo pipefail
 # SUDO is supplied by remote_exec_script's preamble (already authenticated,
-# pinned to `sudo -n`). Do NOT redefine it here.
+# pinned to sudo -n). Do NOT redefine it here.
+# NOTE: no backticks in this heredoc — it is unquoted, so the LOCAL shell
+# would run them as command substitution.
 
 problems=0
 
