@@ -5,6 +5,11 @@ HappyGymStats is a Torn telemetry pipeline with a production ASP.NET API, a Blaz
 ## Quick links
 
 - Live Project: [HappyGymStats](https://torn.geromet.com/)
+- **Operator console: `bash scripts/menu.sh`** — one place to run every deploy,
+  bootstrap, maintenance and verification task, with a preview before anything
+  changes
+- Operational pitfalls: [docs/OPERATIONS-PITFALLS.md](docs/OPERATIONS-PITFALLS.md)
+  — read before a first deploy
 - Project overview: [docs/OVERVIEW.md](docs/OVERVIEW.md)
 - Local setup/run: [docs/SETUP.md](docs/SETUP.md)
 - Deployment: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
@@ -14,6 +19,10 @@ HappyGymStats is a Torn telemetry pipeline with a production ASP.NET API, a Blaz
 - Torn API key ToS disclosure: [docs/torn-api/terms-of-service.md](docs/torn-api/terms-of-service.md)
 
 ## Minimal verification commands
+
+Everything below is also reachable from `bash scripts/menu.sh` without typing
+flags.
+
 
 - `bash scripts/verify/m004-my-stats-final-gate.sh`
 - `bash scripts/verify/production-smoke.sh`

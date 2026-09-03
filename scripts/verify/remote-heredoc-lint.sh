@@ -40,6 +40,7 @@ readonly TARGETS=(
   scripts/post-reboot-maintenance.sh
   scripts/upgrade-containers.sh
   scripts/remove-teamspeak.sh
+  scripts/check-server-env.sh
 )
 
 echo "==> remote-heredoc lint"
