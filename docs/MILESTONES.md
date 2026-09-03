@@ -217,13 +217,35 @@ no third-party data.
   `/v2/faction?selections=chain` returns a **`timeout`** field, plus `modifier`,
   `current`, `max` and `cooldown`. The lapse timer is real, not something to infer.
 
-  **But the sweep ran with no chain active**, so every field read `0`. The field's
-  existence is certain; its semantics are not. Before `ChainLapseInference` is deleted,
-  a mid-chain re-run must confirm (a) `timeout` counts down between hits and resets on a
-  qualifying hit — as opposed to being a fixed allowance, which is what
-  `ChainEngine.BonusTable`'s `Timer` column is, and conflating the two is the error S03's
-  comments exist to prevent — and (b) `modifier` agrees with `ChainEngine`. If (b) fails,
-  the scoring engine is wrong and that outranks everything built on it.
+  Re-run mid-chain the same day (`current: 2`) settled (a): `start: 1788467478,
+  end: 1788467778, timeout: 263` — `timeout` counts down and `end` is an absolute unix
+  deadline. **`end` is the field to store, not `timeout`:** `timeout` is only true at the
+  instant of the request, so a sample polled 40 s ago yields a clock 40 s fast; `end` does
+  not decay, so the board can tick a real countdown between polls. `max` is confirmed as
+  the next milestone target (`10` at chain 2), not a cap.
+
+  (b) is **still open.** `modifier` read `1` at chain 2, which agrees with `ChainEngine` —
+  but every chain below 10 gives 1, so the sample cannot discriminate, and the field is
+  typed as an int while the engine's multiplier is fractional above chain 10. A chain of
+  100+ settles whether this is a usable cross-check or a rounded number. No code reads it
+  meanwhile.
+
+  The 300 s lapse window is corroborated **at chain 2 only** — `start` is the chain's
+  start, not the last hit, so one reading cannot separate "always 300" from "300 at this
+  tier". `TornChainLapseTimeoutSeconds` stays challengeable.
+
+  **Delivered from this:** `ChainLapseEstimate.FromDeadline` +
+  `ChainLapseConfidence.Exact`, with `ChainLapseInference` kept as the fallback — the
+  enemy faction cannot be polled for its chain, and neither can ours before the first
+  chain poll, so the honest-output rules stay live. Adding `Exact` also exposed a real
+  defect: `ChainTracker.AlertLevel` gated `TimerRunningLow` on `Confidence == Inferred`,
+  so an exact deadline ticking to zero would have raised no alert while a guess at the
+  same number did. Fixed, with a regression test.
+
+  **Not built: the wiring.** A real deadline on the board still needs a client method for
+  `/v2/faction?selections=chain`, poller scheduling inside the M007 S02 rate budget, an
+  entity + migration for the deadline, and the DTO/board path. That touches the poller's
+  live rate budget, so it is its own slice and its own decision.
 
   `chainreport` also carries `bonuses[].attacker_id` — milestone lumps attributed to the
   member who landed them, which M007 S01 currently has to infer from score residuals.

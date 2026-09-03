@@ -10,6 +10,15 @@ public enum ChainLapseConfidence
     /// <summary>Estimated from the gap between score-poll samples. Resolution is the poll spacing,
     /// so treat every figure as ± one <see cref="ChainLapseEstimate.SampleSpacingSeconds"/>.</summary>
     Inferred,
+
+    /// <summary>
+    /// Read from Torn's own chain deadline (<c>/v2/faction?selections=chain</c>, the <c>end</c>
+    /// field). No error bar: <c>end</c> is an absolute unix instant, so it does not decay while
+    /// the sample ages the way <c>timeout</c> does. The board may tick a real countdown against
+    /// it. Available only for a faction we can poll with a key — the enemy card stays
+    /// <see cref="Inferred"/> or <see cref="None"/>.
+    /// </summary>
+    Exact,
 }
 
 /// <summary>
@@ -29,6 +38,43 @@ public sealed record ChainLapseEstimate(
 {
     public static ChainLapseEstimate Unknown(string diagnostic) =>
         new(null, null, null, 0, false, ChainLapseConfidence.None, diagnostic);
+
+    /// <summary>
+    /// The real thing, from Torn's own <c>end</c> deadline (M008 S01's sweep, 2026-09-03).
+    ///
+    /// Takes the absolute deadline rather than the <c>timeout</c> countdown on purpose:
+    /// <c>timeout</c> is only true at the instant of the request, so a response polled 40 s ago
+    /// yields a clock 40 s fast, silently. <c>end</c> does not decay.
+    ///
+    /// <paramref name="lastIncreaseAtUtc"/> stays optional — the deadline is authoritative on its
+    /// own, and Torn does not report when the last qualifying hit landed.
+    /// </summary>
+    public static ChainLapseEstimate FromDeadline(
+        DateTimeOffset lapsesAtUtc,
+        DateTimeOffset nowUtc,
+        DateTimeOffset? lastIncreaseAtUtc = null)
+    {
+        var secondsUntilLapse = (int)Math.Floor((lapsesAtUtc - nowUtc).TotalSeconds);
+
+        // A deadline already in the past is not a negative countdown: the chain has lapsed.
+        // Clamping to zero keeps "0" meaning "gone" everywhere, rather than the board rendering
+        // a minus sign nobody specified.
+        if (secondsUntilLapse < 0)
+            secondsUntilLapse = 0;
+
+        var secondsSince = lastIncreaseAtUtc is null
+            ? (int?)null
+            : Math.Max(0, (int)Math.Floor((nowUtc - lastIncreaseAtUtc.Value).TotalSeconds));
+
+        return new ChainLapseEstimate(
+            lastIncreaseAtUtc,
+            secondsSince,
+            secondsUntilLapse,
+            SampleSpacingSeconds: 0,
+            IsInferred: false,
+            ChainLapseConfidence.Exact,
+            $"Chain deadline reported by Torn ({lapsesAtUtc:u}).");
+    }
 }
 
 /// <summary>
@@ -43,12 +89,20 @@ public static class ChainLapseInference
     /// <see cref="ChainEngine.BonusTable"/> — that <c>Timer</c> column is the cumulative limit to
     /// <i>reach</i> the next milestone; this is the gap-between-hits limit that kills the chain.
     ///
-    /// UNVERIFIED ASSUMPTION. The <c>data/V2/handoff/00-brief.md</c> assumption ledger names three
-    /// unknowns (FF formula, hospital duration, energy model); this is a fourth, added here.
-    /// 300 s is the Torn community constant. When M008 S01's live chain sweep lands, replace this
-    /// inference with the real <c>timeout</c> field and delete the constant. The test
-    /// <c>ChainLapseInference_timeout_constant_is_challengeable</c> fails loudly if the value is
-    /// edited so the change cannot pass silently.
+    /// PARTLY VERIFIED (M008 S01 sweep, 2026-09-03). A live chain returned
+    /// <c>start: 1788467478, end: 1788467778</c> — a 300 s window, matching this constant. But
+    /// that reading was at <c>current: 2</c>, and <c>start</c> is the chain's start rather than
+    /// the last hit's timestamp, so it cannot separate "always 300" from "300 at this chain
+    /// length"; Torn is widely believed to shorten the window as a chain grows. Treat this as
+    /// corroborated at low chain lengths only, and as still challengeable.
+    ///
+    /// This whole inference is now the FALLBACK path. Torn reports an absolute deadline, so
+    /// <see cref="ChainLapseEstimate.FromDeadline"/> is preferred wherever a <c>chain</c> response
+    /// is available — which is our own faction only. The enemy card, and any moment before the
+    /// first chain poll, still lands here. That is why this code is not deleted.
+    ///
+    /// The test <c>ChainLapseInference_timeout_constant_is_challengeable</c> fails loudly if the
+    /// value is edited so the change cannot pass silently.
     /// </summary>
     public const int TornChainLapseTimeoutSeconds = 300;
 
