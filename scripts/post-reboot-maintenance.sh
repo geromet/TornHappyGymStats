@@ -26,6 +26,18 @@
 #                   means memory pressure produces OOM kills rather than
 #                   slowdown. Two more .NET services are planned.
 #
+#   postfix-loopback  Bind Postfix to loopback only.
+#
+#                   The ports report settled what :25 is: Postfix 3.8.6 with
+#                   inet_interfaces = all, but mynetworks limited to 127.0.0.0/8
+#                   and the stock smtpd_relay_restrictions
+#                   (permit_mynetworks, permit_sasl_authenticated,
+#                   defer_unauth_destination). So it is NOT an open relay —
+#                   a stranger cannot relay through it. It is simply listening
+#                   to the internet for no reason, which is attack surface and
+#                   spam-probe bait. Local mail (cron, logwatch) is unaffected
+#                   by loopback-only; only INBOUND EXTERNAL mail stops.
+#
 #   keycloak-heap   Cap the Keycloak JVM heap. It is the largest single consumer
 #                   at ~650MB because the JVM sizes its heap as a fraction of
 #                   total RAM and nothing told it otherwise.
@@ -46,8 +58,8 @@ SCRIPT_MUTATES_SERVER_STATE=conditional
 SCRIPT_AUTOMATION_SAFE_DEFAULT=1
 
 Options:
-  --steps LIST        Comma-separated: nginx-catchall,swap,keycloak-heap
-                      (default: swap,keycloak-heap)
+  --steps LIST        Comma-separated: nginx-catchall,swap,keycloak-heap,
+                      postfix-loopback  (default: swap,keycloak-heap)
                       nginx-catchall is OFF by default: the stock 'default' site
                       is being kept deliberately. Opt in only if that changes.
   --swap-size SIZE    Swap file size, e.g. 2G or 4G (default: 2G)
@@ -107,7 +119,7 @@ want_step() {
   [[ ",${STEPS}," == *",$1,"* ]]
 }
 for s in ${STEPS//,/ }; do
-  case "$s" in all|nginx-catchall|swap|keycloak-heap) ;; *) echo "Unknown step: $s" >&2; exit 1 ;; esac
+  case "$s" in all|nginx-catchall|swap|keycloak-heap|postfix-loopback) ;; *) echo "Unknown step: $s" >&2; exit 1 ;; esac
 done
 
 if [[ -f "${ROOT_DIR}/.env.deploy" ]]; then
@@ -222,6 +234,10 @@ want_step nginx-catchall && {
 want_step swap && {
   echo "    [swap]           create /swapfile ${SWAP_SIZE}, vm.swappiness=${SWAPPINESS}, persist in fstab"
 }
+want_step postfix-loopback && {
+  echo "    [postfix-loopback] set inet_interfaces=loopback-only and restart postfix"
+  echo "                       stops inbound external mail; local mail unaffected"
+}
 want_step keycloak-heap && {
   echo "    [keycloak-heap]  cap Keycloak JVM heap at ${KC_HEAP_MB}MB"
   echo "                     compose file: ${KC_COMPOSE_FILE:-unknown}"
@@ -246,6 +262,7 @@ echo "==> Applying"
 DO_NGINX=0; want_step nginx-catchall && DO_NGINX=1
 DO_SWAP=0;  want_step swap && DO_SWAP=1
 DO_HEAP=0;  want_step keycloak-heap && DO_HEAP=1
+DO_POSTFIX=0; want_step postfix-loopback && DO_POSTFIX=1
 
 remote_exec_script <<REMOTE
 set -uo pipefail
@@ -254,6 +271,7 @@ set -uo pipefail
 DO_NGINX=${DO_NGINX}
 DO_SWAP=${DO_SWAP}
 DO_HEAP=${DO_HEAP}
+DO_POSTFIX=${DO_POSTFIX}
 SWAP_SIZE='${SWAP_SIZE}'
 SWAPPINESS='${SWAPPINESS}'
 KC_HEAP_MB='${KC_HEAP_MB}'
@@ -360,6 +378,30 @@ vm.swappiness = \${SWAPPINESS}
 SYSCTL
   \${SUDO} sysctl -q -w vm.swappiness="\${SWAPPINESS}"
   echo "    vm.swappiness=\$(cat /proc/sys/vm/swappiness)"
+  echo
+fi
+
+# -------------------------------------------------------------- postfix ---
+if [ "\${DO_POSTFIX}" = "1" ]; then
+  echo "--> [postfix-loopback]"
+  if ! command -v postconf >/dev/null 2>&1; then
+    echo "    postfix not installed; skipping"
+  else
+    echo "    before: \$(postconf -h inet_interfaces 2>/dev/null)"
+    \${SUDO} cp -a /etc/postfix/main.cf "\${BACKUP_DIR}/main.cf.\${STAMP}.bak" 2>/dev/null \
+      && echo "    backed up main.cf"
+    \${SUDO} postconf -e 'inet_interfaces = loopback-only'
+    if \${SUDO} postfix check 2>&1 | sed 's/^/      /'; then
+      \${SUDO} systemctl restart postfix
+      sleep 1
+      echo "    after:  \$(postconf -h inet_interfaces 2>/dev/null)"
+      echo "    listening on 25 now:"
+      ss -ltn 2>/dev/null | grep ':25 ' | sed 's/^/      /' || echo "      (nothing on 25 externally — expected)"
+    else
+      echo "    !! postfix check failed; restoring main.cf and not restarting" >&2
+      \${SUDO} cp -a "\${BACKUP_DIR}/main.cf.\${STAMP}.bak" /etc/postfix/main.cf
+    fi
+  fi
   echo
 fi
 

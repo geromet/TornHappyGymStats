@@ -32,6 +32,9 @@ section "Public vs loopback classification"
 note "A socket on 127.0.0.1 cannot be reached from another machine."
 note "A socket on 0.0.0.0 or [::] is reachable unless a firewall stops it."
 blank
+probe_sh "publicly bound UDP sockets" \
+  "ss -lun 2>/dev/null | awk 'NR>1 {print \$4}' | grep -E '^(0\\.0\\.0\\.0|\\[::\\]|\\*):' | sort -u || echo '(none)'"
+blank
 probe_sh "publicly bound TCP sockets" \
   "ss -ltn 2>/dev/null | awk 'NR>1 {print \$4}' | grep -E '^(0\\.0\\.0\\.0|\\[::\\]|\\*):' | sort -u || echo '(none)'"
 blank
@@ -148,7 +151,14 @@ note "Conversely, nothing here can widen exposure that the cloud firewall blocks
 section "Automated assessment"
 # Turn the raw data above into findings, so the reader is not left to correlate.
 pub_ports="$(ss -ltn 2>/dev/null | awk 'NR>1 {print $4}' | grep -E '^(0\.0\.0\.0|\[::\]|\*):' | sed 's/.*://' | sort -un | tr '\n' ' ')"
-note "publicly bound ports: ${pub_ports:-none}"
+# UDP is published the same way and was missed by an earlier version, which
+# classified TCP only — TeamSpeak's 9987/udp never showed up as public.
+pub_udp="$(ss -lun 2>/dev/null | awk 'NR>1 {print $4}' | grep -E '^(0\.0\.0\.0|\[::\]|\*):' | sed 's/.*://' | sort -un | tr '\n' ' ')"
+note "publicly bound TCP ports: ${pub_ports:-none}"
+note "publicly bound UDP ports: ${pub_udp:-none}"
+for u in ${pub_udp}; do
+  finding MED "UDP port ${u} is publicly bound — confirm it is intentional"
+done
 blank
 
 for p in ${pub_ports}; do
