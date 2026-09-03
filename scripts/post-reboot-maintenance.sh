@@ -482,28 +482,28 @@ EXT="__EXT__"
 ALLOW="__ALLOW__"
 
 apply() {
-  local ipt="$1"
-  "${ipt}" -N DOCKER-USER 2>/dev/null || true
+  local ipt="\$1"
+  "\${ipt}" -N DOCKER-USER 2>/dev/null || true
 
   # Replies to connections a container opened must keep working. This has to be
   # first, so insert at position 1.
-  "${ipt}" -C DOCKER-USER -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN 2>/dev/null \
-    || "${ipt}" -I DOCKER-USER 1 -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
+  "\${ipt}" -C DOCKER-USER -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN 2>/dev/null \
+    || "\${ipt}" -I DOCKER-USER 1 -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
 
   # Explicit allows sit after that and before the DROP.
   local pos=2
-  for entry in ${ALLOW//,/ }; do
-    [ -z "${entry}" ] && continue
-    local port="${entry%%/*}" proto="tcp"
-    case "${entry}" in */udp) proto="udp" ;; */tcp) proto="tcp" ;; esac
-    "${ipt}" -C DOCKER-USER -i "${EXT}" -p "${proto}" --dport "${port}" -j RETURN 2>/dev/null \
-      || "${ipt}" -I DOCKER-USER "${pos}" -i "${EXT}" -p "${proto}" --dport "${port}" -j RETURN
-    pos=$((pos + 1))
+  for entry in \${ALLOW//,/ }; do
+    [ -z "\${entry}" ] && continue
+    local port="\${entry%%/*}" proto="tcp"
+    case "\${entry}" in */udp) proto="udp" ;; */tcp) proto="tcp" ;; esac
+    "\${ipt}" -C DOCKER-USER -i "\${EXT}" -p "\${proto}" --dport "\${port}" -j RETURN 2>/dev/null \
+      || "\${ipt}" -I DOCKER-USER "\${pos}" -i "\${EXT}" -p "\${proto}" --dport "\${port}" -j RETURN
+    pos=\$((pos + 1))
   done
 
   # Everything else inbound on the external interface. Appended, so it is last.
-  "${ipt}" -C DOCKER-USER -i "${EXT}" -j DROP 2>/dev/null \
-    || "${ipt}" -A DOCKER-USER -i "${EXT}" -j DROP
+  "\${ipt}" -C DOCKER-USER -i "\${EXT}" -j DROP 2>/dev/null \
+    || "\${ipt}" -A DOCKER-USER -i "\${EXT}" -j DROP
 }
 
 apply iptables
