@@ -25,6 +25,17 @@ source "${DEPLOY_CONFIG_PATH}"
 
 readonly PUBLISH_DIR="${ROOT_DIR}/dist/backend-api"
 readonly PUBLISH_EXECUTABLE="${PUBLISH_DIR}/HappyGymStats.Api"
+# Belt and braces for the dev deploy. scripts/deploy-dev.sh exports this, and a
+# release must never land in a production root under it — no matter what
+# .env.deploy, a stale shell, or a future edit does to the variables above.
+if [[ "${DEPLOY_FORBID_PRODUCTION_TARGET:-0}" == "1" ]]; then
+  if [[ "${DEPLOY_REMOTE_ROOT}" == "/var/www/happygymstats" || "${DEPLOY_REMOTE_SERVICE}" == "happygymstats-api" ]]; then
+    echo "DEPLOY_FAIL category=production_target_refused detail=root=${DEPLOY_REMOTE_ROOT} service=${DEPLOY_REMOTE_SERVICE}" >&2
+    echo "    A dev deploy resolved to the production target. Nothing was uploaded." >&2
+    exit 1
+  fi
+fi
+
 readonly REMOTE_RELEASES_DIR="${DEPLOY_REMOTE_ROOT}/releases"
 readonly REMOTE_CURRENT_DIR="${DEPLOY_REMOTE_ROOT}/current"
 readonly REMOTE_STAGING_DIR="/tmp/happygymstats-staging-${DEPLOY_SSH_USER}"

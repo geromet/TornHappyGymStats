@@ -196,6 +196,10 @@ else
 fi
 
 echo "==> devhost verify: dev deploy cannot target production"
+require_contains "${DEPLOY_SCRIPT}" "DEPLOY_FORBID_PRODUCTION_TARGET=1" "dev deploy arms the production-target refusal in both child scripts"
+require_contains "scripts/deploy-backend.sh" "DEPLOY_FORBID_PRODUCTION_TARGET" "backend deploy honours the refusal"
+require_contains "scripts/deploy-frontend.sh" "DEPLOY_FORBID_PRODUCTION_TARGET" "frontend deploy honours the refusal"
+require_contains "scripts/deploy-config.sh" "_deploy_env_snapshot" "exported overrides survive .env.deploy"
 require_contains "${DEPLOY_SCRIPT}" "production_target_refused" "deploy-dev.sh refuses production roots/units"
 require_contains "${SETUP_SCRIPT}" "DEPLOY_INSTALL_DEV_HOST" "setup script is gated behind DEPLOY_INSTALL_DEV_HOST"
 require_contains "${SETUP_SCRIPT}" "--confirm-remote-setup" "setup script requires explicit remote confirmation"

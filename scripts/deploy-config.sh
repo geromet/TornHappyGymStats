@@ -18,8 +18,25 @@ readonly DEPLOY_CONFIG_ROOT_DIR="$(cd "${DEPLOY_CONFIG_DIR}/.." && pwd)"
 readonly DEPLOY_ENV_FILE="${DEPLOY_CONFIG_ROOT_DIR}/.env.deploy"
 
 if [[ -f "${DEPLOY_ENV_FILE}" ]]; then
+  # .env.deploy uses plain assignments, so sourcing it CLOBBERS anything a
+  # caller exported. scripts/deploy-dev.sh passes DEPLOY_REMOTE_ROOT and
+  # DEPLOY_REMOTE_SERVICE that way, and the file quietly replaced them with the
+  # production values — a dev deploy wrote a release into /var/www/happygymstats
+  # and moved its "current" symlink. The environment is the specific,
+  # per-invocation signal; the file is defaults. So: snapshot what arrived in
+  # the environment, source the file, put the environment back on top.
+  _deploy_env_snapshot="$(mktemp)"
+  while IFS='=' read -r _deploy_env_name _; do
+    printf '%s=%q\n' "${_deploy_env_name}" "${!_deploy_env_name}" >> "${_deploy_env_snapshot}"
+  done < <(env | grep '^DEPLOY_[A-Za-z0-9_]*=' || true)
+
   # shellcheck disable=SC1090
   source "${DEPLOY_ENV_FILE}"
+
+  # shellcheck disable=SC1090
+  source "${_deploy_env_snapshot}"
+  rm -f "${_deploy_env_snapshot}"
+  unset _deploy_env_snapshot _deploy_env_name
 fi
 
 : "${DEPLOY_SSH_HOST:=ssh.geromet.com}"
