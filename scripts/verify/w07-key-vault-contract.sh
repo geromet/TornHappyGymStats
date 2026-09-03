@@ -137,11 +137,36 @@ for pattern in "${forbidden_patterns[@]}"; do
 done
 pass "vault stays inside the Core boundary"
 
-# The compliance gate's document has to exist and say keys are stored encrypted.
+# --- The compliance gate ----------------------------------------------------
+#
+# handoff 07 binds the gate to a specific moment: "Before the first key is written to the
+# database." So this is not "does the document mention encryption" — the draft mentions it
+# and is still unpublished; passing on that would be the exact go-green-on-unbuilt-work
+# failure this script is written to avoid.
+#
+# The rule enforced here: if any non-test source both names a stored-key entity AND
+# persists (SaveChanges), the disclosure must no longer be a draft.
+gate_writers="$(rg -l --glob '!**/bin/**' --glob '!**/obj/**' 'StoredApiKey' "${ROOT_DIR}/src" 2>/dev/null || true)"
+persisting_writer=""
+for candidate in $gate_writers; do
+  if rg -q 'SaveChanges' "$candidate"; then
+    persisting_writer="$candidate"
+    break
+  fi
+done
+
 if ! rg -qi 'encrypt' "$TOS_DOC"; then
   fail "terms-of-service.md does not mention encryption — the gate in handoff 07 requires the disclosure to state that war keys are stored encrypted"
 fi
-pass "terms-of-service.md discloses encrypted key storage"
+
+if rg -q -- '-draft' "$TOS_DOC"; then
+  if [[ -n "$persisting_writer" ]]; then
+    fail "COMPLIANCE GATE: ${persisting_writer#"${ROOT_DIR}/"} persists a stored key while terms-of-service.md is still a draft. Publish the disclosure and record member consent first — storing a key against the published text is a Torn ToS breach."
+  fi
+  note "terms-of-service.md is a DRAFT and the gate is therefore UNMET — but nothing persists a key yet, so no breach. This check turns into a hard failure the moment a source both names StoredApiKey and calls SaveChanges."
+else
+  pass "terms-of-service.md is published (not a draft) and discloses encrypted key storage"
+fi
 
 dotnet test "$TEST_PROJECT" --filter "$TEST_FILTER" --nologo
 pass "pinned key-vault tests passed (${TEST_FILTER})"

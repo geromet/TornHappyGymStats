@@ -297,9 +297,14 @@ The `feat/m007-*` / `feat/m008-*` branches this document used to point at have b
 deleted; read the code on `main`. S01 stays BLOCKED ON USER (live Limited key +
 `api.torn.com`); S06 DEFERRED (hub groups).
 
-The old "278/281, 3 pre-existing SQLite / pending-migration failures" note is stale. The
-suite is green at 328/328, and the three Postgres integration tests now execute for real
-rather than skipping — see M009 status for what running them turned up.
+The old "278/281, 3 pre-existing SQLite / pending-migration failures" note is stale: the
+suite is green on `main` (342 on this branch, which adds M009 S02's tests).
+
+Note what that number does *not* include. The three Postgres integration tests still skip
+here — they had never executed, and running them turned up three defects in the harness
+itself. Those fixes are on `fix/pg-superuser-detection` (PR #42), unmerged, where the
+tier is green at 3/3 against a real container. Until that merges, a green suite on `main`
+says nothing about the Npgsql path.
 
 Out of scope: target *selection* among eligible targets — that is M010.
 

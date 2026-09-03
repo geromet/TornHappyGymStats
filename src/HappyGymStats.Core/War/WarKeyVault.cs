@@ -184,7 +184,14 @@ public sealed class WarKeyVault
         }
     }
 
-    /// <summary>Async overload; same contract, same zeroing on the way out.</summary>
+    /// <summary>
+    /// Async overload. Same authentication and same callback shape — but note the zeroing
+    /// is NOT held across the caller's await: the plaintext buffer is cleared once the
+    /// callback returns its task, before that task completes. That costs nothing here
+    /// because the callback receives an immutable <see cref="string"/> the buffer no
+    /// longer backs, but do not read this as "the plaintext is protected until the await
+    /// finishes". Nothing can protect a .NET string from its own lifetime.
+    /// </summary>
     public async Task<T> UseKeyAsync<T>(
         ReadOnlyMemory<byte> ciphertext,
         int playerId,
