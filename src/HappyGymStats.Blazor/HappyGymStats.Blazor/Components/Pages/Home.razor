@@ -1,6 +1,7 @@
 @page "/"
 @rendermode InteractiveServer
 @inject SurfacesService SurfacesApi
+@inject UiSettingsService UiSettings
 @inject IJSRuntime JS
 @inject ILogger<Home> Logger
 @implements IAsyncDisposable
@@ -75,6 +76,39 @@ else if (_loadError != null)
 }
 else if (_surfaces != null)
 {
+    <AuthorizeView Roles="@Roles.Admin">
+        <Authorized>
+            @* Admin-only strip. Sits directly above the thing it controls so the
+               effect of the switch is visible without navigating anywhere. *@
+            <MudPaper Class="mb-2 pa-2" Outlined="true">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Size="Size.Small" Color="Color.Secondary" />
+                        <MudText Typo="Typo.body2">
+                            Gym point cloud is
+                            <strong>@(_gymPointCloudEnabled ? "enabled" : "disabled")</strong>
+                            for everyone
+                        </MudText>
+                    </MudStack>
+                    <MudButton Variant="Variant.Outlined"
+                               Size="Size.Small"
+                               Color="@(_gymPointCloudEnabled ? Color.Warning : Color.Success)"
+                               Disabled="@_togglingPointCloud"
+                               OnClick="ToggleGymPointCloudAsync">
+                        @(_togglingPointCloud
+                            ? "Saving…"
+                            : _gymPointCloudEnabled ? "Disable" : "Enable")
+                    </MudButton>
+                </MudStack>
+            </MudPaper>
+        </Authorized>
+    </AuthorizeView>
+}
+
+@* Rendering the point cloud is the expensive part of this page, so when the
+   switch is off the card is not rendered at all rather than merely hidden. *@
+@if (!_loading && _loadError == null && _surfaces != null && _gymPointCloudEnabled)
+{
     <MudCard Class="@($"mb-4 {(_gymFullscreen ? "gym-fullscreen" : string.Empty)}")">
         <MudCardHeader>
             <CardHeaderContent>
@@ -100,6 +134,12 @@ else if (_surfaces != null)
         </MudCardContent>
     </MudCard>
 }
+else if (!_loading && _loadError == null && _surfaces != null && !_gymPointCloudEnabled)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4">
+        The gym point cloud is temporarily switched off.
+    </MudAlert>
+}
 
 @code {
     private string? _apiKey;
@@ -111,9 +151,47 @@ else if (_surfaces != null)
     private SurfacesDatasetDto? _surfaces;
     private bool _chartsDrawn;
     private bool _gymFullscreen;
+    private bool _gymPointCloudEnabled = true;
+    private bool _togglingPointCloud;
     private DotNetObjectReference<Home>? _dotNetRef;
 
-    protected override async Task OnInitializedAsync() => await LoadSurfacesAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        // Read the switch before the data so a disabled cloud never briefly
+        // renders on load.
+        _gymPointCloudEnabled = (await UiSettings.GetAsync()).GymPointCloudEnabled;
+        await LoadSurfacesAsync();
+    }
+
+    private async Task ToggleGymPointCloudAsync()
+    {
+        if (_togglingPointCloud) return;
+        _togglingPointCloud = true;
+        try
+        {
+            var target = !_gymPointCloudEnabled;
+            if (await UiSettings.SetGymPointCloudAsync(target))
+            {
+                _gymPointCloudEnabled = target;
+                // The chart is torn down with the card, so it must be redrawn
+                // when the cloud is switched back on.
+                _chartsDrawn = false;
+                _statusSeverity = Severity.Success;
+                _statusMessage = target
+                    ? "Gym point cloud enabled for all users."
+                    : "Gym point cloud disabled for all users.";
+            }
+            else
+            {
+                _statusSeverity = Severity.Error;
+                _statusMessage = "Could not change the setting. Are you still signed in as an admin?";
+            }
+        }
+        finally
+        {
+            _togglingPointCloud = false;
+        }
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
