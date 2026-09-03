@@ -7,6 +7,7 @@ using HappyGymStats.Identity.Authentication;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.AspNetCore.HttpOverrides;
 using System.Net;
+using System.Security.Claims;
 using System.IO;
 using Microsoft.AspNetCore.DataProtection;
 using MudBlazor.Services;
@@ -119,6 +120,12 @@ public sealed class Program
                     options.TokenValidationParameters.NameClaimType = "preferred_username";
                     options.TokenValidationParameters.RoleClaimType = "roles";
                 });
+
+            // Maps the raw Keycloak "groups" claim onto roles, the same way the
+            // API and AdminPanel do. Without it, membership of /admins is
+            // invisible to <AuthorizeView Roles="admin">, so an administrator
+            // signs in successfully and still sees no admin controls.
+            builder.Services.AddScoped<IClaimsTransformation, KeycloakGroupClaimsTransformer>();
         }
 
         // In production we intentionally target API loopback (127.0.0.1:5047) to avoid external proxy/CDN hops.
