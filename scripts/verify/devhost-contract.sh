@@ -145,6 +145,45 @@ for allowed in "/signin-oidc" "/login" "/auth/"; do
   require_contains "${ACCESS_SOURCE}" "\"${allowed}\"" "sign-in path stays reachable: ${allowed}"
 done
 
+echo "==> devhost verify: the API base is a single loopback choke point"
+# Everything the Blazor host talks to is derived from ApiBaseUrl: all four
+# HttpClients, and the SignalR hub URL (WarBoardService builds it as
+# new Uri(http.BaseAddress, "/api/hub/war")). So ApiBaseUrl is the only place
+# dev could be pointed at production, and it must never be a public hostname.
+#
+# This matters because the live server has an api.torn.geromet.com server block
+# that is absent from this repo. Nothing references it today; this check is what
+# keeps that true.
+bad_base=0
+while IFS= read -r line; do
+  [[ -z "${line}" ]] && continue
+  value="${line#*ApiBaseUrl}"
+  if printf '%s' "${value}" | grep -qE 'https?://[A-Za-z0-9.-]*geromet\.com'; then
+    fail "ApiBaseUrl points at a public geromet.com host: ${line}"
+    bad_base=1
+  fi
+done < <(grep -rn "ApiBaseUrl" --include=*.json --include=*.service infra/ src/ 2>/dev/null | grep -v '/obj/\|/bin/')
+if (( bad_base == 0 )); then
+  pass "no ApiBaseUrl resolves to a public geromet.com host (all loopback/localhost)"
+fi
+
+# A browser-side HttpClient would bypass ApiBaseUrl entirely and resolve against
+# whatever host the page was served from — or worse, an absolute URL. The WASM
+# client currently registers none; keep it that way.
+if grep -rqn "BaseAddress" --include=*.cs src/HappyGymStats.Blazor/HappyGymStats.Blazor.Client/ 2>/dev/null; then
+  fail "the WASM client now sets an HttpClient BaseAddress — browser-side calls bypass ApiBaseUrl and can cross environments"
+else
+  pass "WASM client registers no HttpClient (no browser-side call can bypass ApiBaseUrl)"
+fi
+
+# api.torn.com is Torn's own API and is expected. Any *.geromet.com absolute
+# base address is not.
+if grep -rn "BaseAddress *= *new Uri(\"" --include=*.cs src/ 2>/dev/null | grep -v '/obj/\|/bin/' | grep -qE 'geromet\.com'; then
+  fail "an HttpClient BaseAddress hardcodes a geromet.com host"
+else
+  pass "no HttpClient hardcodes a geromet.com base address"
+fi
+
 echo "==> devhost verify: dev deploy cannot target production"
 require_contains "${DEPLOY_SCRIPT}" "production_target_refused" "deploy-dev.sh refuses production roots/units"
 require_contains "${SETUP_SCRIPT}" "DEPLOY_INSTALL_DEV_HOST" "setup script is gated behind DEPLOY_INSTALL_DEV_HOST"

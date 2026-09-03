@@ -47,7 +47,9 @@ SCRIPT_AUTOMATION_SAFE_DEFAULT=1
 
 Options:
   --steps LIST        Comma-separated: nginx-catchall,swap,keycloak-heap
-                      (default: all)
+                      (default: swap,keycloak-heap)
+                      nginx-catchall is OFF by default: the stock 'default' site
+                      is being kept deliberately. Opt in only if that changes.
   --swap-size SIZE    Swap file size, e.g. 2G or 4G (default: 2G)
   --swappiness N      vm.swappiness (default: 10 — swap as a safety net for a
                       server, not as routine paging)
@@ -72,7 +74,7 @@ SAFETY
 EOF
 }
 
-STEPS="all"
+STEPS="swap,keycloak-heap"
 SWAP_SIZE="2G"
 SWAPPINESS="10"
 KC_HEAP_MB="384"

@@ -118,6 +118,25 @@ blank
 probe_priv "loopback listeners with process" \
   "ss -ltnp 2>/dev/null | grep -E '127\\.0\\.0\\.1|\\[::1\\]'"
 
+section "api.torn.geromet.com — what does it actually serve?"
+note "This hostname is declared in the live nginx config but appears nowhere in"
+note "the repository. Worth knowing whether it is another public route to the"
+note "production API, and whether DNS even points at this machine."
+blank
+probe_priv "server block" \
+  "nginx -T 2>/dev/null | awk '/server[[:space:]]*\\{/{buf=\"\"} {buf=buf\"\\n\"\$0} /api\\.torn\\.geromet\\.com/{found=1} /^\\}/{if(found){print buf; found=0} buf=\"\"}' | grep -E 'server_name|listen|proxy_pass|root|return|location' || echo '(no block found)'"
+blank
+probe_sh "does it resolve, and to where?" \
+  "getent hosts api.torn.geromet.com || echo '(does not resolve)'"
+blank
+probe_sh "does it reach this machine, and which upstream?" \
+  "curl -s -o /dev/null -w 'https://api.torn.geromet.com/ -> %{http_code}\n' --max-time 10 https://api.torn.geromet.com/ 2>/dev/null || echo '(no response)'"
+blank
+note "If this proxies to 127.0.0.1:5047 it is a SECOND public entrance to the"
+note "production API. Nothing in the application uses it — verified by grep and"
+note "pinned by scripts/verify/devhost-contract.sh — so it can most likely be"
+note "retired. Confirm before removing: something outside this repo may rely on it."
+
 section "What the host believes about its own exposure"
 probe_sh "primary IPv4/IPv6" "ip -brief addr show scope global 2>/dev/null || ip addr show 2>/dev/null | grep -E 'inet |inet6 ' | grep -v '127\\.0\\.0\\.1\\|::1'"
 blank
