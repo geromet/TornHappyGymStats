@@ -17,6 +17,8 @@ readonly TEST_PROJECT="${ROOT_DIR}/tests/HappyGymStats.Tests/HappyGymStats.Tests
 readonly VAULT_SOURCE="${ROOT_DIR}/src/HappyGymStats.Core/War/WarKeyVault.cs"
 readonly VAULT_TESTS="${ROOT_DIR}/tests/HappyGymStats.Tests/WarKeyVaultTests.cs"
 readonly TOS_DOC="${ROOT_DIR}/docs/torn-api/terms-of-service.md"
+readonly TOS_PAGE="${ROOT_DIR}/src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/Terms.razor"
+readonly TOS_VERSION_SOURCE="${ROOT_DIR}/src/HappyGymStats.Contracts/Compliance/TermsDocument.cs"
 
 readonly TEST_FILTER="WarKeyVaultTests"
 
@@ -25,6 +27,8 @@ required_files=(
   "$VAULT_SOURCE"
   "$VAULT_TESTS"
   "$TOS_DOC"
+  "$TOS_PAGE"
+  "$TOS_VERSION_SOURCE"
 )
 
 # Acceptance criteria from workspace/V2/handoff/07, each pinned to a named test.
@@ -158,6 +162,27 @@ done
 if ! rg -qi 'encrypt' "$TOS_DOC"; then
   fail "terms-of-service.md does not mention encryption — the gate in handoff 07 requires the disclosure to state that war keys are stored encrypted"
 fi
+
+# The disclosure only means anything if the document, the served page and the
+# version stamped on consent records all say the same thing. Consent recorded
+# against a version nobody can produce cannot be honoured.
+doc_version="$(rg -o -m1 'Document version: \S+' "$TOS_DOC" | sed 's/Document version: //')"
+code_version="$(rg -o -m1 'Version = "[^"]+"' "$TOS_VERSION_SOURCE" | sed 's/Version = "//; s/"//')"
+[[ -n "${doc_version}" ]] || fail "could not read the version from terms-of-service.md"
+[[ -n "${code_version}" ]] || fail "could not read TermsDocument.Version"
+[[ "${doc_version}" == "${code_version}" ]] \
+  || fail "disclosure version drift: terms-of-service.md says '${doc_version}', TermsDocument.Version says '${code_version}'"
+pass "disclosure version agrees between the document and the code (${code_version})"
+
+# The page must render the version, not hardcode a copy of it.
+rg -q 'TermsDocument.Version' "$TOS_PAGE" \
+  || fail "Terms.razor does not render TermsDocument.Version — the page could drift from the document silently"
+# and it must actually carry the substance, not the old placeholder
+rg -q 'Stored, encrypted' "$TOS_PAGE" \
+  || fail "Terms.razor does not state that keys are stored encrypted"
+rg -qi 'placeholder' "$TOS_PAGE" \
+  && fail "Terms.razor still contains placeholder text"
+pass "the served page carries the disclosure and its version"
 
 if rg -q -- '-draft' "$TOS_DOC"; then
   if [[ -n "$persisting_writer" ]]; then

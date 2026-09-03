@@ -1,6 +1,10 @@
 # Torn API Key Terms Disclosure
 
-**Document version: 2.0.0-draft — NOT YET PUBLISHED. See "Status" below.**
+**Document version: 2.0.0 · published 2026-09-04**
+
+Served at `/terms`. The version above, the page, and
+`HappyGymStats.Contracts.Compliance.TermsDocument.Version` must agree;
+`scripts/verify/w07-key-vault-contract.sh` fails the build if they drift.
 
 Source policy: https://www.torn.com/api.html#
 
@@ -10,14 +14,15 @@ data — and Torn's disclosure requirements apply to each.
 
 ## Status
 
-Version 1.0.0 of this document (the single-row table it replaces) stated *"API key is not
-stored and not shared"*. That statement is accurate for usage 1 and only for usage 1.
+This version replaces 1.0.0, which described a single usage and stated *"API key
+is not stored and not shared"*. That statement was accurate for usage 1 and only
+for usage 1.
 
-Usages 2 and 3 below describe **stored** keys. Neither is in service yet: the key vault
-(`WarKeyVault`) exists, but no endpoint writes a key row, and the linking page is not
-built. This document must be published and actively accepted by members **before the first
-key is stored**. Until then, version 1.0.0 remains the operative disclosure and no key is
-retained by anything.
+Usages 2 and 3 below describe **stored** keys. The disclosure is published
+first, deliberately: no key row may be written until it is live and the member
+storing a key has accepted this version. `w07-key-vault-contract.sh` enforces
+that ordering — it fails the build if any code persists a stored key while this
+document is still a draft.
 
 ## 1. One-off import key
 
@@ -76,9 +81,9 @@ If you do not accept, usage 1 remains available and nothing about your account c
 
 ### Changelog
 
-- **2.0.0-draft** — Splits the single disclosure into the three distinct key usages;
-  states plainly that war and member keys are stored encrypted; adds the revocation,
-  non-readability, and least-access commitments; adds versioned consent. Drafted for
-  M009 S01 (`workspace/V2/handoff/07`). **Requires review and publication before any key
-  is stored.**
+- **2.0.0** (2026-09-04) — Splits the single disclosure into the three distinct
+  key usages; states plainly that war and member keys are stored encrypted; adds
+  the revocation, non-readability and least-access commitments; adds versioned
+  consent. Published before any key-storing code exists, per M009 S01
+  (`workspace/V2/handoff/07`).
 - **1.0.0** — Single usage: Full Access import key, not stored.

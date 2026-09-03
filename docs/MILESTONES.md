@@ -403,14 +403,25 @@ and `WAR_KEY_MASTER` is already key material, so those two fields would describe
 fails authentication instead of decrypting into the wrong member. The only way to a
 plaintext key is the `UseKey` callback — there is no method that returns one.
 
-**S01 is the blocker, and it is worse than the plan assumed.** Handoff 07 says the
-disclosure "has been rewritten … to state plainly that war keys are stored encrypted". It
-had not been. `docs/torn-api/terms-of-service.md` still said *"API key is not stored and
-not shared"* and named Full Access as the level requested. Storing a key against that
-published text is precisely the breach handoff 07 warns about, and the exposure is the
-faction's. A 2.0.0 draft covering the three key usages is now in the repo, marked
-NOT YET PUBLISHED. **It needs the operator to review and publish it, and members to
-actively accept it, before S03/S04 may write a single key row.**
+**S01 — the disclosure is PUBLISHED (2.0.0, 2026-09-04).** The hand-off claimed it
+had been rewritten to say war keys are stored encrypted; it had not.
+`docs/torn-api/terms-of-service.md` still read *"API key is not stored and not
+shared"*, with Full Access as the level requested. Storing a key against that text
+would have been a Torn ToS breach, with the faction exposed rather than the
+developer.
+
+Publishing meant two things and only one of them was a version marker:
+`Terms.razor` was a placeholder saying details "will be expanded here", so a
+disclosure that lived only in the repository was not published at all. The page
+now serves the document. `TermsDocument.Version` is the single fact the document,
+the page and each future consent record share, and `w07` fails the build if they
+drift — consent recorded against a version nobody can produce cannot be honoured.
+
+Still outstanding for S01: `ConsentRecordEntity` + migration and a recorded
+acceptance. The operator is currently the only member with access to key-storing
+features, so that is one record — but the version stamp is what makes a later
+material change re-askable.
+
 
 Remaining slices unbuilt: S01 consent record, S03 entity + migration, S04 linking
 endpoints (also needs `/v2/user/basic`), S05–S08. `w07` prints these as explicitly
