@@ -300,11 +300,11 @@ deleted; read the code on `main`. S01 stays BLOCKED ON USER (live Limited key +
 The old "278/281, 3 pre-existing SQLite / pending-migration failures" note is stale: the
 suite is green on `main` (342 on this branch, which adds M009 S02's tests).
 
-Note what that number does *not* include. The three Postgres integration tests still skip
-here — they had never executed, and running them turned up three defects in the harness
-itself. Those fixes are on `fix/pg-superuser-detection` (PR #42), unmerged, where the
-tier is green at 3/3 against a real container. Until that merges, a green suite on `main`
-says nothing about the Npgsql path.
+The three Postgres integration tests had never executed in their life — running them
+turned up three defects in the harness itself, fixed in PR #42 (merged 2026-09-03). They
+now run for real against a container, so a green suite finally says something about the
+Npgsql path. They still skip silently where no container runtime is available; check for
+`Skipped: 0` before treating that tier as evidence.
 
 Out of scope: target *selection* among eligible targets — that is M010.
 
