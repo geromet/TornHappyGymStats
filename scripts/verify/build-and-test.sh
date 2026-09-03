@@ -25,6 +25,7 @@ bash scripts/verify/w05-scouting-contract.sh
 
 echo "==> verify: chain command contract (w06)"
 bash scripts/verify/w06-chain-contract.sh
+bash scripts/verify/w07-key-vault-contract.sh
 
 echo "==> dotnet build"
 dotnet build

@@ -46,9 +46,9 @@ below. Two findings were re-scoped once checked against the tree: S01 (lump dete
 existed as a dampener, not real detection) and S03 (`OpenTarget` holes already existed
 but were mis-gated) — see each slice.
 
-**Branch layout.** The slices land as a **stack**, not on `main` yet: `feat/m007-s01-…`
-off `main` (carries this plan doc), `feat/m007-s02-…` off S01, etc. Look for completed
-slices on their branch, not `main`, until the stack is merged.
+**Branch layout.** The slices landed as a stack of branches and are now **merged to
+`main`** (2026-09-03); the branches are gone. Per-slice notes below still say "branch
+`feat/m007-…`" — read those as "in `main`, delivered by that slice".
 
 ### S01 — Ranked-war lump detection rework  *(→ workspace/V2/handoff/05)*  — DONE (branch `feat/m007-s01-lump-detection`)
 
@@ -292,11 +292,19 @@ no third-party data.
   `ChainTracker.cs` / `ChainLapseInference.cs` (no `TornApiClient` / `HttpClient` /
   `api.torn.com` / transport). Wired into `scripts/verify/build-and-test.sh`.
 
-**M008 status:** S02–S05, S07 (board half), S08 shipped on branch
-`feat/m008-s03-chain-command` (stacked on `feat/m008-s02-chain-tracker`). S01 stays
-BLOCKED ON USER (live Limited key + `api.torn.com`); S06 DEFERRED (hub groups). Full
-suite 278/281 — the 3 failures are the pre-existing unrelated SQLite / pending-migration
-issues on `main`, unchanged. +15 new tests.
+**M008 status:** S02–S05, S07 (board half), S08 are **merged to `main`** (2026-09-03).
+The `feat/m007-*` / `feat/m008-*` branches this document used to point at have been
+deleted; read the code on `main`. S01 stays BLOCKED ON USER (live Limited key +
+`api.torn.com`); S06 DEFERRED (hub groups).
+
+The old "278/281, 3 pre-existing SQLite / pending-migration failures" note is stale: the
+suite is green on `main` (342 on this branch, which adds M009 S02's tests).
+
+Note what that number does *not* include. The three Postgres integration tests still skip
+here — they had never executed, and running them turned up three defects in the harness
+itself. Those fixes are on `fix/pg-superuser-detection` (PR #42), unmerged, where the
+tier is green at 3/3 against a real container. Until that merges, a green suite on `main`
+says nothing about the Npgsql path.
 
 Out of scope: target *selection* among eligible targets — that is M010.
 
@@ -337,6 +345,31 @@ ships**.
   unreadable by any role incl. admin; revocation deletes readings (queried afterward);
   Full key refused; no key in any log at any level (greps captured output of a failing
   call).
+
+---
+
+**M009 status (2026-09-03):** S02 built on `feat/m009-s02-war-key-vault` — `WarKeyVault`
+in `Core/War`, 17 tests, `scripts/verify/w07-key-vault-contract.sh` wired into
+`build-and-test.sh`. Envelope encryption, AES-256-GCM, master key from `WAR_KEY_MASTER`,
+`[1 version][12 nonce][ct][16 tag]` framing. It does **not** copy `KeyWrapping`'s header:
+that frame leads with iterations + salt because its key comes from a password via PBKDF2,
+and `WAR_KEY_MASTER` is already key material, so those two fields would describe nothing.
+`PlayerId` + `Purpose` are bound as AES-GCM associated data, so a blob moved between rows
+fails authentication instead of decrypting into the wrong member. The only way to a
+plaintext key is the `UseKey` callback — there is no method that returns one.
+
+**S01 is the blocker, and it is worse than the plan assumed.** Handoff 07 says the
+disclosure "has been rewritten … to state plainly that war keys are stored encrypted". It
+had not been. `docs/torn-api/terms-of-service.md` still said *"API key is not stored and
+not shared"* and named Full Access as the level requested. Storing a key against that
+published text is precisely the breach handoff 07 warns about, and the exposure is the
+faction's. A 2.0.0 draft covering the three key usages is now in the repo, marked
+NOT YET PUBLISHED. **It needs the operator to review and publish it, and members to
+actively accept it, before S03/S04 may write a single key row.**
+
+Remaining slices unbuilt: S01 consent record, S03 entity + migration, S04 linking
+endpoints (also needs `/v2/user/basic`), S05–S08. `w07` prints these as explicitly
+unverified rather than passing over them.
 
 ---
 
