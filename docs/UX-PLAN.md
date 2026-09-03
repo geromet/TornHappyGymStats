@@ -102,10 +102,38 @@ measured-figures-carry-no-marker rule, and that markers do not rely on colour
 alone. Prose bindings are exempt **by name** rather than by loosening the
 pattern, so a new binding has to be classified deliberately.
 
-**Not verified: how it looks.** I cannot see the rendered page. The markup and
-the rules are right; whether the marker reads as a helpful caveat or as clutter
-at a glance needs the operator's eyes, and is the one thing U001 cannot close on
-its own.
+**Verified by running it**, not by reading the source. The app was started
+locally (API + Blazor, `HAPPYGYMSTATS_DEV_AUTH=1`, the `DevelopmentWarSeed` data)
+and the rendered DOM was read back. Two defects showed up that source review had
+missed:
+
+- the chain-timer caption rendered **"Last hit (inferred) inferred"** — the label
+  and the new marker each said it;
+- the "chain about to lapse" alert printed the raw operator diagnostic
+  (*"Last qualifying hit ~280s ago (inferred from score polls, ±570s)"*) on the
+  loudest surface on the board, which is exactly what U001 said belonged in a
+  tooltip.
+
+Both fixed. Density on a faction card is three marked figures out of eleven,
+which reads as emphasis rather than noise.
+
+**Still open:** colour, contrast and spacing. Reading the DOM shows structure and
+copy; it does not show what the marker looks like next to a number. That needs
+eyes on a screen, and is U006's business.
+
+**How to look at it yourself:**
+
+```bash
+ASPNETCORE_ENVIRONMENT=Development HAPPYGYMSTATS_DEV_AUTH=1 \
+  ASPNETCORE_URLS=http://localhost:5047 dotnet run --project src/HappyGymStats.Api --no-launch-profile &
+ASPNETCORE_ENVIRONMENT=Development HAPPYGYMSTATS_DEV_AUTH=1 ApiBaseUrl=http://localhost:5047 \
+  ASPNETCORE_URLS=http://localhost:5137 dotnet run --project src/HappyGymStats.Blazor/HappyGymStats.Blazor --no-launch-profile &
+# then open http://localhost:5137/war
+```
+
+Both hosts need `HAPPYGYMSTATS_DEV_AUTH=1`: with it set only on the frontend, the
+board renders *"War board unavailable. Authentication is required"*, because the
+dev-header principal has no access token to forward to the API.
 
 ---
 
