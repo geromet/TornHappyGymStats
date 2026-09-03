@@ -60,7 +60,9 @@ public sealed class WarPollerHubNotificationTests
         Assert.Equal("succeeded", result.Phase);
         Assert.Equal(WarId, result.ActiveWarId);
         Assert.True(result.PersistedWarState);
-        Assert.Equal(3, tornHandler.Requests.Count);
+        // Four since M008 added the chain-deadline call; see WarPollerServiceTests for why
+        // this number is asserted rather than ignored.
+        Assert.Equal(4, tornHandler.Requests.Count);
         Assert.Single(notifyHandler.Requests);
     }
 
@@ -88,7 +90,9 @@ public sealed class WarPollerHubNotificationTests
         Assert.Equal("succeeded", result.Phase);
         Assert.Equal(WarId, result.ActiveWarId);
         Assert.True(result.PersistedWarState);
-        Assert.Equal(3, tornHandler.Requests.Count);
+        // Four since M008 added the chain-deadline call; see WarPollerServiceTests for why
+        // this number is asserted rather than ignored.
+        Assert.Equal(4, tornHandler.Requests.Count);
         Assert.Single(notifyHandler.Requests);
 
         var current = await persistence.WarRepository.GetCurrentAsync(ScopeKey, CancellationToken.None);
@@ -164,6 +168,13 @@ public sealed class WarPollerHubNotificationTests
     private static HttpResponseMessage RouteWarResponse(HttpRequestMessage request)
     {
         var uri = request.RequestUri?.AbsoluteUri ?? string.Empty;
+
+        // M008: our faction's chain deadline, one WarState call per tick.
+        if (uri == $"https://api.torn.com/v2/faction?selections=chain&key={ApiKey}")
+        {
+            return JsonResponse(ReadFixture("tests/fixtures/war/faction-chain-live.json"));
+        }
+
         if (uri == $"https://api.torn.com/faction/?selections=rankedwars&key={ApiKey}")
         {
             return JsonResponse(ReadFixture("tests/fixtures/war/live-faction-wars.json"));

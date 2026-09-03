@@ -166,7 +166,7 @@
                                                     <MudText Typo="Typo.body1">@chain.AttackableWarTargetCount</MudText>
                                                 </MudItem>
                                                 <MudItem xs="6">
-                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Last hit (inferred)</MudText>
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@ChainTimerLabel(chain)</MudText>
                                                     <MudText Typo="Typo.body1">@FormatChainTimer(chain)</MudText>
                                                 </MudItem>
                                             </MudGrid>
@@ -349,8 +349,20 @@
             ? $"{ms} · {hits} hit(s), worth {chain.NextMilestoneBonus}"
             : "past the final milestone";
 
+    // The label changes with the data source, so an exact countdown is never dressed up as a
+    // guess and a guess is never dressed up as a countdown.
+    private static string ChainTimerLabel(WarChainCommandDto chain)
+        => chain.TimerConfidence == "Exact" ? "Chain lapses in" : "Last hit (inferred)";
+
     private static string FormatChainTimer(WarChainCommandDto chain)
     {
+        if (chain.TimerConfidence == "Exact" && chain.SecondsUntilLapse is int exactLeft)
+        {
+            // No ± and no tilde: this is Torn's own deadline, not a figure derived from poll
+            // spacing. Saying "~" here would understate what we know.
+            return $"{TimeSpan.FromSeconds(exactLeft):mm\\:ss}";
+        }
+
         if (!chain.TimerIsInferred || chain.SecondsSinceLastHit is not int since)
         {
             return chain.TimerDiagnostic ?? "unknown";

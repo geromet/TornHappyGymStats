@@ -39,7 +39,11 @@ public sealed class WarPollerServiceTests
         Assert.Equal(WarId, result.ActiveWarId);
         Assert.True(result.PersistedWarState);
         Assert.Equal(TimeSpan.FromSeconds(30), result.DelayBeforeNextTick);
-        Assert.Equal(3, handler.Requests.Count);
+        // Four, not three: M008 added one WarState-priority call per tick for our faction's
+        // chain deadline. This count is a rate-budget guardrail — if it rises again, something
+        // has been added to the poller's critical path and that is a decision, not a detail.
+        Assert.Equal(4, handler.Requests.Count);
+        Assert.Contains(handler.Requests, request => request.RequestUri?.AbsoluteUri == $"https://api.torn.com/v2/faction?selections=chain&key={ApiKey}");
         Assert.Contains(handler.Requests, request => request.RequestUri?.AbsoluteUri == $"https://api.torn.com/faction/?selections=rankedwars&key={ApiKey}");
         Assert.Contains(handler.Requests, request => request.RequestUri?.AbsoluteUri == $"https://api.torn.com/torn/?selections=rankedwars&key={ApiKey}");
         Assert.Contains(handler.Requests, request => request.RequestUri?.AbsoluteUri == $"https://api.torn.com/torn/48377?selections=rankedwarreport&key={ApiKey}");
@@ -66,6 +70,9 @@ public sealed class WarPollerServiceTests
         Assert.Equal(117, sample.OpponentScore);
         Assert.Equal(39, sample.OpponentChain);
         Assert.Equal(new DateTimeOffset(2026, 5, 9, 12, 0, 2, TimeSpan.Zero), sample.SampledAtUtc);
+        // The chain deadline is Torn's absolute "end" (1788467778), stored as-is rather than
+        // as the decaying "timeout" that came with it.
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1788467778), sample.FactionChainLapsesAtUtc);
 
         var heartbeat = await persistence.WarRepository.GetHeartbeatAsync(ScopeKey, CancellationToken.None);
         Assert.NotNull(heartbeat);
@@ -294,9 +301,72 @@ public sealed class WarPollerServiceTests
             clock,
             NullLogger<WarPollerService>.Instance);
 
-    private static HttpResponseMessage RouteWarResponse(HttpRequestMessage request, string? liveBody = null, string? globalBody = null, string? reportBody = null)
+    [Fact]
+    public async Task RunOnceAsync_still_persists_the_war_when_the_chain_call_fails()
+    {
+        // The chain deadline is a garnish on the tick, not the tick. Losing it must cost the
+        // exact countdown and nothing else — score, roster and holes still land, and the board
+        // falls back to the inferred timer.
+        await using var persistence = await TestPersistenceScope.CreateAsync();
+        var handler = new RecordingHttpMessageHandler((request, _) =>
+            Task.FromResult(RouteWarResponse(request, chainStatusCode: HttpStatusCode.InternalServerError)));
+        var clock = new RecordingWarPollerClock(
+            new DateTimeOffset(2026, 5, 9, 12, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 5, 9, 12, 0, 1, TimeSpan.Zero),
+            new DateTimeOffset(2026, 5, 9, 12, 0, 2, TimeSpan.Zero),
+            new DateTimeOffset(2026, 5, 9, 12, 0, 3, TimeSpan.Zero));
+
+        var sut = CreateSut(persistence, handler, clock);
+
+        var result = await sut.RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal("succeeded", result.Phase);
+        Assert.True(result.PersistedWarState);
+
+        var sample = Assert.Single(await persistence.WarRepository.GetScoreSamplesAsync(WarId, CancellationToken.None));
+        Assert.Equal(128, sample.FactionScore);
+        Assert.Null(sample.FactionChainLapsesAtUtc);
+    }
+
+    [Fact]
+    public async Task RunOnceAsync_records_no_deadline_when_no_chain_is_running()
+    {
+        // Torn reports id/current 0 and end 0 between chains. Storing 1970 as a deadline would
+        // make the derivation read it as long past and, worse, look like real data.
+        await using var persistence = await TestPersistenceScope.CreateAsync();
+        var idleChain = """{"chain":{"id":0,"current":0,"max":10,"timeout":0,"modifier":1,"cooldown":0,"start":0,"end":1788467060}}""";
+        var handler = new RecordingHttpMessageHandler((request, _) =>
+            Task.FromResult(RouteWarResponse(request, chainBody: idleChain)));
+        var clock = new RecordingWarPollerClock(
+            new DateTimeOffset(2026, 5, 9, 12, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 5, 9, 12, 0, 1, TimeSpan.Zero),
+            new DateTimeOffset(2026, 5, 9, 12, 0, 2, TimeSpan.Zero),
+            new DateTimeOffset(2026, 5, 9, 12, 0, 3, TimeSpan.Zero));
+
+        var sut = CreateSut(persistence, handler, clock);
+
+        await sut.RunOnceAsync(CancellationToken.None);
+
+        var sample = Assert.Single(await persistence.WarRepository.GetScoreSamplesAsync(WarId, CancellationToken.None));
+        Assert.Null(sample.FactionChainLapsesAtUtc);
+    }
+
+    private static HttpResponseMessage RouteWarResponse(
+        HttpRequestMessage request,
+        string? liveBody = null,
+        string? globalBody = null,
+        string? reportBody = null,
+        string? chainBody = null,
+        HttpStatusCode chainStatusCode = HttpStatusCode.OK)
     {
         var uri = request.RequestUri?.AbsoluteUri ?? string.Empty;
+
+        // M008: our faction's live chain deadline. One extra WarState call per tick.
+        if (uri == $"https://api.torn.com/v2/faction?selections=chain&key={ApiKey}")
+        {
+            return JsonResponse(chainBody ?? ReadFixture("tests/fixtures/war/faction-chain-live.json"), chainStatusCode);
+        }
+
         if (uri == $"https://api.torn.com/faction/?selections=rankedwars&key={ApiKey}")
         {
             return JsonResponse(liveBody ?? ReadFixture("tests/fixtures/war/live-faction-wars.json"));

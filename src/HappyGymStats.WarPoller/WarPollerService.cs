@@ -172,8 +172,9 @@ public sealed class WarPollerService
             }
 
             var report = await _tornApiClient.GetRankedWarReportAsync(_options.ApiKey, resolution.WarId, cancellationToken);
+            var ourChainLapsesAtUtc = await TryGetOurChainDeadlineAsync(cancellationToken);
             var capturedAtUtc = _clock.UtcNow;
-            var persistedState = BuildPersistedState(resolution, report, capturedAtUtc);
+            var persistedState = BuildPersistedState(resolution, report, capturedAtUtc, ourChainLapsesAtUtc);
 
             await _warStateRepository.UpsertCurrentAsync(persistedState.Current, cancellationToken);
             await _warStateRepository.ReplaceRosterSnapshotAsync(persistedState.Current.WarId!.Value, persistedState.RosterRows, cancellationToken);
@@ -326,7 +327,11 @@ public sealed class WarPollerService
         return new ActiveWarResolution(globalWar.WarId, liveCandidates[0]);
     }
 
-    private PersistedWarState BuildPersistedState(ActiveWarResolution resolution, RankedWarReportResponse report, DateTimeOffset capturedAtUtc)
+    private PersistedWarState BuildPersistedState(
+        ActiveWarResolution resolution,
+        RankedWarReportResponse report,
+        DateTimeOffset capturedAtUtc,
+        DateTimeOffset? ourChainLapsesAtUtc)
     {
         if (report.War.WarId != resolution.WarId)
         {
@@ -388,7 +393,8 @@ public sealed class WarPollerService
             OpponentFactionName = opponentFaction.Name,
             OpponentScore = opponentFaction.Score,
             OpponentChain = opponentFaction.Chain,
-            SampledAtUtc = capturedAtUtc
+            SampledAtUtc = capturedAtUtc,
+            FactionChainLapsesAtUtc = ourChainLapsesAtUtc
         };
 
         return new PersistedWarState(current, rosterRows, sample);
@@ -418,6 +424,40 @@ public sealed class WarPollerService
             PollIntervalSeconds = _options.PollIntervalSeconds,
             FailureBackoffSeconds = failureBackoffSeconds
         };
+
+    /// <summary>
+    /// Our faction's chain deadline, or null.
+    ///
+    /// One extra WarState-priority call per tick, on the same ~30 s cadence as the war report,
+    /// so the rate budget grows by one request per poll and nothing is displaced. The chain
+    /// selection reports the chain of the faction the key belongs to, so there is no opponent
+    /// equivalent to fetch.
+    ///
+    /// Failures are swallowed on purpose. A missing deadline costs the exact countdown and falls
+    /// back to the inferred timer; letting it throw would cost the whole tick — score, roster and
+    /// holes included — for a strictly optional improvement. The war report is the poller's job;
+    /// this is a garnish on it.
+    /// </summary>
+    private async Task<DateTimeOffset?> TryGetOurChainDeadlineAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _tornApiClient.GetFactionChainAsync(_options.ApiKey, cancellationToken);
+            return response.Chain?.LapsesAtUtc;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                "Chain deadline unavailable for faction {FactionId}; the board falls back to the inferred timer. {Reason}",
+                _options.FactionId,
+                BuildSanitizedErrorMessage(ex));
+            return null;
+        }
+    }
 
     private async Task PersistHeartbeatAsync(WarPollerHeartbeatEntity heartbeat)
     {

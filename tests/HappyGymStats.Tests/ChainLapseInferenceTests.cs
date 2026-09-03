@@ -131,4 +131,52 @@ public sealed class ChainLapseInferenceTests
         // real `timeout`, update BOTH this value and the doc, then delete the inference path.
         Assert.Equal(300, ChainLapseInference.TornChainLapseTimeoutSeconds);
     }
+
+    // ---- M008 S01 sweep outcome: Torn reports a real deadline ----------------
+
+    [Fact]
+    public void An_exact_deadline_carries_no_error_bar_and_is_not_inferred()
+    {
+        var now = DateTimeOffset.FromUnixTimeSeconds(1788467515);
+        var lapsesAt = DateTimeOffset.FromUnixTimeSeconds(1788467778);
+
+        var estimate = ChainLapseEstimate.FromDeadline(lapsesAt, now);
+
+        // The live sample: end 1788467778, request at 1788467515, timeout 263.
+        Assert.Equal(263, estimate.SecondsUntilLapse);
+        Assert.Equal(ChainLapseConfidence.Exact, estimate.Confidence);
+        Assert.False(estimate.IsInferred);
+        Assert.Equal(0, estimate.SampleSpacingSeconds);
+    }
+
+    [Fact]
+    public void A_deadline_already_past_reads_zero_not_a_negative_countdown()
+    {
+        var lapsesAt = DateTimeOffset.FromUnixTimeSeconds(1788467778);
+        var now = lapsesAt.AddSeconds(45);
+
+        var estimate = ChainLapseEstimate.FromDeadline(lapsesAt, now);
+
+        Assert.Equal(0, estimate.SecondsUntilLapse);
+    }
+
+    [Fact]
+    public void An_exact_timer_running_low_still_raises_the_alert()
+    {
+        // Regression guard: the alert gate used to test Confidence == Inferred, so
+        // introducing Exact would have silenced the better signal.
+        var state = ChainTracker.Evaluate(chainLength: 40, attackableWarTargetCount: 3);
+        var now = DateTimeOffset.FromUnixTimeSeconds(1788467515);
+        var exact = ChainLapseEstimate.FromDeadline(now.AddSeconds(30), now);
+
+        Assert.Equal(ChainAlertLevel.TimerRunningLow, ChainTracker.AlertLevel(state, exact));
+    }
+
+    [Fact]
+    public void An_unknown_timer_raises_no_timer_alert()
+    {
+        var state = ChainTracker.Evaluate(chainLength: 40, attackableWarTargetCount: 3);
+
+        Assert.Equal(ChainAlertLevel.None, ChainTracker.AlertLevel(state, ChainLapseEstimate.Unknown("no data")));
+    }
 }

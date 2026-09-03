@@ -389,3 +389,61 @@ internal sealed class UnixSecondsDateTimeOffsetConverter : JsonConverter<DateTim
         writer.WriteNumberValue(value.ToUnixTimeSeconds());
     }
 }
+
+/// <summary>
+/// <c>/v2/faction?selections=chain</c>. Shape confirmed by the M008 S01 sweep
+/// (2026-09-03) — see <c>workspace/V2/reference/data-layer.md</c>.
+/// </summary>
+public sealed record FactionChainResponse
+{
+    [JsonPropertyName("chain")]
+    public FactionChain? Chain { get; init; }
+}
+
+public sealed record FactionChain
+{
+    /// <summary>Chain id. <c>0</c> when no chain is running.</summary>
+    [JsonPropertyName("id")]
+    public long Id { get; init; }
+
+    [JsonPropertyName("current")]
+    public int Current { get; init; }
+
+    /// <summary>Next milestone target (<c>10</c> at chain 2), not a cap.</summary>
+    [JsonPropertyName("max")]
+    public int Max { get; init; }
+
+    /// <summary>
+    /// Seconds to lapse AT THE INSTANT OF THE RESPONSE. Deliberately unused for the board's
+    /// countdown: it is stale the moment it is stored, so a sample polled 40 s ago yields a
+    /// clock 40 s fast with nothing on screen saying so. Use <see cref="End"/>.
+    /// </summary>
+    [JsonPropertyName("timeout")]
+    public int Timeout { get; init; }
+
+    /// <summary>
+    /// Torn's own chain multiplier. NOT read by any code: the sweep only observed it at chain 2,
+    /// where every multiplier is 1, and it is typed as an integer while
+    /// <see cref="ChainEngine"/>'s multiplier is fractional above chain 10. A chain of 100+
+    /// settles whether this is a usable cross-check or a rounded number.
+    /// </summary>
+    [JsonPropertyName("modifier")]
+    public double Modifier { get; init; }
+
+    [JsonPropertyName("cooldown")]
+    public int Cooldown { get; init; }
+
+    [JsonPropertyName("start")]
+    public long Start { get; init; }
+
+    /// <summary>Absolute unix instant the chain lapses. Does not decay as the sample ages.</summary>
+    [JsonPropertyName("end")]
+    public long End { get; init; }
+
+    /// <summary>
+    /// The lapse deadline, or null when no chain is running (<c>id</c>/<c>current</c> zero).
+    /// A zero <see cref="End"/> is treated as absent rather than as 1970.
+    /// </summary>
+    public DateTimeOffset? LapsesAtUtc =>
+        Current > 0 && End > 0 ? DateTimeOffset.FromUnixTimeSeconds(End) : null;
+}

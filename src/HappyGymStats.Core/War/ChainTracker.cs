@@ -76,9 +76,12 @@ public static class ChainTracker
     /// <c>data/V2/handoff/06</c> starts it at 5; a planner can override per war.</summary>
     public const int DefaultReservationWindowHits = 5;
 
-    /// <summary>At or below this many inferred seconds to lapse, the board raises
-    /// <see cref="ChainAlertLevel.TimerRunningLow"/>. One score-poll spacing (~30 s) is noise, so
-    /// this sits well above it to survive the ± error bar.</summary>
+    /// <summary>At or below this many seconds to lapse, the board raises
+    /// <see cref="ChainAlertLevel.TimerRunningLow"/>. Sized for the INFERRED path: one score-poll
+    /// spacing (~30 s) is noise, so this sits well above it to survive the ± error bar. An exact
+    /// deadline needs no such margin, but it uses the same threshold deliberately — two thresholds
+    /// would mean the alert moved when the data source changed, which reads as a bug to anyone
+    /// watching the board.</summary>
     public const int AlertTimerLowSeconds = 90;
 
     /// <summary>The loudest chain signal for the board: timer-about-to-lapse beats
@@ -87,7 +90,12 @@ public static class ChainTracker
     {
         ArgumentNullException.ThrowIfNull(state);
 
-        if (timer is { Confidence: ChainLapseConfidence.Inferred, SecondsUntilLapse: int left }
+        // Exact as well as Inferred. This gate was written when Inferred was the only
+        // confidence that carried a number, so adding ChainLapseConfidence.Exact would
+        // otherwise have made the BETTER signal silent — a real Torn deadline ticking down
+        // to zero with no alert, while a guess at the same number raised one.
+        if (timer is { SecondsUntilLapse: int left }
+            && timer.Confidence is ChainLapseConfidence.Inferred or ChainLapseConfidence.Exact
             && left <= AlertTimerLowSeconds)
         {
             return ChainAlertLevel.TimerRunningLow;

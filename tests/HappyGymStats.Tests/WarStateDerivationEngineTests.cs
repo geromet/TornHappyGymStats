@@ -421,9 +421,88 @@ public sealed class WarStateDerivationEngineTests
         Assert.Equal(1000, f1.ChainState.NextMilestone);
     }
 
-    private static WarScoreSampleEntity ChainSample(long id, int factionChain, DateTimeOffset at)
+    [Fact]
+    public void Derive_prefers_Torns_own_deadline_over_the_inference()
+    {
+        var roster = new[]
+        {
+            Roster(1, 10, "A1", "okay"),
+            Roster(1, 11, "A2", "okay"),
+            Roster(2, 20, "B1", "okay"),
+            Roster(2, 21, "B2", "okay"),
+        };
+        var samples = new[]
+        {
+            ChainSample(id: 1, factionChain: 8, at: FixtureNowUtc.AddSeconds(-30)),
+            ChainSample(id: 2, factionChain: 9, at: FixtureNowUtc, lapsesAtUtc: FixtureNowUtc.AddSeconds(263)),
+        };
+
+        var state = new WarStateDerivationEngine().Derive(roster, samples, FixtureNowUtc);
+        var ours = state.Factions.Single(f => f.FactionId == 1);
+
+        Assert.Equal(ChainLapseConfidence.Exact, ours.ChainTimer!.Confidence);
+        Assert.Equal(263, ours.ChainTimer.SecondsUntilLapse);
+        Assert.False(ours.ChainTimer.IsInferred);
+        Assert.Equal(0, ours.ChainTimer.SampleSpacingSeconds);
+        Assert.Equal(FixtureNowUtc.AddSeconds(263), ours.ChainTimer.LapsesAtUtc);
+    }
+
+    [Fact]
+    public void Derive_falls_back_to_inference_when_the_newest_deadline_has_already_passed()
+    {
+        // Torn stops reporting a chain the moment it lapses, so a deadline in the past means
+        // our newest sample predates the lapse. Reporting an exact "0 seconds left" from it
+        // would assert the chain is alive and about to expire when it is already gone.
+        var roster = new[]
+        {
+            Roster(1, 10, "A1", "okay"),
+            Roster(1, 11, "A2", "okay"),
+            Roster(2, 20, "B1", "okay"),
+            Roster(2, 21, "B2", "okay"),
+        };
+        var samples = new[]
+        {
+            ChainSample(id: 1, factionChain: 8, at: FixtureNowUtc.AddSeconds(-30)),
+            ChainSample(id: 2, factionChain: 9, at: FixtureNowUtc, lapsesAtUtc: FixtureNowUtc.AddSeconds(-5)),
+        };
+
+        var state = new WarStateDerivationEngine().Derive(roster, samples, FixtureNowUtc);
+        var ours = state.Factions.Single(f => f.FactionId == 1);
+
+        Assert.Equal(ChainLapseConfidence.Inferred, ours.ChainTimer!.Confidence);
+    }
+
+    [Fact]
+    public void Derive_never_gives_the_enemy_an_exact_timer()
+    {
+        // The chain selection reports the chain of the faction the key belongs to, so an
+        // enemy deadline cannot exist. The enemy card carries no chain command at all.
+        var roster = new[]
+        {
+            Roster(1, 10, "A1", "okay"),
+            Roster(1, 11, "A2", "okay"),
+            Roster(2, 20, "B1", "okay"),
+            Roster(2, 21, "B2", "okay"),
+        };
+        var samples = new[]
+        {
+            ChainSample(id: 1, factionChain: 9, at: FixtureNowUtc, lapsesAtUtc: FixtureNowUtc.AddSeconds(263)),
+        };
+
+        var state = new WarStateDerivationEngine().Derive(roster, samples, FixtureNowUtc);
+        var enemy = state.Factions.Single(f => f.FactionId == 2);
+
+        Assert.Null(enemy.ChainTimer);
+    }
+
+    private static WarScoreSampleEntity ChainSample(
+        long id,
+        int factionChain,
+        DateTimeOffset at,
+        DateTimeOffset? lapsesAtUtc = null)
         => new()
         {
+            FactionChainLapsesAtUtc = lapsesAtUtc,
             Id = id,
             WarId = 48377,
             FactionId = 1,

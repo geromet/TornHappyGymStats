@@ -10,6 +10,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
+using HappyGymStats.Api.Infrastructure;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
 using Xunit.Abstractions;
 using Xunit.Sdk;
@@ -56,11 +58,18 @@ public sealed class PostgresApiIntegrationTests : IAsyncLifetime
             using var startupCts = new CancellationTokenSource(startupTimeout);
             await _postgres.StartAsync(startupCts.Token);
         }
-        catch (OperationCanceledException)
+        catch (Exception ex) when (ex is OperationCanceledException or TimeoutException)
         {
+            // TimeoutException as well as our own cancellation: Testcontainers'
+            // readiness wait has its own internal timeout and throws
+            // TimeoutException from WaitStrategy, which bypassed the
+            // CancellationToken entirely. That turned a slow or unhealthy daemon
+            // into a red suite rather than the skip this tier is designed for —
+            // observed against rootless podman, where the pg_isready probe is
+            // slower than the strategy's default budget.
             _skipReason =
                 $"[timeout] Postgres integration tests exceeded startup timeout of {startupTimeout.TotalSeconds:0}s while waiting for Docker/Testcontainers. " +
-                $"Increase {StartupTimeoutEnvVar} or ensure Docker is healthy.";
+                $"Increase {StartupTimeoutEnvVar} or ensure Docker is healthy. Details: {ex.GetType().Name}: {ex.Message}";
             return;
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or DockerUnavailableException)
@@ -178,9 +187,28 @@ public sealed class PostgresApiIntegrationTests : IAsyncLifetime
         var root = payload.RootElement;
 
         Assert.Equal(JsonValueKind.Object, root.ValueKind);
-        Assert.True(root.TryGetProperty("generatedAtUtc", out _));
+
+        // These assertions previously described a payload this endpoint has
+        // never produced — a "generatedAtUtc" field and a "series" array. The
+        // tier had never actually executed, so nothing contradicted them. The
+        // real contract is SurfacesController.SanitizeLatestPayload: the cached
+        // file is served with the caller-identifying fields stripped.
+        Assert.True(root.TryGetProperty("version", out _));
         Assert.True(root.TryGetProperty("series", out var series));
-        Assert.Equal(JsonValueKind.Array, series.ValueKind);
+        Assert.Equal(JsonValueKind.Object, series.ValueKind);
+        Assert.True(series.TryGetProperty("gymCloud", out var gymCloud));
+
+        // The scrub is the point of serving through the API instead of as a
+        // static file, so assert what it removes, not just that JSON came back.
+        Assert.False(root.TryGetProperty("syncedAtUtc", out _), "syncedAtUtc must be scrubbed from the public payload");
+        Assert.False(gymCloud.TryGetProperty("text", out _), "per-point text must be scrubbed");
+        Assert.False(gymCloud.TryGetProperty("confidence", out _), "per-point confidence must be scrubbed");
+        Assert.False(gymCloud.TryGetProperty("confidenceReasons", out _), "confidence reasons must be scrubbed");
+
+        // The coordinates themselves must survive, or the scrub has eaten the payload.
+        Assert.True(gymCloud.TryGetProperty("x", out var xs));
+        Assert.Equal(JsonValueKind.Array, xs.ValueKind);
+        Assert.NotEmpty(xs.EnumerateArray());
     }
 
     private bool ShouldSkipIntegration()
@@ -240,12 +268,18 @@ public sealed class PostgresApiIntegrationTests : IAsyncLifetime
         {
             builder.UseContentRoot(ResolveApiContentRoot());
             builder.UseEnvironment("Development");
-            builder.ConfigureAppConfiguration((_, config) =>
+            // NOT ConfigureAppConfiguration: under minimal hosting the API's
+            // Program reads HAPPYGYMSTATS_SURFACES_CACHE_DIR and registers
+            // SurfacesConfig while building, which happens BEFORE the factory's
+            // configuration callbacks are applied. The override was therefore
+            // ignored, the controller looked in the repo-relative default, and
+            // the "cached json" test got a 404 from a directory the test never
+            // wrote to. Replacing the registration is what actually takes
+            // effect, because ConfigureServices runs after Program's.
+            builder.ConfigureServices(services =>
             {
-                config.AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["HAPPYGYMSTATS_SURFACES_CACHE_DIR"] = _surfacesCacheDirectory,
-                });
+                services.RemoveAll<SurfacesConfig>();
+                services.AddSingleton(new SurfacesConfig(_surfacesCacheDirectory));
             });
 
             builder.ConfigureServices(services =>

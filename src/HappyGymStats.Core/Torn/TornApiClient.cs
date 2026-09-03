@@ -106,6 +106,17 @@ public sealed class TornApiClient
         return GetWarAsync<RankedWarReportResponse>(apiKey, new Uri(TornApiBaseUri, $"torn/{warId}?selections=rankedwarreport"), TornRequestPriority.Other, ct);
     }
 
+    /// <summary>
+    /// Our own faction's live chain (M008). WarState priority: it shares the board's critical
+    /// path with score and roster, and a stale chain deadline is worse than none — it renders a
+    /// confident countdown for a chain that may already have lapsed.
+    ///
+    /// There is no opponent equivalent: this selection reports the chain of the faction the key
+    /// belongs to, which is why the enemy card keeps the inferred timer.
+    /// </summary>
+    public Task<FactionChainResponse> GetFactionChainAsync(string apiKey, CancellationToken ct = default)
+        => GetWarAsync<FactionChainResponse>(apiKey, new Uri(TornApiBaseUri, "v2/faction?selections=chain"), TornRequestPriority.WarState, ct);
+
     public Task<GlobalRankedWarsResponse> GetGlobalRankedWarsAsync(string apiKey, CancellationToken ct = default)
         => GetWarAsync<GlobalRankedWarsResponse>(apiKey, new Uri(TornApiBaseUri, "torn/?selections=rankedwars"), TornRequestPriority.WarState, ct);
 

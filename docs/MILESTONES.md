@@ -212,11 +212,56 @@ watchers, and a filler-target policy. This is early on purpose: the chain multip
 maths is already in `ChainEngine` (confirmed against 54 records to 0.005), and it needs
 no third-party data.
 
-- **S01 — chain-endpoint lookup sweep (GATE).** — **BLOCKED ON USER.** Needs a live
-  Limited key + network to `api.torn.com`, which this environment doesn't have. Run the
-  `chain`, `chainreport`, `chains` selections against `/v2/faction/lookup`, paste what
-  each returns, and it gets recorded in `workspace/V2/reference/data-layer.md`. Until then S03
-  (timer source) cannot start; S02/S04–S08 do not depend on it.
+- **S01 — chain-endpoint lookup sweep (GATE).** — **RUN 2026-09-03. Recorded in
+  `workspace/V2/reference/data-layer.md`.** The answer inverts S03's premise:
+  `/v2/faction?selections=chain` returns a **`timeout`** field, plus `modifier`,
+  `current`, `max` and `cooldown`. The lapse timer is real, not something to infer.
+
+  Re-run mid-chain the same day (`current: 2`) settled (a): `start: 1788467478,
+  end: 1788467778, timeout: 263` — `timeout` counts down and `end` is an absolute unix
+  deadline. **`end` is the field to store, not `timeout`:** `timeout` is only true at the
+  instant of the request, so a sample polled 40 s ago yields a clock 40 s fast; `end` does
+  not decay, so the board can tick a real countdown between polls. `max` is confirmed as
+  the next milestone target (`10` at chain 2), not a cap.
+
+  (b) is **still open.** `modifier` read `1` at chain 2, which agrees with `ChainEngine` —
+  but every chain below 10 gives 1, so the sample cannot discriminate, and the field is
+  typed as an int while the engine's multiplier is fractional above chain 10. A chain of
+  100+ settles whether this is a usable cross-check or a rounded number. No code reads it
+  meanwhile.
+
+  The 300 s lapse window is corroborated **at chain 2 only** — `start` is the chain's
+  start, not the last hit, so one reading cannot separate "always 300" from "300 at this
+  tier". `TornChainLapseTimeoutSeconds` stays challengeable.
+
+  **Delivered from this:** `ChainLapseEstimate.FromDeadline` +
+  `ChainLapseConfidence.Exact`, with `ChainLapseInference` kept as the fallback — the
+  enemy faction cannot be polled for its chain, and neither can ours before the first
+  chain poll, so the honest-output rules stay live. Adding `Exact` also exposed a real
+  defect: `ChainTracker.AlertLevel` gated `TimerRunningLow` on `Confidence == Inferred`,
+  so an exact deadline ticking to zero would have raised no alert while a guess at the
+  same number did. Fixed, with a regression test.
+
+  **S09 — real chain deadline, end to end.** — DONE. `TornApiClient.GetFactionChainAsync`
+  (WarState priority) → `WarScoreSampleEntity.FactionChainLapsesAtUtc` (migration
+  `AddChainLapseDeadline`, additive and nullable) → `ResolveChainTimer` in the derivation
+  → `WarChainCommandDto.TimerConfidence` / `LapsesAtUtc` → the board, which switches its
+  label between "Chain lapses in" and "Last hit (inferred)".
+
+  **Rate budget: one extra WarState call per tick**, same ~30 s cadence as the war report,
+  nothing displaced. The poller test asserting the per-tick request count is a deliberate
+  guardrail — it went 3 → 4 here, and a future rise should be a decision, not a surprise.
+
+  Three refusals, each with a test: a failed chain call is non-fatal and falls back to the
+  inference; a deadline already in the past falls back too (Torn stops reporting a chain
+  the moment it lapses, so a past deadline means our newest sample predates the lapse, and
+  an exact "0 seconds left" would assert a dead chain is alive); and the enemy faction can
+  never have an exact timer, because the selection reports only the chain of the faction
+  whose key was used.
+
+  `chainreport` also carries `bonuses[].attacker_id` — milestone lumps attributed to the
+  member who landed them, which M007 S01 currently has to infer from score residuals.
+  Worth revisiting that slice once this is ingested.
 - **S02 — `ChainTracker` in `Core/War`.** — DONE (branch `feat/m008-s02-chain-tracker`,
   off the M007 stack). Pure `static ChainTracker.Evaluate(chainLength,
   attackableWarTargetCount, reservationWindowHits = 5)` → `ChainTrackerState`:
@@ -300,11 +345,11 @@ deleted; read the code on `main`. S01 stays BLOCKED ON USER (live Limited key +
 The old "278/281, 3 pre-existing SQLite / pending-migration failures" note is stale: the
 suite is green on `main` (342 on this branch, which adds M009 S02's tests).
 
-Note what that number does *not* include. The three Postgres integration tests still skip
-here — they had never executed, and running them turned up three defects in the harness
-itself. Those fixes are on `fix/pg-superuser-detection` (PR #42), unmerged, where the
-tier is green at 3/3 against a real container. Until that merges, a green suite on `main`
-says nothing about the Npgsql path.
+The three Postgres integration tests had never executed in their life — running them
+turned up three defects in the harness itself, fixed in PR #42 (merged 2026-09-03). They
+now run for real against a container, so a green suite finally says something about the
+Npgsql path. They still skip silently where no container runtime is available; check for
+`Skipped: 0` before treating that tier as evidence.
 
 Out of scope: target *selection* among eligible targets — that is M010.
 
