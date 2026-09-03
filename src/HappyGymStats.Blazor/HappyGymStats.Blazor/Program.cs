@@ -55,6 +55,23 @@ public sealed class Program
                 ?? throw new InvalidOperationException("Missing required configuration key: Keycloak:ClientId");
             var keycloakClientSecret = keycloakSection["ClientSecret"];
 
+            // A confidential client whose secret went missing (an unreadable or
+            // unmounted EnvironmentFile) would otherwise start happily and fail
+            // only at the token exchange, as an opaque invalid_client from
+            // Keycloak on the user's first sign-in. Both server deployments set
+            // this; localhost uses a public client and leaves it unset.
+            var requireClientSecret =
+                string.Equals(keycloakSection["RequireClientSecret"], "1", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(keycloakSection["RequireClientSecret"], "true", StringComparison.OrdinalIgnoreCase);
+
+            if (requireClientSecret && string.IsNullOrWhiteSpace(keycloakClientSecret))
+            {
+                throw new InvalidOperationException(
+                    $"Keycloak:RequireClientSecret is set for client '{keycloakClientId}', but Keycloak:ClientSecret is empty. " +
+                    "Set Keycloak__ClientSecret in the unit's EnvironmentFile (/etc/happygymstats/blazor.env or blazor-dev.env), " +
+                    "or clear Keycloak__RequireClientSecret if this deployment really does use a public client.");
+            }
+
             builder.Services
                 .AddAuthentication(options =>
                 {

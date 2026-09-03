@@ -49,6 +49,33 @@ Critical API env var names:
 - `ASPNETCORE_URLS`
 - `ASPNETCORE_ENVIRONMENT`
 
+Critical Blazor env var names (`/etc/happygymstats/blazor.env`, and
+`blazor-dev.env` on the dev host — both 0640 `root:www-data`):
+
+- `Keycloak__ClientSecret`
+
+Unit files are installed 0644 and are therefore readable by every account on the
+host, so a secret may never appear in an `Environment=` line. Both Blazor units
+set `Keycloak__RequireClientSecret=true`, which makes the host refuse to start
+when the env file is missing or unreadable, instead of silently degrading to a
+public client and failing later with an opaque `invalid_client` at the user's
+first sign-in.
+
+## Keycloak clients (realm `torn`)
+
+| Client | Used by | Client authentication | Redirect URIs |
+|---|---|---|---|
+| `happygymstats-web` | production frontend | on (secret) | `https://torn.geromet.com/signin-oidc` |
+| `happygymstats-web-dev` | dev host frontend | on (secret) | `https://torndev.geromet.com/signin-oidc` |
+| `happygymstats-web-local` | `dotnet run` on a laptop | off (public + PKCE `S256`) | `https://localhost:7011/signin-oidc`, `http://localhost:5137/signin-oidc` |
+| `happygymstats-api` | audience only | off, no flows | none |
+| `happygymstats-api-dev` | audience only | off, no flows | none |
+
+No client has a wildcard in its redirect URIs (CVE-2026-7504). The localhost
+callbacks live on their own public client so the production client can hold a
+secret that never has to exist on a developer's laptop;
+`appsettings.Development.json` selects it, and only that file references it.
+
 ## Service and release roots
 
 Current deploy scripts enforce timestamped release + `current` symlink activation:

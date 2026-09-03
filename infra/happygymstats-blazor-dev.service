@@ -11,6 +11,15 @@ ExecStart=/var/www/happygymstats-blazor-dev/current/HappyGymStats.Blazor
 Restart=on-failure
 RestartSec=5
 
+# Runtime secrets (server-local, never committed). Must define:
+# - Keycloak__ClientSecret   the credential of 'happygymstats-web-dev'. MUST
+#                            differ from production's; they are different
+#                            Keycloak clients and the secrets are not shared.
+# Deliberately NOT /etc/happygymstats/blazor.env: sourcing production's file
+# would hand the dev host the production client credential.
+EnvironmentFile=/etc/happygymstats/blazor-dev.env
+
+# Non-secret defaults, after EnvironmentFile= so they cannot be overridden.
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=ASPNETCORE_URLS=http://127.0.0.1:5282
 
@@ -25,6 +34,7 @@ Environment=Access__RestrictToAdmins=true
 
 # Dedicated Keycloak client so a production session cookie cannot ride into dev.
 Environment=Keycloak__ClientId=happygymstats-web-dev
+Environment=Keycloak__RequireClientSecret=true
 
 [Install]
 WantedBy=multi-user.target
