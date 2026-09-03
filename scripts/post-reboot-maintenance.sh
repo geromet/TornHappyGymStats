@@ -38,6 +38,26 @@
 #                   spam-probe bait. Local mail (cron, logwatch) is unaffected
 #                   by loopback-only; only INBOUND EXTERNAL mail stops.
 #
+#   docker-firewall Make ufw authoritative over container ports again.
+#
+#                   Docker publishes ports by inserting iptables rules that are
+#                   evaluated BEFORE ufw's, so `ufw status` can report a port
+#                   denied while the world reaches it. On this host ufw is
+#                   active with default deny (incoming), DOCKER-USER holds no
+#                   rules at all, and teamspeak published 0.0.0.0:30033 and
+#                   0.0.0.0:9987/udp straight through it.
+#
+#                   This appends a DROP for traffic arriving on the external
+#                   interface, after a RETURN for established/related
+#                   connections so replies to container-initiated traffic still
+#                   work. Container egress and container-to-container traffic
+#                   are untouched: only packets arriving on the external
+#                   interface are matched.
+#
+#                   Once TeamSpeak is gone nothing publishes externally, so this
+#                   changes nothing today — it is a guard so the NEXT published
+#                   container cannot silently punch through the firewall.
+#
 #   keycloak-heap   Cap the Keycloak JVM heap. It is the largest single consumer
 #                   at ~650MB because the JVM sizes its heap as a fraction of
 #                   total RAM and nothing told it otherwise.
@@ -59,7 +79,11 @@ SCRIPT_AUTOMATION_SAFE_DEFAULT=1
 
 Options:
   --steps LIST        Comma-separated: nginx-catchall,swap,keycloak-heap,
-                      postfix-loopback  (default: swap,keycloak-heap)
+                      postfix-loopback,docker-firewall
+                      (default: swap,keycloak-heap)
+  --docker-allow P    Ports to keep publicly reachable through DOCKER-USER,
+                      comma-separated, e.g. 30033 or 30033/udp. Default: none.
+  --ext-if IFACE      External interface (default: auto-detected default route)
                       nginx-catchall is OFF by default: the stock 'default' site
                       is being kept deliberately. Opt in only if that changes.
   --swap-size SIZE    Swap file size, e.g. 2G or 4G (default: 2G)
@@ -91,6 +115,8 @@ SWAP_SIZE="2G"
 SWAPPINESS="10"
 KC_HEAP_MB="384"
 EDIT_COMPOSE=0
+DOCKER_ALLOW=""
+EXT_IF=""
 EXECUTE=0
 CONFIRM=0
 SHOW_STATUS=0
@@ -102,6 +128,8 @@ while [[ $# -gt 0 ]]; do
     --swappiness) SWAPPINESS="${2:-10}"; shift 2 ;;
     --keycloak-heap) KC_HEAP_MB="${2:-384}"; shift 2 ;;
     --edit-compose) EDIT_COMPOSE=1; shift ;;
+    --docker-allow) DOCKER_ALLOW="${2:-}"; shift 2 ;;
+    --ext-if) EXT_IF="${2:-}"; shift 2 ;;
     --status) SHOW_STATUS=1; shift ;;
     --execute) EXECUTE=1; shift ;;
     --confirm-maintenance) CONFIRM=1; shift ;;
@@ -113,13 +141,19 @@ done
 [[ "${SWAP_SIZE}" =~ ^[0-9]+[MG]$ ]] || { echo "Invalid --swap-size '${SWAP_SIZE}' (e.g. 2G, 512M)" >&2; exit 1; }
 [[ "${SWAPPINESS}" =~ ^[0-9]+$ ]] && (( SWAPPINESS <= 100 )) || { echo "Invalid --swappiness '${SWAPPINESS}' (0-100)" >&2; exit 1; }
 [[ "${KC_HEAP_MB}" =~ ^[0-9]+$ ]] && (( KC_HEAP_MB >= 128 )) || { echo "Invalid --keycloak-heap '${KC_HEAP_MB}' (MB, min 128)" >&2; exit 1; }
+if [[ -n "${DOCKER_ALLOW}" ]]; then
+  for a in ${DOCKER_ALLOW//,/ }; do
+    [[ "${a}" =~ ^[0-9]{1,5}(/(tcp|udp))?$ ]] || { echo "Invalid --docker-allow entry '${a}' (expected 8080 or 8080/udp)" >&2; exit 1; }
+  done
+fi
+[[ -z "${EXT_IF}" || "${EXT_IF}" =~ ^[A-Za-z0-9._@-]+$ ]] || { echo "Invalid --ext-if '${EXT_IF}'" >&2; exit 1; }
 
 want_step() {
   [[ "${STEPS}" == "all" ]] && return 0
   [[ ",${STEPS}," == *",$1,"* ]]
 }
 for s in ${STEPS//,/ }; do
-  case "$s" in all|nginx-catchall|swap|keycloak-heap|postfix-loopback) ;; *) echo "Unknown step: $s" >&2; exit 1 ;; esac
+  case "$s" in all|nginx-catchall|swap|keycloak-heap|postfix-loopback|docker-firewall) ;; *) echo "Unknown step: $s" >&2; exit 1 ;; esac
 done
 
 if [[ -f "${ROOT_DIR}/.env.deploy" ]]; then
@@ -238,6 +272,12 @@ want_step postfix-loopback && {
   echo "    [postfix-loopback] set inet_interfaces=loopback-only and restart postfix"
   echo "                       stops inbound external mail; local mail unaffected"
 }
+want_step docker-firewall && {
+  echo "    [docker-firewall]  DROP inbound container traffic on the external interface"
+  echo "                       interface: ${EXT_IF:-auto-detected}"
+  echo "                       kept public: ${DOCKER_ALLOW:-none}"
+  echo "                       installs a boot-time unit so it survives the weekly reboot"
+}
 want_step keycloak-heap && {
   echo "    [keycloak-heap]  cap Keycloak JVM heap at ${KC_HEAP_MB}MB"
   echo "                     compose file: ${KC_COMPOSE_FILE:-unknown}"
@@ -263,6 +303,7 @@ DO_NGINX=0; want_step nginx-catchall && DO_NGINX=1
 DO_SWAP=0;  want_step swap && DO_SWAP=1
 DO_HEAP=0;  want_step keycloak-heap && DO_HEAP=1
 DO_POSTFIX=0; want_step postfix-loopback && DO_POSTFIX=1
+DO_DOCKERFW=0; want_step docker-firewall && DO_DOCKERFW=1
 
 remote_exec_script <<REMOTE
 set -uo pipefail
@@ -272,6 +313,9 @@ DO_NGINX=${DO_NGINX}
 DO_SWAP=${DO_SWAP}
 DO_HEAP=${DO_HEAP}
 DO_POSTFIX=${DO_POSTFIX}
+DO_DOCKERFW=${DO_DOCKERFW}
+DOCKER_ALLOW='${DOCKER_ALLOW}'
+EXT_IF_ARG='${EXT_IF}'
 SWAP_SIZE='${SWAP_SIZE}'
 SWAPPINESS='${SWAPPINESS}'
 KC_HEAP_MB='${KC_HEAP_MB}'
@@ -401,6 +445,104 @@ if [ "\${DO_POSTFIX}" = "1" ]; then
       echo "    !! postfix check failed; restoring main.cf and not restarting" >&2
       \${SUDO} cp -a "\${BACKUP_DIR}/main.cf.\${STAMP}.bak" /etc/postfix/main.cf
     fi
+  fi
+  echo
+fi
+
+# ------------------------------------------------------- docker firewall ---
+if [ "\${DO_DOCKERFW}" = "1" ]; then
+  echo "--> [docker-firewall]"
+  EXT="\${EXT_IF_ARG}"
+  if [ -z "\${EXT}" ]; then
+    EXT="\$(ip route show default 2>/dev/null | awk '/default/{print \$5; exit}')"
+  fi
+  if [ -z "\${EXT}" ]; then
+    echo "    !! could not determine the external interface; pass --ext-if" >&2
+  else
+    echo "    external interface: \${EXT}"
+
+    # A boot-time unit rather than iptables-persistent: these rules must survive
+    # the weekly reboot AND a docker daemon restart, and shipping our own unit
+    # avoids installing a package and depending on its save/restore behaviour.
+    \${SUDO} tee /usr/local/sbin/happygymstats-docker-firewall >/dev/null <<'FWSCRIPT'
+#!/usr/bin/env bash
+# Managed by scripts/post-reboot-maintenance.sh
+#
+# Restores ufw's authority over Docker-published ports. Docker inserts its own
+# iptables rules ahead of ufw's, so without this a published container port is
+# internet-reachable no matter what ufw reports.
+#
+# Only packets ARRIVING on the external interface are dropped. Container egress
+# and container-to-container traffic traverse the docker bridges and are never
+# matched.
+set -euo pipefail
+EXT="__EXT__"
+ALLOW="__ALLOW__"
+
+apply() {
+  local ipt="$1"
+  "${ipt}" -N DOCKER-USER 2>/dev/null || true
+
+  # Replies to connections a container opened must keep working. This has to be
+  # first, so insert at position 1.
+  "${ipt}" -C DOCKER-USER -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN 2>/dev/null \
+    || "${ipt}" -I DOCKER-USER 1 -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
+
+  # Explicit allows sit after that and before the DROP.
+  local pos=2
+  for entry in ${ALLOW//,/ }; do
+    [ -z "${entry}" ] && continue
+    local port="${entry%%/*}" proto="tcp"
+    case "${entry}" in */udp) proto="udp" ;; */tcp) proto="tcp" ;; esac
+    "${ipt}" -C DOCKER-USER -i "${EXT}" -p "${proto}" --dport "${port}" -j RETURN 2>/dev/null \
+      || "${ipt}" -I DOCKER-USER "${pos}" -i "${EXT}" -p "${proto}" --dport "${port}" -j RETURN
+    pos=$((pos + 1))
+  done
+
+  # Everything else inbound on the external interface. Appended, so it is last.
+  "${ipt}" -C DOCKER-USER -i "${EXT}" -j DROP 2>/dev/null \
+    || "${ipt}" -A DOCKER-USER -i "${EXT}" -j DROP
+}
+
+apply iptables
+# The host has a public IPv6 address, so the v6 table matters too — but only if
+# Docker actually created the chain there.
+if ip6tables -L DOCKER-USER >/dev/null 2>&1; then
+  apply ip6tables
+fi
+FWSCRIPT
+
+    \${SUDO} sed -i "s|__EXT__|\${EXT}|; s|__ALLOW__|\${DOCKER_ALLOW}|" /usr/local/sbin/happygymstats-docker-firewall
+    \${SUDO} chmod 0755 /usr/local/sbin/happygymstats-docker-firewall
+
+    \${SUDO} tee /etc/systemd/system/happygymstats-docker-firewall.service >/dev/null <<'FWUNIT'
+[Unit]
+Description=Restore ufw authority over Docker-published ports
+After=docker.service network-online.target
+Wants=docker.service
+# Docker rewrites its own chains when the daemon restarts; re-running after it
+# is what keeps DOCKER-USER correct.
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/happygymstats-docker-firewall
+
+[Install]
+WantedBy=multi-user.target
+FWUNIT
+
+    \${SUDO} systemctl daemon-reload
+    \${SUDO} systemctl enable --now happygymstats-docker-firewall.service
+
+    echo "    DOCKER-USER now:"
+    \${SUDO} iptables -S DOCKER-USER 2>/dev/null | sed 's/^/      /'
+    echo "    boot unit: \$(systemctl is-enabled happygymstats-docker-firewall.service 2>/dev/null)"
+    echo
+    echo "    Rollback:"
+    echo "      \${SUDO} systemctl disable --now happygymstats-docker-firewall.service"
+    echo "      \${SUDO} iptables -F DOCKER-USER"
   fi
   echo
 fi
