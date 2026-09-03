@@ -212,11 +212,22 @@ watchers, and a filler-target policy. This is early on purpose: the chain multip
 maths is already in `ChainEngine` (confirmed against 54 records to 0.005), and it needs
 no third-party data.
 
-- **S01 — chain-endpoint lookup sweep (GATE).** — **BLOCKED ON USER.** Needs a live
-  Limited key + network to `api.torn.com`, which this environment doesn't have. Run the
-  `chain`, `chainreport`, `chains` selections against `/v2/faction/lookup`, paste what
-  each returns, and it gets recorded in `workspace/V2/reference/data-layer.md`. Until then S03
-  (timer source) cannot start; S02/S04–S08 do not depend on it.
+- **S01 — chain-endpoint lookup sweep (GATE).** — **RUN 2026-09-03. Recorded in
+  `workspace/V2/reference/data-layer.md`.** The answer inverts S03's premise:
+  `/v2/faction?selections=chain` returns a **`timeout`** field, plus `modifier`,
+  `current`, `max` and `cooldown`. The lapse timer is real, not something to infer.
+
+  **But the sweep ran with no chain active**, so every field read `0`. The field's
+  existence is certain; its semantics are not. Before `ChainLapseInference` is deleted,
+  a mid-chain re-run must confirm (a) `timeout` counts down between hits and resets on a
+  qualifying hit — as opposed to being a fixed allowance, which is what
+  `ChainEngine.BonusTable`'s `Timer` column is, and conflating the two is the error S03's
+  comments exist to prevent — and (b) `modifier` agrees with `ChainEngine`. If (b) fails,
+  the scoring engine is wrong and that outranks everything built on it.
+
+  `chainreport` also carries `bonuses[].attacker_id` — milestone lumps attributed to the
+  member who landed them, which M007 S01 currently has to infer from score residuals.
+  Worth revisiting that slice once this is ingested.
 - **S02 — `ChainTracker` in `Core/War`.** — DONE (branch `feat/m008-s02-chain-tracker`,
   off the M007 stack). Pure `static ChainTracker.Evaluate(chainLength,
   attackableWarTargetCount, reservationWindowHits = 5)` → `ChainTrackerState`:
