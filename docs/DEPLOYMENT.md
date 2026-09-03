@@ -56,10 +56,17 @@ Critical Blazor env var names (`/etc/happygymstats/blazor.env`, and
 
 Unit files are installed 0644 and are therefore readable by every account on the
 host, so a secret may never appear in an `Environment=` line. Both Blazor units
-set `Keycloak__RequireClientSecret=true`, which makes the host refuse to start
-when the env file is missing or unreadable, instead of silently degrading to a
-public client and failing later with an opaque `invalid_client` at the user's
-first sign-in.
+set `Keycloak__RequireClientSecret=true`, which logs a `Critical` line at startup
+when the secret is missing — naming the client and the file — instead of failing
+later with an opaque `invalid_client` at the user's first sign-in.
+
+The host keeps serving in that state, deliberately: anonymous pages are most of
+the site, and taking them down over a sign-in misconfiguration is the worse of
+the two failures. Grep for it after any change to these files:
+
+```bash
+sudo journalctl -u happygymstats-blazor -b | grep -i RequireClientSecret
+```
 
 ## Keycloak clients (realm `torn`)
 

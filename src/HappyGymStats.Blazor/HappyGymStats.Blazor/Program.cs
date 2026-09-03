@@ -60,6 +60,11 @@ public sealed class Program
             options.AddPolicy("RequireRole", policy => policy.RequireRole("hgs-user"));
         });
 
+        // Reported after the host is built, so the message reaches the same log
+        // sinks as everything else rather than a half-configured logger.
+        var startupClientSecretMissing = false;
+        string? startupClientId = null;
+
         var developmentAuthEnabled = DevelopmentAuthenticationExtensions.IsEnabled(builder.Configuration);
         if (developmentAuthEnabled)
         {
@@ -76,20 +81,20 @@ public sealed class Program
             var keycloakClientSecret = keycloakSection["ClientSecret"];
 
             // A confidential client whose secret went missing (an unreadable or
-            // unmounted EnvironmentFile) would otherwise start happily and fail
-            // only at the token exchange, as an opaque invalid_client from
-            // Keycloak on the user's first sign-in. Both server deployments set
-            // this; localhost uses a public client and leaves it unset.
+            // unmounted EnvironmentFile, or a misspelled key in it) otherwise
+            // fails only at the token exchange, as an opaque invalid_client from
+            // Keycloak. Say so loudly at startup instead — but keep serving:
+            // this is the public site, and taking every anonymous page down over
+            // a sign-in misconfiguration is the worse failure of the two.
+            // Both server deployments set this; localhost leaves it unset.
             var requireClientSecret =
                 string.Equals(keycloakSection["RequireClientSecret"], "1", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(keycloakSection["RequireClientSecret"], "true", StringComparison.OrdinalIgnoreCase);
 
             if (requireClientSecret && string.IsNullOrWhiteSpace(keycloakClientSecret))
             {
-                throw new InvalidOperationException(
-                    $"Keycloak:RequireClientSecret is set for client '{keycloakClientId}', but Keycloak:ClientSecret is empty. " +
-                    "Set Keycloak__ClientSecret in the unit's EnvironmentFile (/etc/happygymstats/blazor.env or blazor-dev.env), " +
-                    "or clear Keycloak__RequireClientSecret if this deployment really does use a public client.");
+                startupClientSecretMissing = true;
+                startupClientId = keycloakClientId;
             }
 
             builder.Services
@@ -159,6 +164,18 @@ public sealed class Program
         });
 
         var app = builder.Build();
+
+        if (startupClientSecretMissing)
+        {
+            app.Services.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("HappyGymStats.Blazor.Startup")
+                .LogCritical(
+                    "Keycloak:RequireClientSecret is set for client '{ClientId}', but Keycloak:ClientSecret is empty. " +
+                    "Anonymous pages still serve; every sign-in will fail against a confidential client. " +
+                    "Set Keycloak__ClientSecret in the unit's EnvironmentFile (/etc/happygymstats/blazor.env or blazor-dev.env) " +
+                    "- check the key spelling - or clear Keycloak__RequireClientSecret if this deployment really is a public client.",
+                    startupClientId);
+        }
 
         if (developmentAuthEnabled)
         {
