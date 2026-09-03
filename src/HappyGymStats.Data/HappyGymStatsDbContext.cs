@@ -181,6 +181,7 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
             entity.Property(e => e.FactionName).HasMaxLength(128);
             entity.Property(e => e.OpponentFactionName).HasMaxLength(128);
             entity.Property(e => e.SampledAtUtc).HasConversion(UtcDateTimeOffsetConverter);
+            entity.Property(e => e.FactionChainLapsesAtUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
             entity.HasIndex(e => new { e.WarId, e.SampledAtUtc });
         });
 

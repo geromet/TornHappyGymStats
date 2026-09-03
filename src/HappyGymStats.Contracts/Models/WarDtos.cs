@@ -84,7 +84,15 @@ public sealed record WarChainCommandDto(
     int? SecondsSinceLastHit,
     int? SecondsUntilLapse,
     int TimerSpacingSeconds,
-    string? TimerDiagnostic);
+    string? TimerDiagnostic,
+    // "None" | "Inferred" | "Exact". TimerIsInferred is kept rather than replaced: it is
+    // already consumed, and the two answer different questions — whether the figure carries an
+    // error bar, and where it came from.
+    string TimerConfidence,
+    // Absolute lapse instant, present only when TimerConfidence is "Exact". The board ticks
+    // against this so the countdown stays true between polls; SecondsUntilLapse is a snapshot
+    // taken when the state was derived and goes stale the moment it is sent.
+    DateTimeOffset? LapsesAtUtc);
 
 public sealed record WarMemberDto(
     long MemberId,

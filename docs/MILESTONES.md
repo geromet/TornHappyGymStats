@@ -242,10 +242,22 @@ no third-party data.
   so an exact deadline ticking to zero would have raised no alert while a guess at the
   same number did. Fixed, with a regression test.
 
-  **Not built: the wiring.** A real deadline on the board still needs a client method for
-  `/v2/faction?selections=chain`, poller scheduling inside the M007 S02 rate budget, an
-  entity + migration for the deadline, and the DTO/board path. That touches the poller's
-  live rate budget, so it is its own slice and its own decision.
+  **S09 — real chain deadline, end to end.** — DONE. `TornApiClient.GetFactionChainAsync`
+  (WarState priority) → `WarScoreSampleEntity.FactionChainLapsesAtUtc` (migration
+  `AddChainLapseDeadline`, additive and nullable) → `ResolveChainTimer` in the derivation
+  → `WarChainCommandDto.TimerConfidence` / `LapsesAtUtc` → the board, which switches its
+  label between "Chain lapses in" and "Last hit (inferred)".
+
+  **Rate budget: one extra WarState call per tick**, same ~30 s cadence as the war report,
+  nothing displaced. The poller test asserting the per-tick request count is a deliberate
+  guardrail — it went 3 → 4 here, and a future rise should be a decision, not a surprise.
+
+  Three refusals, each with a test: a failed chain call is non-fatal and falls back to the
+  inference; a deadline already in the past falls back too (Torn stops reporting a chain
+  the moment it lapses, so a past deadline means our newest sample predates the lapse, and
+  an exact "0 seconds left" would assert a dead chain is alive); and the enemy faction can
+  never have an exact timer, because the selection reports only the chain of the faction
+  whose key was used.
 
   `chainreport` also carries `bonuses[].attacker_id` — milestone lumps attributed to the
   member who landed them, which M007 S01 currently has to infer from score residuals.

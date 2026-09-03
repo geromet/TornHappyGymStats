@@ -36,6 +36,15 @@ public sealed record ChainLapseEstimate(
     ChainLapseConfidence Confidence,
     string Diagnostic)
 {
+    /// <summary>
+    /// The absolute instant the chain lapses, set only on the <see cref="ChainLapseConfidence.Exact"/>
+    /// path. Carried alongside <see cref="SecondsUntilLapse"/> rather than replacing it because the
+    /// two decay differently: the seconds figure is true when the state is derived and stale by the
+    /// time it reaches a browser, while this does not move. A client that wants a live countdown
+    /// ticks against this.
+    /// </summary>
+    public DateTimeOffset? LapsesAtUtc { get; init; }
+
     public static ChainLapseEstimate Unknown(string diagnostic) =>
         new(null, null, null, 0, false, ChainLapseConfidence.None, diagnostic);
 
@@ -73,7 +82,10 @@ public sealed record ChainLapseEstimate(
             SampleSpacingSeconds: 0,
             IsInferred: false,
             ChainLapseConfidence.Exact,
-            $"Chain deadline reported by Torn ({lapsesAtUtc:u}).");
+            $"Chain deadline reported by Torn ({lapsesAtUtc:u}).")
+        {
+            LapsesAtUtc = lapsesAtUtc,
+        };
     }
 }
 

@@ -54,6 +54,12 @@ required_tests=(
   "Derive_chain_command_holds_for_a_war_target_when_none_is_attackable_in_the_window"
   # wiring — the board's derived state actually carries the chain command + inferred timer
   "Derive_attaches_chain_command_with_an_inferred_lapse_timer"
+  # S01 sweep outcome — Torn's own deadline wins, but never dishonestly
+  "Derive_prefers_Torns_own_deadline_over_the_inference"
+  "Derive_falls_back_to_inference_when_the_newest_deadline_has_already_passed"
+  "Derive_never_gives_the_enemy_an_exact_timer"
+  "An_exact_timer_running_low_still_raises_the_alert"
+  "A_deadline_already_past_reads_zero_not_a_negative_countdown"
 )
 
 # The chain command is pure logic on the public-war read path — no live Torn calls, no transport.
@@ -83,6 +89,10 @@ board_literals=(
   'Landing chain'
   'Outside targets locked'
   'Wait or revive'
+  # the label must change with the data source, so an exact countdown is never dressed up as
+  # a guess and a guess is never dressed up as a countdown
+  'Chain lapses in'
+  'Last hit (inferred)'
 )
 
 pass() { printf 'PASS: %s\n' "$1"; }

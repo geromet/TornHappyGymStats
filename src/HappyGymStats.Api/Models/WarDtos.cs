@@ -145,7 +145,9 @@ public static class WarDtoMapper
             SecondsSinceLastHit: timer?.SecondsSinceLastIncrease,
             SecondsUntilLapse: timer?.SecondsUntilLapse,
             TimerSpacingSeconds: timer?.SampleSpacingSeconds ?? 0,
-            TimerDiagnostic: timer?.Diagnostic);
+            TimerDiagnostic: timer?.Diagnostic,
+            TimerConfidence: (timer?.Confidence ?? ChainLapseConfidence.None).ToString(),
+            LapsesAtUtc: timer?.LapsesAtUtc);
     }
 
     private static WarHoleDto ToHoleDto(WarHoleRecord hole)
