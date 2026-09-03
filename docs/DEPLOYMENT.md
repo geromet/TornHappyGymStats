@@ -49,6 +49,40 @@ Critical API env var names:
 - `ASPNETCORE_URLS`
 - `ASPNETCORE_ENVIRONMENT`
 
+Critical Blazor env var names (`/etc/happygymstats/blazor.env`, and
+`blazor-dev.env` on the dev host — both 0640 `root:www-data`):
+
+- `Keycloak__ClientSecret`
+
+Unit files are installed 0644 and are therefore readable by every account on the
+host, so a secret may never appear in an `Environment=` line. Both Blazor units
+set `Keycloak__RequireClientSecret=true`, which logs a `Critical` line at startup
+when the secret is missing — naming the client and the file — instead of failing
+later with an opaque `invalid_client` at the user's first sign-in.
+
+The host keeps serving in that state, deliberately: anonymous pages are most of
+the site, and taking them down over a sign-in misconfiguration is the worse of
+the two failures. Grep for it after any change to these files:
+
+```bash
+sudo journalctl -u happygymstats-blazor -b | grep -i RequireClientSecret
+```
+
+## Keycloak clients (realm `torn`)
+
+| Client | Used by | Client authentication | Redirect URIs |
+|---|---|---|---|
+| `happygymstats-web` | production frontend | on (secret) | `https://torn.geromet.com/signin-oidc` |
+| `happygymstats-web-dev` | dev host frontend | on (secret) | `https://torndev.geromet.com/signin-oidc` |
+| `happygymstats-web-local` | `dotnet run` on a laptop | off (public + PKCE `S256`) | `https://localhost:7011/signin-oidc`, `http://localhost:5137/signin-oidc` |
+| `happygymstats-api` | audience only | off, no flows | none |
+| `happygymstats-api-dev` | audience only | off, no flows | none |
+
+No client has a wildcard in its redirect URIs (CVE-2026-7504). The localhost
+callbacks live on their own public client so the production client can hold a
+secret that never has to exist on a developer's laptop;
+`appsettings.Development.json` selects it, and only that file references it.
+
 ## Service and release roots
 
 Current deploy scripts enforce timestamped release + `current` symlink activation:
@@ -111,12 +145,24 @@ systemd units and the host env file.
 These cannot be scripted from this repo:
 
 1. **DNS** — Cloudflare A record `torndev.geromet.com` to the origin IP.
-2. **Keycloak** — a client `happygymstats-web-dev` in realm `torn`, with redirect
-   URI `https://torndev.geromet.com/signin-oidc`, post-logout redirect
-   `https://torndev.geromet.com/signout-callback-oidc`, and web origin
-   `https://torndev.geromet.com`. A separate client, rather than a second
-   redirect URI on `happygymstats-web`, is what stops a production session from
-   being replayed against dev. Your account must be in the `/admins` group.
+2. **Keycloak** — two clients in realm `torn`:
+   - `happygymstats-web-dev`: redirect URI
+     `https://torndev.geromet.com/signin-oidc`, post-logout redirect
+     `https://torndev.geromet.com/signout-callback-oidc`, web origin
+     `https://torndev.geromet.com`, no wildcards. A separate client, rather than
+     a second redirect URI on `happygymstats-web`, is what stops a production
+     session from being replayed against dev.
+   - `happygymstats-api-dev`: a bearer-only stand-in that exists so an audience
+     has a name. On `happygymstats-web-dev`'s dedicated scope, add an **Audience**
+     mapper with Included Client Audience = `happygymstats-api-dev`, matching
+     `Keycloak__Audience` in `happygymstats-api-dev.service`. Without it the two
+     APIs accept the same tokens and the client separation buys nothing at the
+     API layer.
+
+   Your account must be in the `/admins` group, and the group must reach the
+   token: the realm's `groups` client scope carries a Group Membership mapper
+   (full path on, "Add to access token" and "Add to ID token" on) that emits the
+   `groups` claim `RestrictedAccessExtensions.IsAdministrator` reads.
 3. **Postgres** — a database and role for dev, separate from production. The API
    runs migrations at startup, so a shared database would let a dev build alter
    the production schema.

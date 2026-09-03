@@ -112,6 +112,15 @@ require_contains "${UNIT_API_DEV}" "EnvironmentFile=/etc/happygymstats/api-dev.e
 require_absent "${UNIT_API_DEV}" "EnvironmentFile=/etc/happygymstats/api.env" "dev API does not source the production env file"
 require_contains "${UNIT_API_DEV}" "WorkingDirectory=/var/www/happygymstats-dev/current" "dev API uses the dev release root"
 require_contains "${UNIT_BLAZOR_DEV}" "WorkingDirectory=/var/www/happygymstats-blazor-dev/current" "dev Blazor uses the dev release root"
+require_contains "${UNIT_BLAZOR_DEV}" "EnvironmentFile=/etc/happygymstats/blazor-dev.env" "dev Blazor uses its own EnvironmentFile"
+# Sourcing production's blazor.env would hand the dev host the production
+# client secret — the credential the separate client exists to keep apart.
+require_absent "${UNIT_BLAZOR_DEV}" "EnvironmentFile=/etc/happygymstats/blazor.env" "dev Blazor does not source the production Blazor env file"
+# A secret in a 0644 unit file is readable by every account on the host.
+require_absent "${UNIT_BLAZOR_DEV}" "Environment=Keycloak__ClientSecret" "dev Blazor keeps the client secret out of the unit file"
+require_absent "${UNIT_API_DEV}" "Environment=Keycloak__ClientSecret" "dev API keeps the client secret out of the unit file"
+require_contains "${UNIT_BLAZOR_DEV}" "Keycloak__RequireClientSecret=true" "dev Blazor fails fast when the client secret is missing"
+require_contains "${UNIT_API_DEV}" "Keycloak__Audience=happygymstats-api-dev" "dev API accepts only the dev audience"
 
 echo "==> devhost verify: nginx server block"
 require_contains "${NGINX_DEV}" "server_name torndev.geromet.com;" "dev nginx serves torndev.geromet.com"
@@ -134,6 +143,8 @@ require_contains "${UNIT_API_PROD}" "ASPNETCORE_URLS=http://127.0.0.1:${PROD_API
 require_absent "${UNIT_API_PROD}" "Access__RestrictToAdmins" "production API unit does not enable the admin-only gate"
 if [[ -f "infra/happygymstats-blazor.service" ]]; then
   require_absent "infra/happygymstats-blazor.service" "Access__RestrictToAdmins" "production Blazor unit does not enable the admin-only gate"
+  require_absent "infra/happygymstats-blazor.service" "Environment=Keycloak__ClientSecret" "production Blazor keeps the client secret out of the unit file"
+  require_absent "infra/happygymstats-blazor.service" "Keycloak__ClientId=happygymstats-web-dev" "production Blazor does not use the dev Keycloak client"
 fi
 
 echo "==> devhost verify: admin-only gate is opt-in and wired"
@@ -185,6 +196,10 @@ else
 fi
 
 echo "==> devhost verify: dev deploy cannot target production"
+require_contains "${DEPLOY_SCRIPT}" "DEPLOY_FORBID_PRODUCTION_TARGET=1" "dev deploy arms the production-target refusal in both child scripts"
+require_contains "scripts/deploy-backend.sh" "DEPLOY_FORBID_PRODUCTION_TARGET" "backend deploy honours the refusal"
+require_contains "scripts/deploy-frontend.sh" "DEPLOY_FORBID_PRODUCTION_TARGET" "frontend deploy honours the refusal"
+require_contains "scripts/deploy-config.sh" "_deploy_env_snapshot" "exported overrides survive .env.deploy"
 require_contains "${DEPLOY_SCRIPT}" "production_target_refused" "deploy-dev.sh refuses production roots/units"
 require_contains "${SETUP_SCRIPT}" "DEPLOY_INSTALL_DEV_HOST" "setup script is gated behind DEPLOY_INSTALL_DEV_HOST"
 require_contains "${SETUP_SCRIPT}" "--confirm-remote-setup" "setup script requires explicit remote confirmation"

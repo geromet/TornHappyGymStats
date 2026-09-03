@@ -25,6 +25,17 @@ source "${DEPLOY_CONFIG_PATH}"
 
 readonly PUBLISH_DIR="${ROOT_DIR}/dist/blazor"
 readonly PUBLISH_EXECUTABLE="${PUBLISH_DIR}/HappyGymStats.Blazor"
+# Belt and braces for the dev deploy. scripts/deploy-dev.sh exports this, and a
+# release must never land in a production root under it — no matter what
+# .env.deploy, a stale shell, or a future edit does to the variables above.
+if [[ "${DEPLOY_FORBID_PRODUCTION_TARGET:-0}" == "1" ]]; then
+  if [[ "${DEPLOY_BLAZOR_REMOTE_ROOT}" == "/var/www/happygymstats-blazor" || "${DEPLOY_BLAZOR_REMOTE_SERVICE}" == "happygymstats-blazor" ]]; then
+    echo "DEPLOY_FAIL category=production_target_refused detail=root=${DEPLOY_BLAZOR_REMOTE_ROOT} service=${DEPLOY_BLAZOR_REMOTE_SERVICE}" >&2
+    echo "    A dev deploy resolved to the production target. Nothing was uploaded." >&2
+    exit 1
+  fi
+fi
+
 readonly REMOTE_RELEASES_DIR="${DEPLOY_BLAZOR_REMOTE_ROOT}/releases"
 readonly REMOTE_CURRENT_DIR="${DEPLOY_BLAZOR_REMOTE_ROOT}/current"
 readonly REMOTE_STAGING_DIR="/tmp/happygymstats-blazor-staging-${DEPLOY_SSH_USER}"
@@ -90,7 +101,7 @@ deploy_ssh_tty "set -euo pipefail; \
   ${DEPLOY_SUDO_CMD} ln -sfn '${REMOTE_RELEASE_DIR}' '${REMOTE_CURRENT_DIR}'; \
   ${DEPLOY_SUDO_CMD} chown -R '${DEPLOY_BLAZOR_OWNER}:${DEPLOY_BLAZOR_GROUP}' '${REMOTE_RELEASE_DIR}'; \
   ${DEPLOY_SUDO_CMD} find '${REMOTE_RELEASE_DIR}' -type d -exec chmod 755 {} \\;; \
-  ${DEPLOY_SUDO_CMD} find '${REMOTE_RELEASE_DIR}' -type f -exec chmod 644 {} \\;; \
+  ${DEPLOY_SUDO_CMD} find '${REMOTE_RELEASE_DIR}' -type f ! -name 'HappyGymStats.Blazor' -exec chmod 644 {} \\;; \
   if [[ -f '${REMOTE_RELEASE_DIR}/HappyGymStats.Blazor' ]]; then ${DEPLOY_SUDO_CMD} chmod 755 '${REMOTE_RELEASE_DIR}/HappyGymStats.Blazor'; fi; \
   rm -rf '${REMOTE_STAGING_DIR}'"
 

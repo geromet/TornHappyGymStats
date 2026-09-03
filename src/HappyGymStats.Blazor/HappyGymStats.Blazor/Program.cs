@@ -7,6 +7,9 @@ using HappyGymStats.Identity.Authentication;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.AspNetCore.HttpOverrides;
 using System.Net;
+using System.Security.Claims;
+using System.IO;
+using Microsoft.AspNetCore.DataProtection;
 using MudBlazor.Services;
 
 namespace HappyGymStats.Blazor;
@@ -27,6 +30,23 @@ public sealed class Program
             .AddInteractiveServerComponents()
             .AddInteractiveWebAssemblyComponents();
 
+        // Data-protection key ring. Unset (localhost) keeps the framework default;
+        // the server units point it at their systemd StateDirectory, which
+        // survives both a restart and the release-symlink swap of a deploy.
+        // Without a stable ring every deploy invalidates every auth cookie and
+        // signs the whole site out.
+        var keyRingPath = builder.Configuration["DataProtection:KeyRingPath"];
+        if (!string.IsNullOrWhiteSpace(keyRingPath))
+        {
+            builder.Services
+                .AddDataProtection()
+                .PersistKeysToFileSystem(new DirectoryInfo(keyRingPath))
+                // Pinned, so production and dev never derive different keys from
+                // a changing entry-assembly name, and so the two hosts stay
+                // distinguishable if a ring is ever shared by mistake.
+                .SetApplicationName(builder.Configuration["DataProtection:ApplicationName"] ?? "HappyGymStats.Blazor");
+        }
+
         builder.Services.AddMudServices();
         builder.Services.AddCascadingAuthenticationState();
         builder.Services.AddHttpContextAccessor();
@@ -39,6 +59,11 @@ public sealed class Program
         {
             options.AddPolicy("RequireRole", policy => policy.RequireRole("hgs-user"));
         });
+
+        // Reported after the host is built, so the message reaches the same log
+        // sinks as everything else rather than a half-configured logger.
+        var startupClientSecretMissing = false;
+        string? startupClientId = null;
 
         var developmentAuthEnabled = DevelopmentAuthenticationExtensions.IsEnabled(builder.Configuration);
         if (developmentAuthEnabled)
@@ -54,6 +79,23 @@ public sealed class Program
             var keycloakClientId = keycloakSection["ClientId"]
                 ?? throw new InvalidOperationException("Missing required configuration key: Keycloak:ClientId");
             var keycloakClientSecret = keycloakSection["ClientSecret"];
+
+            // A confidential client whose secret went missing (an unreadable or
+            // unmounted EnvironmentFile, or a misspelled key in it) otherwise
+            // fails only at the token exchange, as an opaque invalid_client from
+            // Keycloak. Say so loudly at startup instead — but keep serving:
+            // this is the public site, and taking every anonymous page down over
+            // a sign-in misconfiguration is the worse failure of the two.
+            // Both server deployments set this; localhost leaves it unset.
+            var requireClientSecret =
+                string.Equals(keycloakSection["RequireClientSecret"], "1", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(keycloakSection["RequireClientSecret"], "true", StringComparison.OrdinalIgnoreCase);
+
+            if (requireClientSecret && string.IsNullOrWhiteSpace(keycloakClientSecret))
+            {
+                startupClientSecretMissing = true;
+                startupClientId = keycloakClientId;
+            }
 
             builder.Services
                 .AddAuthentication(options =>
@@ -83,6 +125,12 @@ public sealed class Program
                     options.TokenValidationParameters.NameClaimType = "preferred_username";
                     options.TokenValidationParameters.RoleClaimType = "roles";
                 });
+
+            // Maps the raw Keycloak "groups" claim onto roles, the same way the
+            // API and AdminPanel do. Without it, membership of /admins is
+            // invisible to <AuthorizeView Roles="admin">, so an administrator
+            // signs in successfully and still sees no admin controls.
+            builder.Services.AddScoped<IClaimsTransformation, KeycloakGroupClaimsTransformer>();
         }
 
         // In production we intentionally target API loopback (127.0.0.1:5047) to avoid external proxy/CDN hops.
@@ -116,6 +164,18 @@ public sealed class Program
         });
 
         var app = builder.Build();
+
+        if (startupClientSecretMissing)
+        {
+            app.Services.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("HappyGymStats.Blazor.Startup")
+                .LogCritical(
+                    "Keycloak:RequireClientSecret is set for client '{ClientId}', but Keycloak:ClientSecret is empty. " +
+                    "Anonymous pages still serve; every sign-in will fail against a confidential client. " +
+                    "Set Keycloak__ClientSecret in the unit's EnvironmentFile (/etc/happygymstats/blazor.env or blazor-dev.env) " +
+                    "- check the key spelling - or clear Keycloak__RequireClientSecret if this deployment really is a public client.",
+                    startupClientId);
+        }
 
         if (developmentAuthEnabled)
         {

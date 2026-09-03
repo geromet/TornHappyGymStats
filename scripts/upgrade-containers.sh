@@ -64,6 +64,9 @@ Options:
 Environment:
   DEPLOY_UPGRADE_CONTAINERS   must be 1 for any mutation (default: 0)
   UPGRADE_BACKUP_DIR          on the SERVER (default: /var/backups/happygymstats)
+  DEPLOY_PG_SUPERUSER         Postgres superuser for pg_dumpall. Detected from
+                              the container's POSTGRES_USER when unset; set this
+                              only if detection is wrong.
   DEPLOY_SSH_HOST/USER/KEY/PROXY_COMMAND   as per scripts/deploy-config.sh
 
 Expect downtime: Keycloak restart signs everyone out; a Postgres restart drops
@@ -182,7 +185,15 @@ echo "PG_NAME=${PG}"
 [ -n "${KC}" ] && echo "KC_COMPOSE_FILE=$(${SUDO} docker inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "${KC}" 2>/dev/null)"
 [ -n "${PG}" ] && echo "PG_VERSION_RUNNING=$(${SUDO} docker exec "${PG}" postgres --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1)"
 [ -n "${PG}" ] && echo "PG_VOLUMES=$(${SUDO} docker inspect --format '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} {{end}}{{end}}' "${PG}" 2>/dev/null)"
-[ -n "${PG}" ] && echo "PG_DBS=$(${SUDO} docker exec "${PG}" psql -U postgres -Atc 'SELECT datname FROM pg_database WHERE NOT datistemplate' 2>/dev/null | tr '\n' ',')"
+# The superuser is whatever POSTGRES_USER the container was created with —
+# the postgres image creates that role and NOT a role called "postgres".
+# Hardcoding -U postgres is what made the first upgrade attempt fail.
+if [ -n "${PG}" ]; then
+  PGU="$(${SUDO} docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${PG}" 2>/dev/null | sed -n 's/^POSTGRES_USER=//p' | head -1)"
+  [ -n "${PGU}" ] || PGU=postgres
+  echo "PG_SUPERUSER=${PGU}"
+  echo "PG_DBS=$(${SUDO} docker exec "${PG}" psql -U "${PGU}" -Atc 'SELECT datname FROM pg_database WHERE NOT datistemplate' 2>/dev/null | tr '\n' ',')"
+fi
 echo "DISK_AVAIL=$(df -BG --output=avail /var 2>/dev/null | tail -1 | tr -dc '0-9')"
 echo "SURVEY_OK=1"
 REMOTE
@@ -221,6 +232,10 @@ fi
 KC_NAME="$(get KC_NAME)";   KC_IMAGE="$(get KC_IMAGE)"
 PG_NAME="$(get PG_NAME)";   PG_IMAGE="$(get PG_IMAGE)"
 PG_RUNNING="$(get PG_VERSION_RUNNING)"
+# Explicit override wins; otherwise use what the container reported. "postgres"
+# is only a last resort — on this deployment the role is happygym.
+PG_SUPERUSER="${DEPLOY_PG_SUPERUSER:-$(get PG_SUPERUSER)}"
+: "${PG_SUPERUSER:=postgres}"
 KC_COMPOSE="$(get KC_COMPOSE)"; PG_COMPOSE="$(get PG_COMPOSE)"
 COMPOSE_FILE="$(get KC_COMPOSE_FILE)"
 DISK_AVAIL="$(get DISK_AVAIL)"
@@ -262,6 +277,7 @@ if [[ "${TARGET}" == "postgres" || "${TARGET}" == "all" ]]; then
 fi
 echo
 echo "    Backup first: $( ((SKIP_BACKUP)) && echo 'SKIPPED (--skip-backup)' || echo "yes, to ${UPGRADE_BACKUP_DIR} on the server" )"
+echo "    pg_dumpall superuser: ${PG_SUPERUSER}$( [[ -n "${DEPLOY_PG_SUPERUSER:-}" ]] && echo ' (from DEPLOY_PG_SUPERUSER)' || echo ' (detected from POSTGRES_USER)' )"
 echo "    Disk available on /var: ${DISK_AVAIL:-unknown} GB"
 echo
 
@@ -321,6 +337,7 @@ PG_IMAGE='${PG_IMAGE}'
 KC_NEW='quay.io/keycloak/keycloak:${KEYCLOAK_VERSION}'
 PG_NEW='postgres:${POSTGRES_VERSION}'
 BACKUP_DIR='${UPGRADE_BACKUP_DIR}'
+PG_SUPERUSER='${PG_SUPERUSER}'
 SKIP_BACKUP=${SKIP_BACKUP}
 STAMP="\$(date -u +%Y%m%dT%H%M%SZ)"
 
@@ -329,7 +346,7 @@ if [ "\${SKIP_BACKUP}" != "1" ] && [ -n "\${PG_NAME}" ]; then
   echo "--> Dumping all databases before any change"
   \${SUDO} mkdir -p "\${BACKUP_DIR}"
   DUMP="\${BACKUP_DIR}/pg_dumpall-\${STAMP}.sql"
-  if \${SUDO} docker exec "\${PG_NAME}" pg_dumpall -U postgres > /tmp/_pgdump.\$\$ 2>/tmp/_pgdumperr.\$\$; then
+  if \${SUDO} docker exec "\${PG_NAME}" pg_dumpall -U "\${PG_SUPERUSER}" > /tmp/_pgdump.\$\$ 2>/tmp/_pgdumperr.\$\$; then
     \${SUDO} mv /tmp/_pgdump.\$\$ "\${DUMP}"
     \${SUDO} chmod 600 "\${DUMP}"
     SIZE="\$(\${SUDO} stat -c %s "\${DUMP}" 2>/dev/null || echo 0)"

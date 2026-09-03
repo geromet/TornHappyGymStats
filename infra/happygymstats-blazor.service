@@ -11,9 +11,33 @@ ExecStart=/var/www/happygymstats-blazor/current/HappyGymStats.Blazor
 Restart=on-failure
 RestartSec=5
 
+# Runtime secrets (server-local, never committed). Must define:
+# - Keycloak__ClientSecret   the credential of the confidential Keycloak client
+#                            'happygymstats-web'. Unit files are world-readable
+#                            (0644), so this may never be an Environment= line.
+# The file is 0640 root:www-data; the service fails to start without it.
+EnvironmentFile=/etc/happygymstats/blazor.env
+
+# Non-secret defaults, after EnvironmentFile= so they cannot be overridden.
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=ASPNETCORE_URLS=http://127.0.0.1:5182
 Environment=ApiBaseUrl=http://127.0.0.1:5047
+
+# Confidential client: refuse to start without a secret rather than silently
+# falling back to a public client and failing later at the token exchange.
+Environment=Keycloak__RequireClientSecret=true
+
+# Data-protection key ring. systemd creates /var/lib/happygymstats-blazor as 0700
+# www-data and keeps it across restarts and deploys; the framework default
+# would put the keys under a path the release-symlink swap replaces, so every
+# deploy would invalidate every auth cookie. Keys are unencrypted at rest —
+# on Linux the only built-in encryptor is an X.509 cert, and the 0700
+# directory is the protection here. That is what the "No XML encryptor
+# configured" warning at startup refers to.
+StateDirectory=happygymstats-blazor
+StateDirectoryMode=0700
+Environment=DataProtection__KeyRingPath=/var/lib/happygymstats-blazor
+Environment=DataProtection__ApplicationName=HappyGymStats.Blazor
 
 [Install]
 WantedBy=multi-user.target

@@ -59,6 +59,7 @@ Environment overrides:
   DEPLOY_DEV_API_ROOT             (default: /var/www/happygymstats-dev)
   DEPLOY_DEV_BLAZOR_ROOT          (default: /var/www/happygymstats-blazor-dev)
   DEPLOY_DEV_ENV_FILE             (default: /etc/happygymstats/api-dev.env)
+  DEPLOY_DEV_BLAZOR_ENV_FILE      (default: /etc/happygymstats/blazor-dev.env)
   DEPLOY_DEV_OWNER                (default: www-data)
   DEPLOY_DEV_GROUP                (default: www-data)
   DEPLOY_DEV_ENABLE_SERVICES      (default: 1; systemctl enable the new units)
@@ -90,6 +91,7 @@ fi
 : "${DEPLOY_DEV_API_ROOT:=/var/www/happygymstats-dev}"
 : "${DEPLOY_DEV_BLAZOR_ROOT:=/var/www/happygymstats-blazor-dev}"
 : "${DEPLOY_DEV_ENV_FILE:=/etc/happygymstats/api-dev.env}"
+: "${DEPLOY_DEV_BLAZOR_ENV_FILE:=/etc/happygymstats/blazor-dev.env}"
 : "${DEPLOY_DEV_OWNER:=www-data}"
 : "${DEPLOY_DEV_GROUP:=www-data}"
 : "${DEPLOY_DEV_ENABLE_SERVICES:=1}"
@@ -137,6 +139,7 @@ readonly REMOTE_NGINX_CONF_D="${DEPLOY_DEV_NGINX_CONF_D_DIR}/${DEPLOY_DEV_NGINX_
 readonly REMOTE_API_UNIT_STAGING="/tmp/happygymstats-api-dev.service.${DEPLOY_SSH_USER}.staging"
 readonly REMOTE_BLAZOR_UNIT_STAGING="/tmp/happygymstats-blazor-dev.service.${DEPLOY_SSH_USER}.staging"
 readonly REMOTE_ENV_STAGING="/tmp/api-dev.env.${DEPLOY_SSH_USER}.staging"
+readonly REMOTE_BLAZOR_ENV_STAGING="/tmp/blazor-dev.env.${DEPLOY_SSH_USER}.staging"
 
 cat <<EOF
 ==> Local preflight complete
@@ -150,6 +153,7 @@ SCRIPT_AUTOMATION_SAFE_DEFAULT=1
     api root:       ${DEPLOY_DEV_API_ROOT}
     blazor root:    ${DEPLOY_DEV_BLAZOR_ROOT}
     env file:       ${DEPLOY_DEV_ENV_FILE}
+    blazor env:     ${DEPLOY_DEV_BLAZOR_ENV_FILE}
     DEPLOY_INSTALL_DEV_HOST=${DEPLOY_INSTALL_DEV_HOST}
     mode: $( [[ "${DEPLOY_DEV_NGINX_USE_CONF_D}" == "1" ]] && echo "conf.d" || echo "sites-available/sites-enabled" )
 EOF
@@ -219,6 +223,30 @@ ssh_cmd_tty "set -euo pipefail; \
   fi; \
   rm -f '${REMOTE_ENV_STAGING}'"
 
+echo "==> Seeding ${DEPLOY_DEV_BLAZOR_ENV_FILE} if absent (never overwrites an existing file)"
+cat <<'BLAZORENVSKELETON' | ssh_cmd_pipe "set -euo pipefail; cat > '${REMOTE_BLAZOR_ENV_STAGING}'"
+# HappyGymStats dev host (torndev.geromet.com) Blazor runtime environment.
+# Seeded by scripts/setup-devhost-server.sh. Edit before starting the service.
+#
+# Secret of the CONFIDENTIAL Keycloak client 'happygymstats-web-dev', copied
+# from Clients -> happygymstats-web-dev -> Credentials. It MUST differ from
+# production's: they are separate clients, and sharing the value would let a
+# dev-host compromise authenticate as the production frontend.
+#
+# This lives in a 0640 file rather than the unit because unit files are 0644.
+Keycloak__ClientSecret=REPLACE_ME
+BLAZORENVSKELETON
+
+ssh_cmd_tty "set -euo pipefail; \
+  ${SUDO_CMD} mkdir -p \"\$(dirname '${DEPLOY_DEV_BLAZOR_ENV_FILE}')\"; \
+  if [[ -f '${DEPLOY_DEV_BLAZOR_ENV_FILE}' ]]; then \
+    echo '    ${DEPLOY_DEV_BLAZOR_ENV_FILE} already exists — left untouched'; \
+  else \
+    ${SUDO_CMD} install -m 0640 -o root -g '${DEPLOY_DEV_GROUP}' '${REMOTE_BLAZOR_ENV_STAGING}' '${DEPLOY_DEV_BLAZOR_ENV_FILE}'; \
+    echo '    seeded ${DEPLOY_DEV_BLAZOR_ENV_FILE} — EDIT IT BEFORE STARTING THE SERVICE'; \
+  fi; \
+  rm -f '${REMOTE_BLAZOR_ENV_STAGING}'"
+
 echo "==> Installing systemd units"
 ssh_cmd_tty "set -euo pipefail; \
   ${SUDO_CMD} install -m 0644 '${REMOTE_API_UNIT_STAGING}' /etc/systemd/system/happygymstats-api-dev.service; \
@@ -258,7 +286,8 @@ cat <<EOF
 ==> Dev host setup complete
 
 Remaining operator steps before the site works:
-  1. Edit ${DEPLOY_DEV_ENV_FILE} and replace every REPLACE_ME value.
+  1. Edit ${DEPLOY_DEV_ENV_FILE} and ${DEPLOY_DEV_BLAZOR_ENV_FILE}, replacing
+     every REPLACE_ME value.
      Create the dev Postgres database/role first if you have not already.
   2. Create the Keycloak client 'happygymstats-web-dev' (see --help for the
      exact redirect URIs) and add your account to the /admins group.
