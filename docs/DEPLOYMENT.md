@@ -305,6 +305,35 @@ If loopback health is 200 after restart, downstream 502 errors on `torn.geromet.
 
 When running local verification flows that pin `ASPNETCORE_URLS`, always include `--no-launch-profile` for `dotnet run` so launch profile settings do not override your explicit URL binding. See `scripts/verify/s05-local-surfaces.sh` for the canonical pattern.
 
+## The operator console
+
+```bash
+bash scripts/menu.sh
+```
+
+One place to run everything below. It supplies the arguments and the
+`DEPLOY_*` gates each script needs, shows the exact command before running it,
+and never applies anything without a typed `APPLY`. Every mutating task offers
+a preview first.
+
+```bash
+bash scripts/menu.sh --list                 every task and its id
+bash scripts/menu.sh --run <id>             preview, changes nothing
+bash scripts/menu.sh --run <id> --apply     make the change
+bash scripts/menu.sh --audit                scripts no menu entry drives
+bash scripts/menu.sh --pitfalls             what has bitten us, and how to notice
+```
+
+The scripts keep their own gates: running one directly still needs its
+`DEPLOY_*=1` and its `--confirm-*` flag. The menu is a convenience, not a
+bypass. `scripts/verify/menu-contract.sh` fails the build if a script is added
+without either a menu entry or a written reason for excluding it — which is how
+the previous menu ended up covering 4 of 27 scripts.
+
+**Read `docs/OPERATIONS-PITFALLS.md` before a first deploy.** It lists the
+failures that have actually happened here and, for each, the symptom you see
+first — which is usually not the cause.
+
 ## Quick operator sequence
 
 ```bash
