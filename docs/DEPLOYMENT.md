@@ -111,12 +111,24 @@ systemd units and the host env file.
 These cannot be scripted from this repo:
 
 1. **DNS** — Cloudflare A record `torndev.geromet.com` to the origin IP.
-2. **Keycloak** — a client `happygymstats-web-dev` in realm `torn`, with redirect
-   URI `https://torndev.geromet.com/signin-oidc`, post-logout redirect
-   `https://torndev.geromet.com/signout-callback-oidc`, and web origin
-   `https://torndev.geromet.com`. A separate client, rather than a second
-   redirect URI on `happygymstats-web`, is what stops a production session from
-   being replayed against dev. Your account must be in the `/admins` group.
+2. **Keycloak** — two clients in realm `torn`:
+   - `happygymstats-web-dev`: redirect URI
+     `https://torndev.geromet.com/signin-oidc`, post-logout redirect
+     `https://torndev.geromet.com/signout-callback-oidc`, web origin
+     `https://torndev.geromet.com`, no wildcards. A separate client, rather than
+     a second redirect URI on `happygymstats-web`, is what stops a production
+     session from being replayed against dev.
+   - `happygymstats-api-dev`: a bearer-only stand-in that exists so an audience
+     has a name. On `happygymstats-web-dev`'s dedicated scope, add an **Audience**
+     mapper with Included Client Audience = `happygymstats-api-dev`, matching
+     `Keycloak__Audience` in `happygymstats-api-dev.service`. Without it the two
+     APIs accept the same tokens and the client separation buys nothing at the
+     API layer.
+
+   Your account must be in the `/admins` group, and the group must reach the
+   token: the realm's `groups` client scope carries a Group Membership mapper
+   (full path on, "Add to access token" and "Add to ID token" on) that emits the
+   `groups` claim `RestrictedAccessExtensions.IsAdministrator` reads.
 3. **Postgres** — a database and role for dev, separate from production. The API
    runs migrations at startup, so a shared database would let a dev build alter
    the production schema.

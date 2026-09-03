@@ -21,9 +21,17 @@ RestartSec=5
 # - HAPPYGYMSTATS_SURFACES_CACHE_DIR  should point under /var/www/happygymstats-dev.
 EnvironmentFile=/etc/happygymstats/api-dev.env
 
-# Non-secret service defaults.
+# Non-secret service defaults. These follow EnvironmentFile= deliberately:
+# systemd applies the directives in order, so a stale value left in the env
+# file cannot override them.
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=ASPNETCORE_URLS=http://127.0.0.1:5147
+
+# Dev-only token audience. Requires a Keycloak client 'happygymstats-api-dev'
+# and an audience mapper on 'happygymstats-web-dev' pointing at it. Without
+# this the dev and production APIs accept the same tokens, so a dev session's
+# access token is replayable against production.
+Environment=Keycloak__Audience=happygymstats-api-dev
 
 [Install]
 WantedBy=multi-user.target
