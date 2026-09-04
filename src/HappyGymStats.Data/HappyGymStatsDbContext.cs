@@ -21,6 +21,7 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
 
     public DbSet<AppSettingEntity> AppSettings => Set<AppSettingEntity>();
     public DbSet<IdentityMapEntity> IdentityMap => Set<IdentityMapEntity>();
+    public DbSet<ConsentRecordEntity> ConsentRecords => Set<ConsentRecordEntity>();
     public DbSet<ImportRunEntity> ImportRuns => Set<ImportRunEntity>();
     public DbSet<ModifierProvenanceEntity> ModifierProvenance => Set<ModifierProvenanceEntity>();
     public DbSet<AffiliationEventEntity> AffiliationEvents => Set<AffiliationEventEntity>();
@@ -57,6 +58,18 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
             entity.Property(e => e.ExpiresAtUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
             entity.Property(e => e.PublicKey).HasColumnType("bytea");
             entity.Property(e => e.EncryptedTornPlayerId).HasColumnType("bytea");
+        });
+
+        modelBuilder.Entity<ConsentRecordEntity>(entity =>
+        {
+            entity.ToTable("ConsentRecords");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.DocumentVersion).IsRequired().HasMaxLength(32);
+            entity.Property(e => e.Purpose).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.AcceptedAtUtc).HasConversion(UtcDateTimeOffsetConverter);
+            entity.Property(e => e.RevokedAtUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
+            entity.HasIndex(e => new { e.AnonymousId, e.Purpose, e.DocumentVersion });
+            entity.HasIndex(e => new { e.AnonymousId, e.Purpose, e.RevokedAtUtc });
         });
 
         modelBuilder.Entity<ImportRunEntity>(entity =>
