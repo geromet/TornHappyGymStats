@@ -22,8 +22,13 @@ public static class RestrictedAccessExtensions
     /// <summary>Config key. Absent or "0"/"false" leaves the pipeline untouched.</summary>
     public const string EnabledKey = "Access:RestrictToAdmins";
 
-    /// <summary>Keycloak group that maps to admin, matching <see cref="KeycloakGroupClaimsTransformer"/>.</summary>
-    public const string AdminGroupClaimValue = "/admins";
+    /// <summary>Keycloak group that maps to admin.</summary>
+    /// <remarks>
+    /// An alias for <see cref="KeycloakGroups.Admins"/>, kept so existing callers
+    /// still compile. It used to be a second copy of the literal held in step with
+    /// a comment; the value now comes from the one place that defines it.
+    /// </remarks>
+    public const string AdminGroupClaimValue = KeycloakGroups.Admins;
 
     /// <summary>
     /// Paths that must stay reachable for an anonymous visitor, or the sign-in
@@ -74,12 +79,18 @@ public static class RestrictedAccessExtensions
     /// <summary>
     /// True when the principal is an admin.
     ///
-    /// Checks the role claim AND the raw Keycloak "groups" claim, because the two
-    /// hosts resolve admin differently: AdminPanel and the API register a
-    /// <see cref="KeycloakGroupClaimsTransformer"/> that turns "/admins" into the
-    /// "admin" role, while the Blazor host registers no transformer at all and
-    /// relies on Keycloak emitting a flat "roles" claim. Accepting either means
-    /// the gate holds without assuming a particular realm protocol-mapper setup.
+    /// Checks the role claim AND the raw Keycloak "groups" claim, and also a flat
+    /// "roles" claim, so the gate holds without assuming a particular realm
+    /// protocol-mapper setup.
+    ///
+    /// All three hosts — API, AdminPanel and Blazor — now register
+    /// <see cref="KeycloakGroupClaimsTransformer"/>, so the role claim alone would
+    /// usually suffice. The other two checks stay because this is the gate that
+    /// decides whether a stranger reaches the site at all: it should not depend on
+    /// a transformer having run, and it must keep working if a realm is configured
+    /// to emit roles directly. (This comment previously said the Blazor host
+    /// registered no transformer. That stopped being true and nothing caught it,
+    /// which is the argument for the mapping living in one place.)
     /// </summary>
     public static bool IsAdministrator(ClaimsPrincipal? principal)
     {
