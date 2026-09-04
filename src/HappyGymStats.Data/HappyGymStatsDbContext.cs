@@ -22,6 +22,7 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
     public DbSet<AppSettingEntity> AppSettings => Set<AppSettingEntity>();
     public DbSet<IdentityMapEntity> IdentityMap => Set<IdentityMapEntity>();
     public DbSet<ConsentRecordEntity> ConsentRecords => Set<ConsentRecordEntity>();
+    public DbSet<StoredApiKeyEntity> StoredApiKeys => Set<StoredApiKeyEntity>();
     public DbSet<ImportRunEntity> ImportRuns => Set<ImportRunEntity>();
     public DbSet<ModifierProvenanceEntity> ModifierProvenance => Set<ModifierProvenanceEntity>();
     public DbSet<AffiliationEventEntity> AffiliationEvents => Set<AffiliationEventEntity>();
@@ -64,12 +65,32 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
         {
             entity.ToTable("ConsentRecords");
             entity.HasKey(e => e.Id);
+            entity.HasAlternateKey(e => new { e.Id, e.AnonymousId });
             entity.Property(e => e.DocumentVersion).IsRequired().HasMaxLength(32);
             entity.Property(e => e.Purpose).IsRequired().HasMaxLength(64);
             entity.Property(e => e.AcceptedAtUtc).HasConversion(UtcDateTimeOffsetConverter);
             entity.Property(e => e.RevokedAtUtc).HasConversion(NullableUtcDateTimeOffsetConverter);
             entity.HasIndex(e => new { e.AnonymousId, e.Purpose, e.DocumentVersion });
             entity.HasIndex(e => new { e.AnonymousId, e.Purpose, e.RevokedAtUtc });
+        });
+
+        modelBuilder.Entity<StoredApiKeyEntity>(entity =>
+        {
+            entity.ToTable("StoredApiKeys");
+            entity.HasKey(e => e.AnonymousId);
+            entity.Property(e => e.AnonymousId).ValueGeneratedNever();
+            entity.Property(e => e.Ciphertext).IsRequired().HasColumnType("bytea");
+            entity.Property(e => e.StoredAtUtc).HasConversion(UtcDateTimeOffsetConverter);
+            entity.HasOne<IdentityMapEntity>()
+                .WithOne()
+                .HasForeignKey<StoredApiKeyEntity>(e => e.AnonymousId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<ConsentRecordEntity>()
+                .WithMany()
+                .HasForeignKey(e => new { e.ConsentRecordId, e.AnonymousId })
+                .HasPrincipalKey(e => new { e.Id, e.AnonymousId })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => e.ConsentRecordId);
         });
 
         modelBuilder.Entity<ImportRunEntity>(entity =>
