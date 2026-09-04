@@ -1,7 +1,7 @@
 @inherits LayoutComponentBase
 @inject NavigationManager Navigation
 
-<MudThemeProvider Theme="_theme" IsDarkMode="true" />
+<MudThemeProvider Theme="@AppTheme.Theme" IsDarkMode="true" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
@@ -98,22 +98,4 @@
         Navigation.NavigateTo("/auth/logout?returnUrl=%2F", forceLoad: true);
     }
 
-    private static readonly MudTheme _theme = new()
-    {
-        PaletteDark = new PaletteDark
-        {
-            Primary = "#58a6ff",
-            PrimaryContrastText = "#041426",
-            Background = "#0b1020",
-            BackgroundGray = "#0d1529",
-            Surface = "#121a2f",
-            AppbarBackground = "#0d1529",
-            DrawerBackground = "#0d1529",
-            TextPrimary = "#e8f1ff",
-            TextSecondary = "#b8e1ff",
-            TableLines = "#243457",
-            Divider = "#243457",
-            LinesDefault = "#243457",
-        }
-    };
 }
