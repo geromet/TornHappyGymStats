@@ -206,14 +206,14 @@ public sealed class Program
 
         app.MapGet("/auth/login", async (HttpContext httpContext, string? returnUrl) =>
         {
-            var safeReturnUrl = GetSafeLocalReturnUrl(returnUrl);
+            var safeReturnUrl = LocalRedirectPolicy.Normalize(returnUrl);
             var properties = new AuthenticationProperties { RedirectUri = safeReturnUrl };
             await httpContext.ChallengeAsync(OpenIdConnectDefaults.AuthenticationScheme, properties);
         });
 
         app.MapGet("/auth/logout", async (HttpContext httpContext, string? returnUrl) =>
         {
-            var safeReturnUrl = GetSafeLocalReturnUrl(returnUrl);
+            var safeReturnUrl = LocalRedirectPolicy.Normalize(returnUrl);
             var properties = new AuthenticationProperties { RedirectUri = safeReturnUrl };
             await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             await httpContext.SignOutAsync(OpenIdConnectDefaults.AuthenticationScheme, properties);
@@ -225,19 +225,5 @@ public sealed class Program
             .AddAdditionalAssemblies(typeof(HappyGymStats.Blazor.Client._Imports).Assembly);
 
         app.Run();
-    }
-
-    private static string GetSafeLocalReturnUrl(string? returnUrl)
-    {
-        if (string.IsNullOrWhiteSpace(returnUrl))
-            return "/";
-
-        if (Uri.TryCreate(returnUrl, UriKind.Relative, out var relative)
-            && relative.OriginalString.StartsWith('/'))
-        {
-            return relative.OriginalString;
-        }
-
-        return "/";
     }
 }
