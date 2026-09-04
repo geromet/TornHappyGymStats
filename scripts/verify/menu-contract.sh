@@ -6,7 +6,7 @@
 # apart.
 set -euo pipefail
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
 readonly ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 readonly MENU="${ROOT_DIR}/scripts/menu.sh"
 readonly REGISTRY="${ROOT_DIR}/scripts/lib/registry.sh"

@@ -11,7 +11,7 @@
 # make one of those answers a side effect of the other.
 set -euo pipefail
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
 readonly ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 manifest="${HAPPYGYMSTATS_VERIFY_MANIFEST:-${SCRIPT_DIR}/manifest.tsv}"

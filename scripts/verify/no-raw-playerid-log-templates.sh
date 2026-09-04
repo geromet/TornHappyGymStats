@@ -9,7 +9,7 @@ set -euo pipefail
 # story; the short version is that `if rg ...; then FAIL; fi` reads a broken
 # ripgrep as an absence of matches.
 
-readonly ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+readonly ROOT_DIR="$(cd "${BASH_SOURCE[0]%/*}/../.." && pwd)"
 # shellcheck source=scripts/verify/verify-common.sh
 source "${ROOT_DIR}/scripts/verify/verify-common.sh"
 cd "${ROOT_DIR}" || verify_die "cannot cd to ${ROOT_DIR}"

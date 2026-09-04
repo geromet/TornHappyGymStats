@@ -3,15 +3,17 @@ build-entrypoint	scripts/verify/build-and-test.sh	orchestrator	excluded	bash,dot
 verify-common	scripts/verify/verify-common.sh	library	excluded	bash	Sourced helper library; not an executable verification assertion.
 verifier-graph	scripts/verify/verifier-graph.sh	bootstrap	excluded	bash	Bootstraps and validates the manifest before manifest routing begins.
 verifier-graph-regression	scripts/verify/verifier-graph-regression.sh	offline	required	bash	-
-verifier-dependency-regression	scripts/verify/verifier-dependency-regression.sh	offline	required	bash,dirname,env,mktemp,ln,grep,rm	-
-privacy-verifier-regression	scripts/verify/privacy-verifier-regression.sh	offline	required	bash,rg,wc,grep,rm	-
+verifier-dependency-regression	scripts/verify/verifier-dependency-regression.sh	offline	required	bash,env,mktemp,ln,grep,rm	-
+verifier-manifest-union-regression	scripts/verify/verifier-manifest-union-regression.sh	offline	required	bash,sed,mktemp,rm,grep	-
+privacy-verifier-regression	scripts/verify/privacy-verifier-regression.sh	offline	required	bash,rg,wc,grep,rm,cat	-
 privacy-playerid-logs	scripts/verify/no-raw-playerid-log-templates.sh	offline	required	rg,wc	-
 menu-contract	scripts/verify/menu-contract.sh	offline	required	bash,grep,awk,wc	-
 u001-honest-signal	scripts/verify/u001-honest-signal.sh	offline	required	rg	-
 w05-scouting-contract	scripts/verify/w05-scouting-contract.sh	offline	required	grep,dotnet	-
 w06-chain-contract	scripts/verify/w06-chain-contract.sh	offline	required	rg,dotnet	-
 w07-key-vault-contract	scripts/verify/w07-key-vault-contract.sh	offline	required	rg,sed,dotnet	-
-hermetic-test-runner	scripts/verify/hermetic-tests.sh	test-runner	excluded	dotnet,env	Invoked after build as the ordinary test runner; it is not a contract verifier.
+package-version-policy	scripts/verify/package-version-policy.sh	offline	required	rg	-
+hermetic-test-runner	scripts/verify/hermetic-tests.sh	test-runner	excluded	dotnet,env,find,sort,head,cut,sed,mktemp	Invoked after build as the ordinary test runner; it is not a contract verifier.
 devhost-contract	scripts/verify/devhost-contract.sh	operator	excluded	bash	Targets the configured dev-host deployment rather than a clean repository clone.
 devhost-smoke	scripts/verify/devhost-smoke.sh	operator	excluded	bash,curl	Requires a running dev host and network access.
 m004-final-gate	scripts/verify/m004-my-stats-final-gate.sh	operator	excluded	bash	Milestone/operator gate with deployment prerequisites; not a merge-safe offline verifier.

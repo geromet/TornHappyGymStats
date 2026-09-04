@@ -4,12 +4,12 @@ set -euo pipefail
 # Sabotage proof for #57: plant exactly the forbidden structured-log template
 # that the privacy verifier exists to reject, then prove it fails for that
 # reason. The temporary source file is always removed before returning.
-readonly ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+readonly ROOT_DIR="$(cd "${BASH_SOURCE[0]%/*}/../.." && pwd)"
 # shellcheck source=scripts/verify/verify-common.sh
 source "${ROOT_DIR}/scripts/verify/verify-common.sh"
 cd "${ROOT_DIR}" || verify_die "cannot cd to ${ROOT_DIR}"
 
-verify_require_commands bash rg wc grep rm
+verify_require_commands bash rg wc grep rm cat
 
 readonly sabotage_file="src/HappyGymStats.Core/PrivacyVerifierSabotage.cs"
 [[ ! -e "${sabotage_file}" ]] || verify_die "refusing to overwrite existing ${sabotage_file}"

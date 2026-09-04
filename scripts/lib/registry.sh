@@ -253,6 +253,11 @@ reg_add verify-chain "Verify" \
   "verify/w06-chain-contract.sh" "-" "NONE" "" \
   "Pinned chain acceptance tests, board literals, and the Core boundary guardrail."
 
+reg_add verify-package-policy "Verify" \
+  "Package versions are centrally managed (offline)" \
+  "verify/package-version-policy.sh" "-" "NONE" "" \
+  "Fails if a project file pins a package version instead of Directory.Packages.props. VersionOverride is allowed."
+
 reg_add verify-graph "Verify" \
   "Verifier graph (manifest completeness, offline)" \
   "verify/verifier-graph.sh" "-" "NONE" "" \
