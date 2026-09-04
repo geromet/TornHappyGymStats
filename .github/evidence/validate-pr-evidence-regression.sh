@@ -32,7 +32,7 @@ write_body "$body" T1 'T1,T4' none n/a n/a n/a n/a
 expect_fail "extra observed tier rejected" "marked observed but is not required" "$body" src/HappyGymStats.Core/Foo.cs
 write_body "$body" T1 T1 none n/a n/a n/a n/a
 expect_fail "stronger diff cannot claim T1" "required evidence declaration disagrees" "$body" src/HappyGymStats.Data/Queries/PostgresQuery.cs
-write_body "$body" T2 T1 T2 n/a "pending screenshot inspection" n/a n/a
+write_body "$body" T2 none T2 n/a "pending screenshot inspection" n/a n/a
 expect_pass "visual gap explicit" "$body" src/HappyGymStats.Blazor/Pages/War.razor
 write_body "$body" T1 T1 none n/a n/a n/a n/a
 expect_fail "security change needs negative control" "security-negative-control must name" "$body" src/HappyGymStats.Api/Controllers/ImportController.cs
