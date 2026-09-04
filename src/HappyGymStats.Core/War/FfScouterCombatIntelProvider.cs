@@ -102,7 +102,7 @@ public sealed class FfScouterCombatIntelProvider
                     }
                 }
 
-                var response = await FetchBatchAsync(batch, now, cancellationToken).ConfigureAwait(false);
+                var response = await FetchBatchAsync(batch, cancellationToken).ConfigureAwait(false);
                 _lastRequestAtUtc = _timeProvider.GetUtcNow();
                 if (response is null)
                 {
@@ -147,7 +147,6 @@ public sealed class FfScouterCombatIntelProvider
 
     private async Task<FfScouterRow[]?> FetchBatchAsync(
         IReadOnlyCollection<long> playerIds,
-        DateTimeOffset trustedNow,
         CancellationToken cancellationToken)
     {
         var targets = string.Join(',', playerIds);
@@ -200,12 +199,12 @@ public sealed class FfScouterCombatIntelProvider
             return false;
         }
 
-        DateTimeOffset observedAtUtc;
         try
         {
-            observedAtUtc = DateTimeOffset.FromUnixTimeSeconds(row.LastUpdated.Value);
+            var observedAtUtc = DateTimeOffset.FromUnixTimeSeconds(row.LastUpdated.Value);
+            var source = row.Source!.ToLowerInvariant();
             observation = CombatIntelObservation.CreateFromProvider(
-                $"ffscouter:{row.PlayerId}:{row.LastUpdated.Value}:{row.Source!.ToLowerInvariant()}",
+                $"ffscouter:{row.PlayerId}:{row.LastUpdated.Value}:{source}",
                 row.PlayerId,
                 "ffscouter",
                 fetchedAtUtc,
@@ -213,14 +212,10 @@ public sealed class FfScouterCombatIntelProvider
                 fetchedAtUtc,
                 CombatIntelClassification.Exact,
                 value: row.BattleStats.Value,
-                providerMetadata: $"source={row.Source!.ToLowerInvariant()}");
+                providerMetadata: $"source={source}");
             return true;
         }
         catch (ArgumentException)
-        {
-            return false;
-        }
-        catch (ArgumentOutOfRangeException)
         {
             return false;
         }
