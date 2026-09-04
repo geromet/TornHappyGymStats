@@ -2,36 +2,80 @@ name: Task Lease
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened, edited, closed]
+  issues:
+    types: [opened, edited, closed, reopened, labeled, unlabeled]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to revalidate
+        required: true
+        type: string
 
 permissions:
   contents: read
   issues: read
   pull-requests: read
+  actions: write
 
 jobs:
-  lease:
-    name: task lease
+  fanout:
+    if: github.event_name == 'issues' || (github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'reopened' || github.event.action == 'closed'))
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Revalidate every open PR after lease/dependency state changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r pr_number; do
+            [[ -n "${pr_number}" ]] || continue
+            gh workflow run task-lease.yml \
+              --repo "${GITHUB_REPOSITORY}" \
+              --ref "${GITHUB_DEFAULT_BRANCH:-main}" \
+              -f "pr_number=${pr_number}"
+          done < <(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls?state=open&per_page=100" --jq '.[].number')
+
+  lease:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.action != 'closed')
+    name: task lease
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
+      INPUT_PR_NUMBER: ${{ inputs.pr_number }}
+    steps:
+      - name: Resolve live PR state
+        shell: bash
+        run: |
+          set -euo pipefail
+          pr_number="${EVENT_PR_NUMBER:-${INPUT_PR_NUMBER:-}}"
+          [[ "${pr_number}" =~ ^[0-9]+$ ]] || { echo "invalid PR number '${pr_number}'" >&2; exit 2; }
+          pr_json="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}")"
+          {
+            echo "PR_NUMBER=${pr_number}"
+            echo "PR_BRANCH=$(jq -r '.head.ref' <<<"${pr_json}")"
+            echo "PR_HEAD_SHA=$(jq -r '.head.sha' <<<"${pr_json}")"
+            echo "PR_BASE_SHA=$(jq -r '.base.sha' <<<"${pr_json}")"
+          } >> "${GITHUB_ENV}"
+
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ env.PR_HEAD_SHA }}
           fetch-depth: 0
+
+      - name: Fetch current target/base commit
+        run: git fetch --quiet origin "${PR_BASE_SHA}"
 
       - name: Regression-test lease validator
         run: bash .github/agent/task-lease-regression.sh
 
-      - name: Validate declared agent task lease
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-          PR_BRANCH: ${{ github.head_ref }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      - name: Validate declared agent task lease against live GitHub state
+        shell: bash
         run: |
-          printf '%s\n' "${PR_BODY}" > "${RUNNER_TEMP}/pr-body.md"
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.body // ""' > "${RUNNER_TEMP}/pr-body.md"
           bash .github/agent/task-lease.sh \
             --pr-body-file "${RUNNER_TEMP}/pr-body.md" \
             --allow-no-lease \
