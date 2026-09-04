@@ -29,11 +29,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          default_branch="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.default_branch')"
+          default_workflow="$(gh api "repos/${GITHUB_REPOSITORY}/contents/.github/workflows/task-lease.yml?ref=${default_branch}" --jq '.content' 2>/dev/null || true)"
+          if [[ -z "${default_workflow}" ]] || ! printf '%s' "${default_workflow}" | base64 --decode | grep -q '^  workflow_dispatch:'; then
+            echo "TASK_LEASE_FANOUT_SKIP: default branch does not yet expose workflow_dispatch; fanout activates after this workflow lands"
+            exit 0
+          fi
           while IFS= read -r pr_number; do
             [[ -n "${pr_number}" ]] || continue
             gh workflow run task-lease.yml \
               --repo "${GITHUB_REPOSITORY}" \
-              --ref "${GITHUB_DEFAULT_BRANCH:-main}" \
+              --ref "${default_branch}" \
               -f "pr_number=${pr_number}"
           done < <(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls?state=open&per_page=100" --jq '.[].number')
 
