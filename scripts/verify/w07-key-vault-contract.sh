@@ -42,19 +42,13 @@ required_files=(
   "$TOS_VERSION_SOURCE"
 )
 
-# Acceptance criteria from workspace/V2/handoff/07, each pinned to a named test.
 required_tests=(
-  # "never in an exception message"
   "A_failed_open_never_names_the_key_or_the_ciphertext"
-  # "never logged" — captured output of a failing call is grepped
   "A_failing_call_logs_nothing_containing_the_key"
-  # revocation is per member: a blob cannot be replayed into another member's row
   "A_blob_moved_to_another_members_row_fails_to_open"
   "A_blob_reused_for_another_purpose_fails_to_open"
-  # the stored blob must not carry the key in the clear, and must not repeat
   "Ciphertext_never_contains_the_plaintext_key"
   "Two_encryptions_of_the_same_key_differ"
-  # misconfiguration must not echo the master key
   "A_master_key_of_the_wrong_length_is_refused_without_echoing_it"
   "A_non_base64_master_key_is_refused_without_echoing_it"
 )
@@ -64,10 +58,6 @@ required_consent_tests=(
   "Consent_records_keep_distinct_versions_as_auditable_history"
 )
 
-# Structural rules from handoff 07 that no runtime test can prove. A C# test asserting
-# "the key is never held in a field" passes vacuously, so these are source assertions.
-# Greps code only. Several rules below name the very thing they forbid ("never in
-# appsettings", "not the Ecies scheme"), so a raw grep would fail on its own explanation.
 code_grep() {
   local pattern="$1" file="$2"
   rg -n "$pattern" "$file" | rg -v '^[0-9]+:\s*(///|//|\*)' | rg -q .
@@ -103,10 +93,6 @@ for test_name in "${required_consent_tests[@]}"; do
 done
 pass "all ${#required_consent_tests[@]} pinned consent persistence tests present"
 
-# --- S01 consent/version contract ------------------------------------------
-
-# Consent is an audit fact about the HGS anonymous identity. The row is intentionally
-# incapable of becoming a second credential store or a raw Torn identity table.
 if code_grep 'TornPlayerId|ApiKey|StoredApiKey|Ciphertext|Plaintext' "$CONSENT_SOURCE"; then
   fail "ConsentRecordEntity contains a raw Torn identity/key-shaped property — consent must stay separate from credential storage"
 fi
@@ -117,11 +103,9 @@ rg -q 'AcceptedAtUtc' "$CONSENT_SOURCE" || fail "ConsentRecordEntity does not re
 rg -q 'RevokedAtUtc' "$CONSENT_SOURCE" || fail "ConsentRecordEntity does not record revocation state"
 pass "consent row contains audit facts only, with no Torn key/player identity field"
 
-# Persistence has to exist before S03 is allowed to add a stored-key row. Pin all three
-# EF surfaces so an entity-only change cannot masquerade as durable consent.
 rg -q 'DbSet<ConsentRecordEntity> ConsentRecords' "$DB_CONTEXT" \
   || fail "HappyGymStatsDbContext does not expose ConsentRecords"
-rg -q 'CreateTable(' "$CONSENT_MIGRATION" \
+rg -Fq 'CreateTable(' "$CONSENT_MIGRATION" \
   || fail "consent migration does not create a table"
 rg -q 'name: "ConsentRecords"' "$CONSENT_MIGRATION" \
   || fail "consent migration does not create ConsentRecords"
@@ -129,37 +113,26 @@ rg -q 'HappyGymStats.Data.Entities.ConsentRecordEntity' "$MODEL_SNAPSHOT" \
   || fail "EF model snapshot does not contain ConsentRecordEntity"
 pass "consent persistence is represented in DbContext, migration and model snapshot"
 
-# --- Source rules -----------------------------------------------------------
-
-# The vault must not be the Ecies scheme. handoff 07 calls this out by name: Ecies
-# encrypts to a client-held public key so the server CANNOT decrypt, which is exactly
-# wrong for a key the server uses unattended.
 if code_grep 'Ecies' "$VAULT_SOURCE"; then
   fail "vault references Ecies outside a comment — handoff 07 forbids reusing that scheme here"
 fi
 pass "vault does not use the Ecies scheme"
 
-# "Decrypted only inside the call that uses it. Never held in a field, never in a static,
-# never captured in a closure that outlives the call." The enforcing design is that no
-# method hands a decrypted key back to a caller: the only way out is the callback.
 if code_grep 'public\s+(static\s+)?string\s+\w*(Unprotect|Decrypt|GetKey|Reveal)\w*\s*\(' "$VAULT_SOURCE"; then
   fail "vault exposes a method returning a decrypted key as a string — use the UseKey callback shape"
 fi
 pass "vault exposes no method that returns a decrypted key"
 
-# A decrypted key must not be assignable to instance state.
 if code_grep '^\s*private\s+(readonly\s+)?string\s+_(apiKey|key|plaintext)' "$VAULT_SOURCE"; then
   fail "vault holds a key-shaped string field — handoff 07: never held in a field"
 fi
 pass "vault holds no key-shaped field"
 
-# "never accepted as a command-line argument"
 if code_grep 'args\[|GetCommandLineArgs|Environment\.CommandLine' "$VAULT_SOURCE"; then
   fail "vault reads command-line input — handoff 07: a key is never a command-line argument"
 fi
 pass "vault reads no command-line input"
 
-# The master key comes from the environment, never from configuration files or git.
 if code_grep 'appsettings|IConfiguration' "$VAULT_SOURCE"; then
   fail "vault reads configuration — WAR_KEY_MASTER is environment-only, never in appsettings"
 fi
@@ -168,13 +141,11 @@ if ! rg -n --fixed-strings 'WAR_KEY_MASTER' "$VAULT_SOURCE" >/dev/null; then
 fi
 pass "master key is environment-sourced only"
 
-# The master key must never be committed. Catches a base64 32-byte literal in the source.
 if code_grep '"[A-Za-z0-9+/]{43}="' "$VAULT_SOURCE"; then
   fail "a 32-byte base64 literal appears in the vault source — that looks like a committed master key"
 fi
 pass "no master-key-shaped literal in the vault source"
 
-# The vault is Core logic: no transport, no HTTP, no web host.
 forbidden_patterns=(
   'TornApiClient'
   'HttpClient'
@@ -189,15 +160,6 @@ for pattern in "${forbidden_patterns[@]}"; do
 done
 pass "vault stays inside the Core boundary"
 
-# --- The compliance gate ----------------------------------------------------
-#
-# handoff 07 binds the gate to a specific moment: "Before the first key is written to the
-# database." So this is not "does the document mention encryption" — a draft can mention it
-# and still fail the gate. S01 now supplies the durable consent record S03 must transact with.
-#
-# The rule enforced here: if any non-test source both names a stored-key entity AND
-# persists (SaveChanges), the disclosure must be published; the S03 slice must additionally
-# prove consent + key persistence are one transaction before it may claim completion.
 gate_writers="$(rg -l --glob '!**/bin/**' --glob '!**/obj/**' 'StoredApiKey' "${ROOT_DIR}/src" 2>/dev/null || true)"
 persisting_writer=""
 for candidate in $gate_writers; do
@@ -211,9 +173,6 @@ if ! rg -qi 'encrypt' "$TOS_DOC"; then
   fail "terms-of-service.md does not mention encryption — the gate in handoff 07 requires the disclosure to state that war keys are stored encrypted"
 fi
 
-# The disclosure only means anything if the document, the served page and the
-# version stamped on consent records all say the same thing. Consent recorded
-# against a version nobody can produce cannot be honoured.
 doc_version="$(rg -o -m1 'Document version: \S+' "$TOS_DOC" | sed 's/Document version: //')"
 code_version="$(rg -o -m1 'Version = "[^"]+"' "$TOS_VERSION_SOURCE" | sed 's/Version = "//; s/"//')"
 [[ -n "${doc_version}" ]] || fail "could not read the version from terms-of-service.md"
@@ -228,10 +187,8 @@ rg -q 'ConsentPurposes.WarMemberApiKey' "$CONSENT_TESTS" \
   || fail "consent persistence tests do not pin the war-member-key purpose"
 pass "consent persistence is pinned to the published version and explicit purpose"
 
-# The page must render the version, not hardcode a copy of it.
 rg -q 'TermsDocument.Version' "$TOS_PAGE" \
   || fail "Terms.razor does not render TermsDocument.Version — the page could drift from the document silently"
-# and it must actually carry the substance, not the old placeholder
 rg -q 'Stored, encrypted' "$TOS_PAGE" \
   || fail "Terms.razor does not state that keys are stored encrypted"
 rg -qi 'placeholder' "$TOS_PAGE" \
@@ -253,7 +210,6 @@ pass "pinned key-vault tests passed (${TEST_FILTER})"
 dotnet test "$TEST_PROJECT" --filter "$CONSENT_TEST_FILTER" --nologo
 pass "pinned consent persistence tests passed (${CONSENT_TEST_FILTER})"
 
-# --- Not yet in scope -------------------------------------------------------
 note "M009 slices not built, therefore NOT verified here:"
 note "  S03 StoredApiKeyEntity + migration + transactional consent/key write gate"
 note "  S04 linking endpoints/page, incl. ownership verification and refusing a Full-access key"
