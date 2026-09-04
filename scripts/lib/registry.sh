@@ -289,6 +289,5 @@ REG_EXCLUDED=(
   "server-create-containers-user.sh:one-time server bootstrap, run once and done"
   "deploy-containers.sh:container stack deploy, superseded by upgrade-containers.sh for the live stack"
   "github-auth.sh:local developer setup, not a server operation"
-  "patch-gsd-milestone-validator.sh:one-off tooling for an external tool"
   "verify-s01-taxonomy.sh:one-off milestone check, superseded by the wNN contract verifiers"
 )

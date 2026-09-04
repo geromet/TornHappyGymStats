@@ -112,16 +112,9 @@ jobs:
       # remaining eight, four were cross-file false positives, two were a split
       # the author had already documented as deliberate, one was a genuinely
       # missing `cd || exit`, and two were dead assignments now removed.
-      #
-      # patch-gsd-milestone-validator.sh is excluded because it is a Python
-      # script that was given a .sh extension. Worth renaming; not in this PR.
       - name: Run shellcheck
         run: |
           shopt -s globstar nullglob
-          files=()
-          for f in scripts/**/*.sh; do
-            [[ "$(basename "$f")" == "patch-gsd-milestone-validator.sh" ]] && continue
-            files+=("$f")
-          done
+          files=(scripts/**/*.sh)
           printf 'linting %d scripts\n' "${#files[@]}"
           shellcheck --severity=warning "${files[@]}"
