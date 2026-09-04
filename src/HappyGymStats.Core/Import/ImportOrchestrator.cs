@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
 using System.Text;
 using HappyGymStats.Core.Fetch;
 using HappyGymStats.Core.Reconstruction;
@@ -27,8 +28,11 @@ public sealed class ImportOrchestrator : BackgroundService
     private readonly ConcurrentQueue<ImportJobRequest> _queue = new();
     private readonly object _stateGate = new();
     private readonly Dictionary<Guid, ImportJobStatus> _latestByOwner = new();
+    private readonly Dictionary<string, Guid> _statusCapabilities = new(StringComparer.Ordinal);
 
-    private ImportJobStatus? _active;
+    // Kept as the process-local active-job marker. Production callers never expose
+    // this value directly; status reads are owner/capability scoped below.
+    private volatile ImportJobStatus? _latest;
 
     public ImportOrchestrator(IServiceScopeFactory scopeFactory, SurfacesCacheWriter surfacesCacheWriter, ILogger<ImportOrchestrator> logger)
     {
@@ -37,10 +41,9 @@ public sealed class ImportOrchestrator : BackgroundService
         _logger = logger;
     }
 
-    /// <summary>
-    /// Returns only status owned by the supplied caller identity. There is deliberately
-    /// no process-global latest status because import state is private tenant data.
-    /// </summary>
+    [Obsolete("Process-global status is for diagnostics only. Use owner- or capability-scoped status reads in request paths.")]
+    public ImportJobStatus? Latest => _latest;
+
     public ImportJobStatus? GetLatestForAnonymousId(Guid anonymousId)
     {
         if (anonymousId == Guid.Empty)
@@ -48,6 +51,34 @@ public sealed class ImportOrchestrator : BackgroundService
 
         lock (_stateGate)
             return _latestByOwner.GetValueOrDefault(anonymousId);
+    }
+
+    /// <summary>
+    /// Issues an unguessable bearer capability for polling one owner's status.
+    /// The capability contains no identity data and is only stored in memory.
+    /// </summary>
+    public string IssueStatusCapability(Guid anonymousId)
+    {
+        if (anonymousId == Guid.Empty)
+            throw new ArgumentException("AnonymousId must identify the import owner.", nameof(anonymousId));
+
+        var capability = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        lock (_stateGate)
+            _statusCapabilities[capability] = anonymousId;
+        return capability;
+    }
+
+    public ImportJobStatus? GetLatestForCapability(string? capability)
+    {
+        if (string.IsNullOrWhiteSpace(capability))
+            return null;
+
+        lock (_stateGate)
+        {
+            return _statusCapabilities.TryGetValue(capability, out var anonymousId)
+                ? _latestByOwner.GetValueOrDefault(anonymousId)
+                : null;
+        }
     }
 
     /// <summary>
@@ -79,7 +110,7 @@ public sealed class ImportOrchestrator : BackgroundService
 
         lock (_stateGate)
         {
-            if (_active is { IsTerminal: false })
+            if (_latest is { IsTerminal: false })
                 return ImportEnqueueResult.Busy;
 
             var status = new ImportJobStatus(
@@ -93,7 +124,7 @@ public sealed class ImportOrchestrator : BackgroundService
                 LogsAppended: 0,
                 ErrorMessage: null);
 
-            _active = status;
+            _latest = status;
             _latestByOwner[anonymousId] = status;
             _queue.Enqueue(new ImportJobRequest(apiKey, fresh, status.Id, anonymousId, publicKey));
             return ImportEnqueueResult.AcceptedJob(status);
@@ -170,10 +201,7 @@ public sealed class ImportOrchestrator : BackgroundService
                     if (msg.StartsWith("Page "))
                         pagesRunning++;
 
-                    Update(request.JobId, request.AnonymousId, s => s with
-                    {
-                        PagesFetched = pagesRunning,
-                    });
+                    Update(request.JobId, request.AnonymousId, s => s with { PagesFetched = pagesRunning });
                 }).ConfigureAwait(false);
 
             var perkOptions = FetchOptions.Default(
@@ -261,8 +289,8 @@ public sealed class ImportOrchestrator : BackgroundService
             var updated = mutate(current);
             _latestByOwner[anonymousId] = updated;
 
-            if (_active?.Id == jobId)
-                _active = updated.IsTerminal ? null : updated;
+            if (_latest?.Id == jobId)
+                _latest = updated.IsTerminal ? null : updated;
         }
     }
 
