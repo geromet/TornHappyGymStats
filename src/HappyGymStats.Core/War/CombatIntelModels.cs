@@ -20,6 +20,13 @@ public enum CombatIntelVisibilityScope
 /// </summary>
 public sealed record CombatIntelObservation
 {
+    /// <summary>
+    /// Provider clocks may lead the trusted ingestion clock by at most two minutes.
+    /// This small tolerance absorbs ordinary clock drift without allowing a provider
+    /// to manufacture indefinitely fresh observations that dominate resolver ordering.
+    /// </summary>
+    public static readonly TimeSpan MaxProviderFutureSkew = TimeSpan.FromMinutes(2);
+
     private CombatIntelObservation(
         string observationId,
         long playerId,
@@ -63,6 +70,52 @@ public sealed record CombatIntelObservation
     public CombatIntelVisibilityScope VisibilityScope { get; }
     public string? VisibilityOwner { get; }
     public string? SupersedesObservationId { get; }
+
+    /// <summary>
+    /// Creates an observation from provider-controlled timestamps using a trusted
+    /// ingestion/reference clock. Provider timestamps beyond <see cref="MaxProviderFutureSkew"/>
+    /// are rejected before they can enter persistence or resolver ordering.
+    /// </summary>
+    public static CombatIntelObservation CreateFromProvider(
+        string observationId,
+        long playerId,
+        string provider,
+        DateTimeOffset fetchedAtUtc,
+        DateTimeOffset observedAtUtc,
+        DateTimeOffset trustedReferenceTimeUtc,
+        CombatIntelClassification classification,
+        decimal? value = null,
+        decimal? lowerBound = null,
+        decimal? upperBound = null,
+        CombatIntelVisibilityScope visibilityScope = CombatIntelVisibilityScope.Public,
+        string? visibilityOwner = null,
+        string? providerMetadata = null,
+        string? supersedesObservationId = null)
+    {
+        var latestAllowedProviderTime = trustedReferenceTimeUtc.ToUniversalTime() + MaxProviderFutureSkew;
+        if (fetchedAtUtc.ToUniversalTime() > latestAllowedProviderTime ||
+            observedAtUtc.ToUniversalTime() > latestAllowedProviderTime)
+        {
+            throw new ArgumentException(
+                $"Provider timestamps may not be more than {MaxProviderFutureSkew.TotalMinutes:0} minutes ahead of the trusted reference time.",
+                nameof(fetchedAtUtc));
+        }
+
+        return Create(
+            observationId,
+            playerId,
+            provider,
+            fetchedAtUtc,
+            observedAtUtc,
+            classification,
+            value,
+            lowerBound,
+            upperBound,
+            visibilityScope,
+            visibilityOwner,
+            providerMetadata,
+            supersedesObservationId);
+    }
 
     public static CombatIntelObservation Create(
         string observationId,
