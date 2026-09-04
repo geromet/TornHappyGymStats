@@ -18,8 +18,13 @@ RestartSec=5
 #   string would let a dev build mutate the production schema.
 # - ProvisionalToken__SigningKey      MUST differ from production, otherwise
 #   tokens minted here are accepted by the production API.
-# - HAPPYGYMSTATS_SURFACES_CACHE_DIR  should point under /var/www/happygymstats-dev.
 EnvironmentFile=/etc/happygymstats/api-dev.env
+
+# Keep dev reconstruction/surfaces working data outside the web deployment tree
+# and physically separate from production. StateDirectory is created and owned
+# for this service by systemd under /var/lib.
+StateDirectory=happygymstats-dev
+Environment=HAPPYGYMSTATS_SURFACES_CACHE_DIR=/var/lib/happygymstats-dev/surfaces-cache
 
 # Non-secret service defaults. These follow EnvironmentFile= deliberately:
 # systemd applies the directives in order, so a stale value left in the env
