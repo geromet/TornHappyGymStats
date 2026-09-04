@@ -15,7 +15,7 @@ public sealed class ImportAdmissionIsolationTests
             NullLogger<ImportOrchestrator>.Instance);
 
         var ownerAnonymousId = Guid.NewGuid();
-        var active = orchestrator.EnqueueForAnonymousId("owner-key", ownerAnonymousId);
+        var active = orchestrator.EnqueueForAnonymousId("owner-key", ownerAnonymousId, fresh: true);
         var busy = orchestrator.Enqueue("other-key", fresh: true);
 
         Assert.Equal("queued", active.Outcome);
