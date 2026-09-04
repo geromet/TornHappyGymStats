@@ -92,7 +92,7 @@ board_literals=(
   # the label must change with the data source, so an exact countdown is never dressed up as
   # a guess and a guess is never dressed up as a countdown
   'Chain lapses in'
-  'Last hit (inferred)'
+  'Last hit'
 )
 
 pass() { printf 'PASS: %s\n' "$1"; }

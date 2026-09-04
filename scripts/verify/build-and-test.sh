@@ -23,6 +23,9 @@ bash scripts/verify/no-raw-playerid-log-templates.sh
 echo "==> verify: ranked-war scouting contract (w05)"
 bash scripts/verify/w05-scouting-contract.sh
 
+echo "==> verify: honest signal on the war board (U001)"
+bash scripts/verify/u001-honest-signal.sh
+
 echo "==> verify: operator console covers every script"
 bash scripts/verify/menu-contract.sh
 

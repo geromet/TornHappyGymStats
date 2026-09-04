@@ -1,0 +1,60 @@
+@using HappyGymStats.Blazor.Components.Shared
+
+@* One number on the board, with the weight it can bear (UX plan U001).
+
+   Every figure on the war board goes through this, including measured ones. Not
+   because measured values need a marker — they deliberately get none — but
+   because a panel that renders a number directly is a panel where the next
+   person forgets to say it is an estimate. Routing all of them through one
+   component makes the omission impossible rather than merely discouraged. *@
+
+<div class="hgs-figure">
+    <MudText Typo="Typo.overline" Class="hgs-figure-label">
+        @Label
+        @if (FigureKinds.NeedsMarker(Kind))
+        {
+            <MudTooltip Text="@TooltipText" Arrow="true" Placement="Placement.Top">
+                <span class="hgs-figure-marker hgs-figure-marker-@FigureKinds.Label(Kind)"
+                      aria-label="@($"{FigureKinds.Label(Kind)}: {FigureKinds.Explanation(Kind)}")">
+                    @FigureKinds.Label(Kind)
+                </span>
+            </MudTooltip>
+        }
+    </MudText>
+
+    <MudText Typo="@ValueTypo" Class="@ValueClass">@Value</MudText>
+
+    @if (!string.IsNullOrWhiteSpace(Note))
+    {
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="hgs-figure-note">@Note</MudText>
+    }
+</div>
+
+@code {
+    /// <summary>The caption above the number.</summary>
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    /// <summary>The already-formatted value. Formatting stays with the caller.</summary>
+    [Parameter, EditorRequired] public string Value { get; set; } = string.Empty;
+
+    /// <summary>How much weight this number can bear. No default: choosing is the point.</summary>
+    [Parameter, EditorRequired] public FigureKind Kind { get; set; }
+
+    /// <summary>Optional second line — a window, an error bar, a source.</summary>
+    [Parameter] public string? Note { get; set; }
+
+    /// <summary>
+    /// The raw diagnostic behind the figure. Reaches the tooltip, never the
+    /// primary line: these strings were written for operators reading logs.
+    /// </summary>
+    [Parameter] public string? Diagnostic { get; set; }
+
+    [Parameter] public Typo ValueTypo { get; set; } = Typo.body1;
+
+    [Parameter] public string? ValueClass { get; set; }
+
+    private string TooltipText =>
+        string.IsNullOrWhiteSpace(Diagnostic)
+            ? FigureKinds.Explanation(Kind)
+            : $"{FigureKinds.Explanation(Kind)}\n\n{Diagnostic}";
+}

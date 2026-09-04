@@ -220,6 +220,21 @@ reg_add adminpanel-setup "Dev host" \
   "Installs the AdminPanel nginx route. Validates with nginx -t before reloading."
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Look at it
+# ─────────────────────────────────────────────────────────────────────────────
+
+reg_add shots-war "Look at it" \
+  "Screenshot the war board (phone / tablet / desktop)" \
+  "screenshot-board.sh" "-" "NONE" "" \
+  "Boots the app locally with dev auth and the seeded war, shoots every viewport into workspace/tmp/screenshots, then stops both hosts. Nothing touches the server."
+
+reg_add shots-setup "Look at it" \
+  "Install the screenshot tooling (Playwright + its own Chromium)" \
+  "screenshot-board.sh" "--check" "--setup" "" \
+  "Creates .venv and downloads Chromium into ~/.cache/ms-playwright. No sudo; no browser you use yourself is involved." \
+  "Downloads about 115 MB on first run."
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Verify
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -237,6 +252,11 @@ reg_add verify-chain "Verify" \
   "M008 chain-command contract" \
   "verify/w06-chain-contract.sh" "-" "NONE" "" \
   "Pinned chain acceptance tests, board literals, and the Core boundary guardrail."
+
+reg_add verify-honest-signal "Verify" \
+  "U001 honest-signal contract (offline)" \
+  "verify/u001-honest-signal.sh" "-" "NONE" "" \
+  "Checks every war-board figure declares whether it is measured, projected or inferred."
 
 reg_add verify-vault "Verify" \
   "M009 key-vault contract" \
