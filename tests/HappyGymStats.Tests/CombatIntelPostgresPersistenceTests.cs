@@ -65,7 +65,7 @@ public sealed class CombatIntelPostgresPersistenceTests : IAsyncLifetime
         {
             if (IsRequired())
             {
-                Assert.Fail($"{RequireEnvVar} is set, so this tier must run: {_skipReason}");
+                Assert.True(false, $"{RequireEnvVar} is set, so this tier must run: {_skipReason}");
             }
 
             _output.WriteLine(_skipReason);
