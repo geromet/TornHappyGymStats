@@ -14,15 +14,11 @@ public class KeycloakGroupClaimsTransformer : IClaimsTransformation
         // AddClaim below mutates that same list mid-enumeration — which threw
         // "Collection was modified" for every user who was actually in a mapped
         // group, the only users this transformer exists for.
-        foreach (var groupClaim in principal.FindAll("groups").ToList())
+        foreach (var groupClaim in principal.FindAll(KeycloakGroups.ClaimType).ToList())
         {
-            var role = groupClaim.Value switch
-            {
-                "/admins" => Roles.Admin,
-                "/users/faction-owners" => Roles.FactionOwner,
-                "/users" => Roles.User,
-                _ => null
-            };
+            // The mapping itself lives in KeycloakGroups so no host can hold a
+            // divergent copy of it. See that file for what went wrong before.
+            var role = KeycloakGroups.RoleFor(groupClaim.Value);
 
             // Add the claim under THIS identity's role claim type, not a fixed
             // ClaimTypes.Role. The API and AdminPanel leave the JwtBearer
