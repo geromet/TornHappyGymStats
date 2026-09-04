@@ -65,10 +65,12 @@ body:
     id: state
     attributes:
       label: State
+      description: Use reopened only when deliberately continuing a task after its earlier PR was merged/closed.
       options:
         - active
         - blocked
         - handoff
         - complete
+        - reopened
     validations:
       required: true
