@@ -232,8 +232,8 @@ else if (_surfaces != null)
 
     private static string BuildLoadFailureMessage(ApiFailure failure) => failure.Category switch
     {
-        ApiFailureCategory.ApiUnavailable => "Could not load your stats: API is unavailable. Verify the API service is running on the configured boundary.",
-        ApiFailureCategory.BadGateway => "Could not load your stats: reverse proxy returned 502 Bad Gateway. Verify nginx upstream to the API boundary.",
+        ApiFailureCategory.ApiUnavailable => "Could not load your stats. The service is temporarily unavailable — try again shortly.",
+        ApiFailureCategory.BadGateway => "Could not load your stats. The service is temporarily unavailable — try again shortly.",
         ApiFailureCategory.Validation => "Could not load your stats: request was rejected. Sign in again and verify account claims.",
         ApiFailureCategory.NotFound => "No personal gym stats found yet. Import data first.",
         ApiFailureCategory.Deserialization => "Could not load your stats: API response format was invalid.",
@@ -246,8 +246,8 @@ else if (_surfaces != null)
         ApiFailureCategory.Forbidden => "Import rejected: your authenticated account does not match the requested owner.",
         ApiFailureCategory.IdentitySetupRequired => "Import blocked: connect your account identity map before importing personal stats.",
         ApiFailureCategory.Validation => "Import rejected: request validation failed.",
-        ApiFailureCategory.BadGateway => "Import failed: reverse proxy returned 502 Bad Gateway. Check API upstream.",
-        ApiFailureCategory.ApiUnavailable => "Import failed: API service is unavailable.",
+        ApiFailureCategory.BadGateway => "Import failed. The service is temporarily unavailable — try again shortly.",
+        ApiFailureCategory.ApiUnavailable => "Import failed. The service is temporarily unavailable — try again shortly.",
         ApiFailureCategory.Deserialization => "Import failed: API response format was invalid.",
         ApiFailureCategory.ImportFailure => "Import failed: backend rejected or could not process the import.",
         _ => $"Import failed: {failure.SafeMessage}"
