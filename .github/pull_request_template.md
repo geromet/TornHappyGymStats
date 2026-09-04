@@ -5,8 +5,8 @@
 ## Evidence
 
 <!--
-Keep this block machine-readable. #61 computes required tiers from changed paths;
-the PR evidence check verifies this declaration against that result.
+Keep this block machine-readable. #61 computes required tiers plus whether the
+diff crosses a security boundary; the PR evidence check verifies both.
 
 Tier meanings:
 - T1: source/contracts/build/tests
@@ -14,9 +14,9 @@ Tier meanings:
 - T3: deploy/remote/operator-boundary proof
 - T4: real PostgreSQL/relational proof
 
-Use comma-separated tiers in canonical order. If required proof has not run yet,
-put that tier in `unverified` and explain it in the matching tier field. Never
-claim pending work under `observed`.
+If required proof has not run yet, put that tier in `unverified`. If the
+classifier reports a security-boundary change, `security-negative-control`
+must name the forbidden path and the observed rejection/failure.
 -->
 <!-- hgs-evidence
 task: #ISSUE
@@ -25,6 +25,7 @@ required: T1
 observed: T1
 unverified: none
 regression: describe the check/negative control that would fail without this change
+security-negative-control: n/a
 tier2: n/a
 tier3: n/a
 tier4: n/a
