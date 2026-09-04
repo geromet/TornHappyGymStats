@@ -6,8 +6,8 @@ usage() {
 Usage: bash scripts/verify/task-lease.sh ISSUE_NUMBER [--handoff]
 
 Validates the current branch against an open agent-task issue lease. By default it
-checks branch/base/dependency ownership. --handoff additionally rejects work pushed
-after the branch's PR was merged or closed.
+checks branch/base/dependency ownership. --handoff additionally requires the branch
+to contain the current base ref and rejects work pushed after its PR was merged/closed.
 
 Test seams:
   TASK_LEASE_ISSUE_BODY_FILE   read the selected issue body from this file
@@ -65,7 +65,7 @@ lease_state="$(printf '%s\n' "$body" | field 'State')"
 [[ -n "$lease_base" ]] || fail "lease is missing Base SHA"
 [[ -n "$lease_branch" ]] || fail "lease is missing Branch"
 [[ -n "$lease_state" ]] || fail "lease is missing State"
-[[ "$lease_state" =~ ^(active|Active|ACTIVE)$ ]] || fail "lease state is not active: ${lease_state}"
+[[ "$lease_state" =~ ^(active|Active|ACTIVE|reopened|Reopened|REOPENED)$ ]] || fail "lease state is not active/reopened: ${lease_state}"
 [[ "$branch" == "$lease_branch" ]] || fail "current branch '${branch}' does not match lease branch '${lease_branch}'"
 git cat-file -e "${lease_base}^{commit}" 2>/dev/null || fail "lease Base SHA '${lease_base}' is not available locally"
 git merge-base --is-ancestor "$lease_base" HEAD || fail "lease Base SHA ${lease_base} is not an ancestor of HEAD ${head_sha}"
@@ -73,6 +73,9 @@ git merge-base --is-ancestor "$lease_base" HEAD || fail "lease Base SHA ${lease_
 base_ref="${TASK_LEASE_BASE_REF:-origin/main}"
 if git rev-parse --verify --quiet "${base_ref}^{commit}" >/dev/null; then
   git merge-base --is-ancestor "$lease_base" "$base_ref" || fail "lease Base SHA ${lease_base} is not on ${base_ref}; refresh the task base"
+  if $handoff; then
+    git merge-base --is-ancestor "$base_ref" HEAD || fail "branch is stale against ${base_ref}; refresh/rebase before handoff"
+  fi
 fi
 
 read_open_issues_json() {
@@ -133,7 +136,9 @@ for pr in prs:
     if state in {"MERGED","CLOSED"} and pr.get("headRefOid") and pr["headRefOid"] != head:
         print(f"#{pr.get('"'"'number'"'"')} ({state.lower()}) recorded {pr['"'"'headRefOid'"'"']}, current HEAD is {head}")
         break' "$head_sha" <<<"$prs_json")" || die "could not parse branch pull requests"
-  [[ -z "$stale_pr" ]] || fail "commits exist after task PR completion: ${stale_pr}. Open a new task/branch or explicitly reopen the task."
+  if [[ -n "$stale_pr" && ! "$lease_state" =~ ^(reopened|Reopened|REOPENED)$ ]]; then
+    fail "commits exist after task PR completion: ${stale_pr}. Open a new task/branch or set the explicitly reopened task state to reopened."
+  fi
 fi
 
 printf 'PASS: task lease #%s owns %s at %s\n' "$issue_number" "$branch" "$head_sha"
