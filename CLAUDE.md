@@ -55,10 +55,21 @@ Before handing work back, run:
 
 It runs the offline contract checks *and* `dotnet build` + `dotnet test`. Slices
 own a script in `scripts/verify/`; `menu-contract.sh` fails if a script exists
-with no operator-console entry, so a new script means a new registry row in
-`scripts/lib/registry.sh`.
+with no operator-console entry, so a new script means a new registry row or a
+`REG_EXCLUDED` reason in `scripts/lib/registry.sh`.
 
 Never claim a check passed without having run it and read the output.
+
+**A green suite here does not mean the Postgres tier ran.**
+`PostgresApiIntegrationTests` reports *passed* when it skips, and it skips with
+no Docker daemon — this machine has rootless podman only. CI sets
+`HAPPYGYMSTATS_REQUIRE_POSTGRES_INTEGRATION=1`, which turns a skip into a hard
+failure; that is where a Postgres change is actually verified. See the
+`fixing-a-bug` skill for which evidence each kind of bug needs.
+
+Formatting is checked with `dotnet format whitespace`. Never bare `dotnet
+format` — it also applies analyzer code fixes, and once rewrote
+`ExecuteSqlRawAsync` to `ExecuteSqlAsync`, changing the SQL a test generates.
 
 ## Where the plans live, and which copy is real
 
