@@ -4,10 +4,10 @@
 # Numbering follows w06 (see that script's note: every downstream verifier is +1 from the
 # handoff's own numbering).
 #
-# SCOPE. M009 S02 (the vault) is built; S01/S03–S09 are not. This script asserts what
-# exists and PRINTS what it cannot yet check, rather than passing silently over unbuilt
-# acceptance criteria — a verifier that goes green on work nobody has done is worse than
-# no verifier.
+# SCOPE. M009 S01 (versioned consent persistence) and S02 (the vault) are built;
+# S03–S09 are not. This script asserts what exists and PRINTS what it cannot yet check,
+# rather than passing silently over unbuilt acceptance criteria — a verifier that goes green
+# on work nobody has done is worse than no verifier.
 set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,16 +16,27 @@ readonly TEST_PROJECT="${ROOT_DIR}/tests/HappyGymStats.Tests/HappyGymStats.Tests
 
 readonly VAULT_SOURCE="${ROOT_DIR}/src/HappyGymStats.Core/War/WarKeyVault.cs"
 readonly VAULT_TESTS="${ROOT_DIR}/tests/HappyGymStats.Tests/WarKeyVaultTests.cs"
+readonly CONSENT_SOURCE="${ROOT_DIR}/src/HappyGymStats.Contracts/Entities/ConsentRecordEntity.cs"
+readonly CONSENT_TESTS="${ROOT_DIR}/tests/HappyGymStats.Tests/ConsentRecordPersistenceTests.cs"
+readonly CONSENT_MIGRATION="${ROOT_DIR}/src/HappyGymStats.Data/Migrations/20260904170000_AddConsentRecords.cs"
+readonly MODEL_SNAPSHOT="${ROOT_DIR}/src/HappyGymStats.Data/Migrations/HappyGymStatsDbContextModelSnapshot.cs"
+readonly DB_CONTEXT="${ROOT_DIR}/src/HappyGymStats.Data/HappyGymStatsDbContext.cs"
 readonly TOS_DOC="${ROOT_DIR}/docs/torn-api/terms-of-service.md"
 readonly TOS_PAGE="${ROOT_DIR}/src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/Terms.razor"
 readonly TOS_VERSION_SOURCE="${ROOT_DIR}/src/HappyGymStats.Contracts/Compliance/TermsDocument.cs"
 
 readonly TEST_FILTER="WarKeyVaultTests"
+readonly CONSENT_TEST_FILTER="ConsentRecordPersistenceTests"
 
 required_files=(
   "$TEST_PROJECT"
   "$VAULT_SOURCE"
   "$VAULT_TESTS"
+  "$CONSENT_SOURCE"
+  "$CONSENT_TESTS"
+  "$CONSENT_MIGRATION"
+  "$MODEL_SNAPSHOT"
+  "$DB_CONTEXT"
   "$TOS_DOC"
   "$TOS_PAGE"
   "$TOS_VERSION_SOURCE"
@@ -48,6 +59,11 @@ required_tests=(
   "A_non_base64_master_key_is_refused_without_echoing_it"
 )
 
+required_consent_tests=(
+  "Consent_record_persists_published_version_purpose_and_revocation_without_player_identity"
+  "Consent_records_keep_distinct_versions_as_auditable_history"
+)
+
 # Structural rules from handoff 07 that no runtime test can prove. A C# test asserting
 # "the key is never held in a field" passes vacuously, so these are source assertions.
 # Greps code only. Several rules below name the very thing they forbid ("never in
@@ -63,7 +79,7 @@ note() { printf 'NOTE: %s\n' "$1"; }
 
 case "${1:-}" in
   -h|--help)
-    printf 'Usage: bash scripts/verify/w07-key-vault-contract.sh\n\nCanonical M009 key-vault verifier: pinned acceptance tests + source rules that no runtime test can prove.\n'
+    printf 'Usage: bash scripts/verify/w07-key-vault-contract.sh\n\nCanonical M009 key-vault verifier: consent/version contract + pinned vault acceptance tests + source rules that no runtime test can prove.\n'
     exit 0
     ;;
   "") ;;
@@ -73,13 +89,45 @@ esac
 for path in "${required_files[@]}"; do
   [[ -f "$path" ]] || fail "missing required path ${path#"${ROOT_DIR}/"}"
 done
-pass "required key-vault paths present"
+pass "required M009 S01/S02 paths present"
 
 for test_name in "${required_tests[@]}"; do
   rg -n --fixed-strings "$test_name" "$VAULT_TESTS" >/dev/null \
     || fail "pinned acceptance test '$test_name' not found"
 done
-pass "all ${#required_tests[@]} pinned acceptance tests present"
+pass "all ${#required_tests[@]} pinned vault acceptance tests present"
+
+for test_name in "${required_consent_tests[@]}"; do
+  rg -n --fixed-strings "$test_name" "$CONSENT_TESTS" >/dev/null \
+    || fail "pinned consent test '$test_name' not found"
+done
+pass "all ${#required_consent_tests[@]} pinned consent persistence tests present"
+
+# --- S01 consent/version contract ------------------------------------------
+
+# Consent is an audit fact about the HGS anonymous identity. The row is intentionally
+# incapable of becoming a second credential store or a raw Torn identity table.
+if code_grep 'TornPlayerId|ApiKey|StoredApiKey|Ciphertext|Plaintext' "$CONSENT_SOURCE"; then
+  fail "ConsentRecordEntity contains a raw Torn identity/key-shaped property — consent must stay separate from credential storage"
+fi
+rg -q 'AnonymousId' "$CONSENT_SOURCE" || fail "ConsentRecordEntity is not scoped by the HGS anonymous identity"
+rg -q 'DocumentVersion' "$CONSENT_SOURCE" || fail "ConsentRecordEntity does not stamp a disclosure version"
+rg -q 'Purpose' "$CONSENT_SOURCE" || fail "ConsentRecordEntity does not stamp a consent purpose"
+rg -q 'AcceptedAtUtc' "$CONSENT_SOURCE" || fail "ConsentRecordEntity does not record acceptance time"
+rg -q 'RevokedAtUtc' "$CONSENT_SOURCE" || fail "ConsentRecordEntity does not record revocation state"
+pass "consent row contains audit facts only, with no Torn key/player identity field"
+
+# Persistence has to exist before S03 is allowed to add a stored-key row. Pin all three
+# EF surfaces so an entity-only change cannot masquerade as durable consent.
+rg -q 'DbSet<ConsentRecordEntity> ConsentRecords' "$DB_CONTEXT" \
+  || fail "HappyGymStatsDbContext does not expose ConsentRecords"
+rg -q 'CreateTable(' "$CONSENT_MIGRATION" \
+  || fail "consent migration does not create a table"
+rg -q 'name: "ConsentRecords"' "$CONSENT_MIGRATION" \
+  || fail "consent migration does not create ConsentRecords"
+rg -q 'HappyGymStats.Data.Entities.ConsentRecordEntity' "$MODEL_SNAPSHOT" \
+  || fail "EF model snapshot does not contain ConsentRecordEntity"
+pass "consent persistence is represented in DbContext, migration and model snapshot"
 
 # --- Source rules -----------------------------------------------------------
 
@@ -144,12 +192,12 @@ pass "vault stays inside the Core boundary"
 # --- The compliance gate ----------------------------------------------------
 #
 # handoff 07 binds the gate to a specific moment: "Before the first key is written to the
-# database." So this is not "does the document mention encryption" — the draft mentions it
-# and is still unpublished; passing on that would be the exact go-green-on-unbuilt-work
-# failure this script is written to avoid.
+# database." So this is not "does the document mention encryption" — a draft can mention it
+# and still fail the gate. S01 now supplies the durable consent record S03 must transact with.
 #
 # The rule enforced here: if any non-test source both names a stored-key entity AND
-# persists (SaveChanges), the disclosure must no longer be a draft.
+# persists (SaveChanges), the disclosure must be published; the S03 slice must additionally
+# prove consent + key persistence are one transaction before it may claim completion.
 gate_writers="$(rg -l --glob '!**/bin/**' --glob '!**/obj/**' 'StoredApiKey' "${ROOT_DIR}/src" 2>/dev/null || true)"
 persisting_writer=""
 for candidate in $gate_writers; do
@@ -174,6 +222,12 @@ code_version="$(rg -o -m1 'Version = "[^"]+"' "$TOS_VERSION_SOURCE" | sed 's/Ver
   || fail "disclosure version drift: terms-of-service.md says '${doc_version}', TermsDocument.Version says '${code_version}'"
 pass "disclosure version agrees between the document and the code (${code_version})"
 
+rg -q 'TermsDocument.Version' "$CONSENT_TESTS" \
+  || fail "consent persistence tests do not stamp TermsDocument.Version — consent could drift from the published disclosure"
+rg -q 'ConsentPurposes.WarMemberApiKey' "$CONSENT_TESTS" \
+  || fail "consent persistence tests do not pin the war-member-key purpose"
+pass "consent persistence is pinned to the published version and explicit purpose"
+
 # The page must render the version, not hardcode a copy of it.
 rg -q 'TermsDocument.Version' "$TOS_PAGE" \
   || fail "Terms.razor does not render TermsDocument.Version — the page could drift from the document silently"
@@ -196,13 +250,15 @@ fi
 dotnet test "$TEST_PROJECT" --filter "$TEST_FILTER" --nologo
 pass "pinned key-vault tests passed (${TEST_FILTER})"
 
+dotnet test "$TEST_PROJECT" --filter "$CONSENT_TEST_FILTER" --nologo
+pass "pinned consent persistence tests passed (${CONSENT_TEST_FILTER})"
+
 # --- Not yet in scope -------------------------------------------------------
 note "M009 slices not built, therefore NOT verified here:"
-note "  S01 consent record (ConsentRecordEntity + migration; document live on the site)"
-note "  S03 StoredApiKeyEntity + migration"
-note "  S04 linking endpoints/page, incl. refusing a Full-access key"
+note "  S03 StoredApiKeyEntity + migration + transactional consent/key write gate"
+note "  S04 linking endpoints/page, incl. ownership verification and refusing a Full-access key"
 note "  S05 client methods, S06 poller extension, S07 scoped bearer token, S08 data tiers"
 note "  revocation deleting identifiable readings — needs S03's rows to delete"
-note "Extend required_tests above as each lands; do not let this script go green on unbuilt criteria."
+note "Extend required tests/source assertions as each slice lands; do not let this script go green on unbuilt criteria."
 
-printf 'PASS: canonical M009 key-vault verifier succeeded (S02 scope)\n'
+printf 'PASS: canonical M009 verifier succeeded (S01 consent + S02 vault scope)\n'
