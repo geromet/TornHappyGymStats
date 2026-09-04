@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Classify a diff into the repository evidence tiers from checked-in path rules.
+# Classify a diff into repository evidence tiers plus an orthogonal security-boundary signal.
 set -euo pipefail
 
 readonly ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -10,15 +10,19 @@ usage() {
 Usage:
   bash .github/evidence/required-evidence.sh [--base REF] [--format tsv|json]
   bash .github/evidence/required-evidence.sh [--format tsv|json] --files PATH [PATH ...]
+  bash .github/evidence/required-evidence.sh --security-boundary [--base REF | --files PATH ...]
 
 Without --files, changed paths come from `git diff --name-only <base>...HEAD`.
 The default base is `main`; CI callers should pass the exact pull-request base SHA.
+Default TSV output remains one required T1-T4 tier per line. `--security-boundary`
+prints only `security_boundary=changed|unchanged`. JSON includes both fields.
 EOF
 }
 
 base="main"
 format="tsv"
 rules_file="${EVIDENCE_RULES_FILE:-${DEFAULT_RULES}}"
+security_only=0
 declare -a files=()
 
 while (($#)); do
@@ -37,6 +41,10 @@ while (($#)); do
       (($# >= 2)) || { echo "ERROR: --rules requires a path" >&2; exit 2; }
       rules_file="$2"
       shift 2
+      ;;
+    --security-boundary)
+      security_only=1
+      shift
       ;;
     --files)
       shift
@@ -62,22 +70,22 @@ esac
 
 [[ -f "${rules_file}" ]] || { echo "ERROR: evidence rules not found: ${rules_file}" >&2; exit 2; }
 
-# Validate the policy before classifying anything. An exception/rule with no
-# checked-in reason is rejected rather than silently becoming folklore.
 rule_line=0
-while IFS=$'\t' read -r pattern tier reason extra; do
+while IFS=$'\t' read -r pattern tier security reason extra; do
   ((rule_line += 1))
   (( rule_line == 1 )) && {
-    [[ "${pattern}" == "pattern" && "${tier}" == "tier" && "${reason}" == "reason" ]] || {
+    [[ "${pattern}" == "pattern" && "${tier}" == "tier" && "${security}" == "security" && "${reason}" == "reason" ]] || {
       echo "ERROR: malformed evidence-rules header" >&2
       exit 2
     }
     continue
   }
-  [[ -z "${pattern}${tier}${reason}${extra}" ]] && continue
+  [[ -z "${pattern}${tier}${security}${reason}${extra}" ]] && continue
   [[ -z "${extra:-}" ]] || { echo "ERROR: extra TSV field on rule line ${rule_line}" >&2; exit 2; }
   [[ -n "${pattern}" ]] || { echo "ERROR: empty pattern on rule line ${rule_line}" >&2; exit 2; }
   [[ "${tier}" =~ ^T[1-4]$ ]] || { echo "ERROR: invalid tier '${tier}' on rule line ${rule_line}" >&2; exit 2; }
+  [[ "${security}" == "changed" || "${security}" == "unchanged" ]] \
+    || { echo "ERROR: invalid security flag '${security}' on rule line ${rule_line}" >&2; exit 2; }
   [[ -n "${reason}" ]] || { echo "ERROR: missing checked-in reason on rule line ${rule_line}" >&2; exit 2; }
 done < "${rules_file}"
 
@@ -91,26 +99,23 @@ if ((${#files[@]} == 0)); then
 fi
 
 declare -A required=()
+security_boundary="unchanged"
 for file in "${files[@]}"; do
   [[ -n "${file}" ]] || continue
   matched=0
   rule_line=0
-  while IFS=$'\t' read -r pattern tier reason extra; do
+  while IFS=$'\t' read -r pattern tier security reason extra; do
     ((rule_line += 1))
     (( rule_line == 1 )) && continue
-    [[ -n "${pattern}${tier}${reason}${extra}" ]] || continue
+    [[ -n "${pattern}${tier}${security}${reason}${extra}" ]] || continue
 
-    # Deliberately use Bash pattern matching, not pathname expansion. The rule
-    # table therefore stays small and deterministic and does not depend on which
-    # files happen to exist in the current checkout.
     if [[ "${file}" == ${pattern} ]]; then
       required["${tier}"]=1
+      [[ "${security}" == "changed" ]] && security_boundary="changed"
       matched=1
     fi
   done < "${rules_file}"
 
-  # Unmatched source/docs/config still require ordinary T1 proof. This is the
-  # fail-safe default: adding a new path can never result in "no evidence".
   if (( matched == 0 )); then
     required[T1]=1
   fi
@@ -120,6 +125,11 @@ declare -a ordered=()
 for tier in T1 T2 T3 T4; do
   [[ -n "${required[${tier}]:-}" ]] && ordered+=("${tier}")
 done
+
+if (( security_only )); then
+  printf 'security_boundary=%s\n' "${security_boundary}"
+  exit 0
+fi
 
 if [[ "${format}" == "tsv" ]]; then
   printf '%s\n' "${ordered[@]}"
@@ -133,4 +143,4 @@ for tier in "${ordered[@]}"; do
   printf '"%s"' "${tier}"
   first=0
 done
-printf ']}\n'
+printf '],"security_boundary":"%s"}\n' "${security_boundary}"
