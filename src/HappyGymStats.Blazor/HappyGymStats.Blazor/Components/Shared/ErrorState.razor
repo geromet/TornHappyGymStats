@@ -1,0 +1,15 @@
+@* Callers must pass pre-filtered member-safe text — never raw exception messages or API error strings. *@
+<MudAlert Severity="Severity.Warning" Dense="@Dense" Class="@Class">
+    @Message
+    @if (OnRetry.HasDelegate)
+    {
+        <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="OnRetry" Class="ml-2">Retry</MudButton>
+    }
+</MudAlert>
+
+@code {
+    [Parameter, EditorRequired] public string Message { get; set; } = string.Empty;
+    [Parameter] public EventCallback OnRetry { get; set; }
+    [Parameter] public bool Dense { get; set; } = false;
+    [Parameter] public string Class { get; set; } = "mb-4";
+}
