@@ -94,6 +94,12 @@ git -C "$repo" add dependency.txt
 git -C "$repo" commit -qm dependency
 dep_sha="$(git -C "$repo" rev-parse HEAD)"
 git -C "$repo" switch -q feat/task-62
+write_body "$base_sha" feat/task-62 none active
+if run_lease --handoff >"$tmp/out" 2>&1; then
+  echo 'FAIL: stale base was accepted at handoff' >&2
+  exit 1
+fi
+grep -q "branch is stale against" "$tmp/out"
 printf '{"state":"MERGED","mergedAt":"2026-09-04T00:00:00Z","mergeCommit":{"oid":"%s"}}\n' "$dep_sha" > "$tmp/deps/123.json"
 write_body "$base_sha" feat/task-62 '#123' active
 if run_lease >"$tmp/out" 2>&1; then
@@ -116,5 +122,7 @@ if run_lease --handoff >"$tmp/out" 2>&1; then
   exit 1
 fi
 grep -q "commits exist after task PR completion" "$tmp/out"
+write_body "$base_sha" feat/task-62 '#123' reopened
+run_lease --handoff | grep -q '^PASS:'
 
-printf 'PASS: task-lease regression covers ownership, duplicate leases, dependency refresh, and post-PR commits\n'
+printf 'PASS: task-lease regression covers ownership, stale base, duplicate leases, dependency refresh, post-PR commits, and explicit reopening\n'
