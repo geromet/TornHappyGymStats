@@ -1,0 +1,35 @@
+name: PR Evidence
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  evidence:
+    name: PR evidence
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Regression-test evidence classifier
+        run: bash .github/evidence/required-evidence-regression.sh
+
+      - name: Regression-test PR evidence parser
+        run: bash .github/evidence/validate-pr-evidence-regression.sh
+
+      - name: Validate this pull request's evidence declaration
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          printf '%s\n' "${PR_BODY}" > "${RUNNER_TEMP}/pr-body.md"
+          bash .github/evidence/validate-pr-evidence.sh \
+            --body-file "${RUNNER_TEMP}/pr-body.md" \
+            --base "${PR_BASE_SHA}"
