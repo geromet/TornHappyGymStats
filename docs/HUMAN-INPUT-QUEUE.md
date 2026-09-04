@@ -20,8 +20,7 @@ bash scripts/human-blockers/00-run-all.sh
 Each step is read-only or explicitly asks before doing anything that mutates
 shared state, and stops with a `gh issue comment` command ready to paste so the
 result reaches the fleet on its next hourly pass. Nothing here runs a
-`scripts/deploy*.sh`, `scripts/menu.sh`, or other T3 script on your behalf —
-see item 3.
+`scripts/deploy*.sh`, `scripts/menu.sh`, or other T3 script on your behalf.
 
 Re-run `00-run-all.sh` whenever this file gains a new item; it walks the
 numbered scripts in this directory in order, so a new `0N-*.sh` is picked up
@@ -42,10 +41,11 @@ reports the key's access level without printing the key itself. If it's
 missing, expired, or the wrong access level, the script tells you what to
 paste into `.env`.
 
-Already run once (2026-09-04): the key currently in `.env` comes back
-`{"error":{"code":2,"error":"Incorrect key"}}` — it's stale/wrong, not just
-unverified. Get a fresh Limited-access key and update `.env` before this item
-is actually done.
+**Done (2026-09-04):** the first key in `.env` was stale
+(`{"error":{"code":2,"error":"Incorrect key"}}`) — the script's own bug also
+masked that result with a silent exit instead of printing it, fixed same day
+(a `pipefail`-triggered abort on a wrong field-name guess in the response
+parse). A replacement key is now confirmed live (`player id=4215828`).
 
 **Not yet actionable beyond this:** the M010/M012/M013 comparison harnesses
 don't exist as code yet — that's fleet work, tracked in #104 itself. This step
@@ -71,27 +71,17 @@ specifies, and stops before sending it. Review the printed diff, then re-run
 with `--apply` to send it. It refuses to run at all until #125 is merged
 (checks live PR state each time).
 
-### 3. Optional: deploy merged runtime changes to production
-
-**Not fleet-blocking** — nothing in the queue is waiting on this; it's here
-only because you said "do it all in a row." #122 (removing the placeholder
-Faction page) is a rendered Blazor change and won't be visible to real users
-until deployed.
-
-**Script:** `scripts/human-blockers/03-deploy-checklist.sh` — prints the
-commands, does not run them. Per `docs/WORKING-AGREEMENT.md` §5, run them
-yourself:
-
-```bash
-! bash scripts/menu.sh
-```
-
-and pick the frontend deploy task (dry run first — it's dry-run by default).
-
 ## Reporting back to the fleet
 
 Each script above ends by printing a ready-to-run `gh issue comment ...`
 command with the result already filled in (key access level, ruleset diff
-applied, deploy SHA). Run the ones you're satisfied with; that's the signal
-the next hourly review pass reads. Nothing posts itself — you decide what's
-worth telling the fleet.
+applied). Run the ones you're satisfied with; that's the signal the next
+hourly review pass reads. Nothing posts itself — you decide what's worth
+telling the fleet.
+
+## Scrapped
+
+**Production deploy checklist** — removed 2026-09-04 (confirmed: nothing
+currently merged is waiting on a deploy). If a future PR needs one, add a new
+`0N-*.sh` here rather than reviving this from git history verbatim; check
+what's actually merged-but-undeployed at that point.
