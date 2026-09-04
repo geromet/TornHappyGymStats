@@ -24,6 +24,7 @@ public sealed class ImportOrchestrator : BackgroundService
 
     private readonly SemaphoreSlim _slot = new(1, 1);
     private readonly ConcurrentQueue<ImportJobRequest> _queue = new();
+    private readonly object _admissionLock = new();
 
     private volatile ImportJobStatus? _latest;
 
@@ -39,29 +40,47 @@ public sealed class ImportOrchestrator : BackgroundService
     public ImportJobStatus? Latest => _latest;
 
     /// <summary>
-    /// Enqueue an import if none is already running.
-    /// Returns the status of the enqueued (or already-running) job.
+    /// Enqueue an import if none is already running. A busy result is deliberately
+    /// tenant-neutral and never returns the active job's identity, status, or error.
     /// </summary>
     public ImportJobStatus Enqueue(string apiKey, bool fresh, byte[]? publicKey = null)
     {
-        if (_latest is { IsTerminal: false })
-            return _latest;
+        lock (_admissionLock)
+        {
+            if (_latest is { IsTerminal: false })
+                return BusyStatus();
 
-        // Generate AnonymousId here for fresh imports so callers can use it immediately
-        // (e.g. to create an IdentityMap entry before the background job runs).
-        // Resume imports resolve the existing AnonymousId from the DB in RunImportAsync.
-        var anonymousId = fresh ? Guid.NewGuid() : Guid.Empty;
+            // Generate AnonymousId here for fresh imports so callers can use it immediately
+            // (e.g. to create an IdentityMap entry before the background job runs).
+            // Resume imports resolve the existing AnonymousId from the DB in RunImportAsync.
+            var anonymousId = fresh ? Guid.NewGuid() : Guid.Empty;
 
-        return EnqueueInternal(apiKey, fresh, anonymousId, publicKey);
+            return EnqueueInternal(apiKey, fresh, anonymousId, publicKey);
+        }
     }
 
     public ImportJobStatus EnqueueForAnonymousId(string apiKey, Guid anonymousId, byte[]? publicKey = null)
     {
-        if (_latest is { IsTerminal: false })
-            return _latest;
+        lock (_admissionLock)
+        {
+            if (_latest is { IsTerminal: false })
+                return BusyStatus();
 
-        return EnqueueInternal(apiKey, fresh: true, anonymousId, publicKey);
+            return EnqueueInternal(apiKey, fresh: true, anonymousId, publicKey);
+        }
     }
+
+    private static ImportJobStatus BusyStatus()
+        => new(
+            Id: string.Empty,
+            AnonymousId: Guid.Empty,
+            Outcome: "busy",
+            StartedAtUtc: DateTimeOffset.UnixEpoch,
+            CompletedAtUtc: null,
+            PagesFetched: 0,
+            LogsFetched: 0,
+            LogsAppended: 0,
+            ErrorMessage: null);
 
     private ImportJobStatus EnqueueInternal(string apiKey, bool fresh, Guid anonymousId, byte[]? publicKey)
     {

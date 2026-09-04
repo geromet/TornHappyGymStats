@@ -42,8 +42,10 @@ public sealed class ImportController : ApiControllerBase
             return ValidationError("apiKey is required.", new { field = "apiKey" });
 
         var status = _importService.Enqueue(apiKey, request?.Fresh ?? false);
-        var statusCode = status.IsTerminal ? StatusCodes.Status200OK : StatusCodes.Status202Accepted;
+        if (IsBusy(status))
+            return BusyImportResponse();
 
+        var statusCode = status.IsTerminal ? StatusCodes.Status200OK : StatusCodes.Status202Accepted;
         return StatusCode(statusCode, ToDto(status));
     }
 
@@ -85,6 +87,9 @@ public sealed class ImportController : ApiControllerBase
         }
 
         var status = _importService.EnqueueForAnonymousId(apiKey, callerAnonymousId, map.PublicKey);
+        if (IsBusy(status))
+            return BusyImportResponse();
+
         var statusCode = status.IsTerminal ? StatusCodes.Status200OK : StatusCodes.Status202Accepted;
 
         _logger.LogInformation(
@@ -128,6 +133,8 @@ public sealed class ImportController : ApiControllerBase
         }
 
         var status = _importService.Enqueue(apiKey, fresh: true, publicKey);
+        if (IsBusy(status))
+            return BusyImportResponse();
 
         await _identityMapRepo.CreateAsync(new IdentityMapEntity
         {
@@ -148,6 +155,12 @@ public sealed class ImportController : ApiControllerBase
             job = ToDto(status),
         });
     }
+
+    private IActionResult BusyImportResponse()
+        => ApiError(StatusCodes.Status409Conflict, "import_busy", "Another import is already in progress.");
+
+    private static bool IsBusy(ImportJobStatus status)
+        => string.Equals(status.Outcome, "busy", StringComparison.Ordinal);
 
     private static ImportStatusDto ToDto(ImportJobStatus s)
         => new(s.Id, s.Outcome, s.StartedAtUtc, s.CompletedAtUtc,
