@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build*)",
+      "Bash(dotnet test*)",
+      "Bash(dotnet restore*)",
+      "Bash(dotnet format whitespace*)",
+      "Bash(dotnet format --verify-no-changes*)",
+      "Bash(dotnet tool restore*)",
+      "Bash(bash scripts/verify/*)",
+      "Bash(shellcheck *)",
+      "Bash(bash scripts/screenshot-board.sh*)",
+      "Bash(bash scripts/menu.sh --list*)",
+      "Bash(bash scripts/menu.sh --audit*)",
+      "Bash(bash scripts/menu.sh --pitfalls*)"
+    ],
+    "deny": [
+      "Bash(dotnet format)",
+      "Bash(bash scripts/deploy*)",
+      "Bash(scripts/deploy*)",
+      "Bash(bash scripts/recon-*)",
+      "Bash(scripts/recon-*)",
+      "Bash(bash scripts/setup-*)",
+      "Bash(scripts/setup-*)",
+      "Bash(bash scripts/publish.sh*)",
+      "Bash(bash scripts/upgrade-containers.sh*)",
+      "Bash(bash scripts/install-docker.sh*)",
+      "Bash(bash scripts/post-reboot-maintenance.sh*)",
+      "Bash(bash scripts/server-create-containers-user.sh*)",
+      "Bash(bash scripts/remove-teamspeak.sh*)",
+      "Bash(bash scripts/audit-server-security.sh*)",
+      "Bash(bash scripts/menu.sh --run*)"
+    ]
+  }
+}
