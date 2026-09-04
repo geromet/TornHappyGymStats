@@ -15,8 +15,12 @@ RestartSec=5
 # /etc/happygymstats/api.env must define:
 # - ConnectionStrings__HappyGymStats (preferred) or HAPPYGYMSTATS_CONNECTION_STRING
 # - ProvisionalToken__SigningKey
-# - HAPPYGYMSTATS_SURFACES_CACHE_DIR
 EnvironmentFile=/etc/happygymstats/api.env
+
+# Keep reconstruction/surfaces working data outside the web deployment tree.
+# StateDirectory is created and owned for this service by systemd under /var/lib.
+StateDirectory=happygymstats
+Environment=HAPPYGYMSTATS_SURFACES_CACHE_DIR=/var/lib/happygymstats/surfaces-cache
 
 # Non-secret service defaults.
 Environment=ASPNETCORE_ENVIRONMENT=Production
