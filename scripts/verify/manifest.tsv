@@ -3,6 +3,8 @@ build-entrypoint	scripts/verify/build-and-test.sh	orchestrator	excluded	bash,dot
 verify-common	scripts/verify/verify-common.sh	library	excluded	bash	Sourced helper library; not an executable verification assertion.
 verifier-graph	scripts/verify/verifier-graph.sh	bootstrap	excluded	bash	Bootstraps and validates the manifest before manifest routing begins.
 verifier-graph-regression	scripts/verify/verifier-graph-regression.sh	offline	required	bash	-
+verifier-dependency-regression	scripts/verify/verifier-dependency-regression.sh	offline	required	bash,dirname,env,mktemp,ln,grep,rm	-
+privacy-verifier-regression	scripts/verify/privacy-verifier-regression.sh	offline	required	bash,rg,wc,grep,rm	-
 privacy-playerid-logs	scripts/verify/no-raw-playerid-log-templates.sh	offline	required	rg,wc	-
 menu-contract	scripts/verify/menu-contract.sh	offline	required	bash,grep,awk,wc	-
 u001-honest-signal	scripts/verify/u001-honest-signal.sh	offline	required	rg	-
