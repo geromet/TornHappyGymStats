@@ -3,6 +3,7 @@
 set -euo pipefail
 readonly ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 readonly VALIDATOR="${ROOT_DIR}/.github/agent/task-lease.sh"
+readonly WORKFLOW="${ROOT_DIR}/.github/workflows/task-lease.yml"
 for command_name in git jq mktemp base64 tr; do command -v "$command_name" >/dev/null || exit 2; done
 readonly TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -72,6 +73,10 @@ cat > "$BIN/gh" <<'EOF'
 #!/bin/sh
 set -eu
 : "${TASK_LEASE_FAKE_DIR:?}"
+if [ "${TASK_LEASE_FORCE_API_FAIL:-0}" = 1 ]; then
+  echo "synthetic API outage" >&2
+  exit 70
+fi
 args="$*"
 case "$args" in
   *"issues?state=open"*) cat "$TASK_LEASE_FAKE_DIR/open-issues.b64" ;;
@@ -101,11 +106,15 @@ run_case fail "branch mismatch" "branch mismatch" --issue 1 --branch other --hea
 run_case fail "stale target base" "refresh/rebase before handoff" --issue 1 --branch feat/lease --head "$HEAD_SHA" --target-base "$PARENT_SHA"
 
 write_issue 1 main feat/lease none Active "$FIX/issue-1.json"; rebuild_open_issues "$FIX/issue-1.json"
-run_case fail "short/ref base is rejected" "full 40-hex" --issue 1 --branch feat/lease --head "$HEAD_SHA" --target-base "$BASE"
+run_case fail "non-40-hex Base SHA is rejected" "full 40-hex" --issue 1 --branch feat/lease --head "$HEAD_SHA" --target-base "$BASE"
 write_issue 1 "$BASE" feat/lease none Active "$FIX/issue-1.json"; rebuild_open_issues "$FIX/issue-1.json"
 
 jq '.body += "\n### Branch\n\nfeat/lease\n"' "$FIX/issue-1.json" > "$FIX/tmp"; mv "$FIX/tmp" "$FIX/issue-1.json"; rebuild_open_issues "$FIX/issue-1.json"
 run_case fail "duplicate generated heading rejected" "exactly once" --issue 1 --branch feat/lease --head "$HEAD_SHA" --target-base "$BASE"
+write_issue 1 "$BASE" feat/lease none Active "$FIX/issue-1.json"; rebuild_open_issues "$FIX/issue-1.json"
+
+jq '.title="ordinary issue"' "$FIX/issue-1.json" > "$FIX/tmp"; mv "$FIX/tmp" "$FIX/issue-1.json"; rebuild_open_issues "$FIX/issue-1.json"
+run_case fail "non-agent issue rejected" "not an [agent-task] issue" --issue 1 --branch feat/lease --head "$HEAD_SHA" --target-base "$BASE"
 write_issue 1 "$BASE" feat/lease none Active "$FIX/issue-1.json"; rebuild_open_issues "$FIX/issue-1.json"
 
 cat > "$FIX/pr-body.md" <<'EOF'
@@ -120,6 +129,18 @@ write_issue 2 "$BASE" feat/lease none Active "$FIX/issue-2.json"; rebuild_open_i
 run_case fail "duplicate active branch lease" "duplicate active lease" --issue 1 --branch feat/lease --head "$HEAD_SHA" --target-base "$BASE"
 write_issue 2 "$BASE" other/branch none Active "$FIX/issue-2.json"; rebuild_open_issues "$FIX/issue-1.json"
 
+jq -n --arg sha "$HEAD_SHA" '[{number:9,state:"closed",closed_at:"2026-09-04T00:00:00Z",merged_at:null,head:{sha:$sha}}]' > "$FIX/closed-prs.json"
+run_case fail "closed PR branch reuse rejected" "already belongs to closed PR #9" --issue 1 --branch feat/lease --head "$HEAD_SHA" --target-base "$BASE"
+write_issue 1 "$BASE" feat/lease none Reopened "$FIX/issue-1.json"; rebuild_open_issues "$FIX/issue-1.json"
+run_case pass "explicitly reopened task may reuse branch" "" --issue 1 --branch feat/lease --head "$HEAD_SHA" --target-base "$BASE"
+printf '[]\n' > "$FIX/closed-prs.json"; write_issue 1 "$BASE" feat/lease none Active "$FIX/issue-1.json"; rebuild_open_issues "$FIX/issue-1.json"
+
+set +e
+api_output="$(cd "$REPO" && PATH="$BIN:$PATH" TASK_LEASE_FAKE_DIR="$FIX" TASK_LEASE_FORCE_API_FAIL=1 bash "$VALIDATOR" --repo test/repo --issue 1 --branch feat/lease --head "$HEAD_SHA" --target-base "$BASE" 2>&1)"
+api_status=$?
+set -e
+if ((api_status==2)) && [[ "$api_output" == *"GitHub API unavailable"* ]]; then echo "PASS: API outage is infrastructure failure"; else echo "FAIL: API outage did not fail closed\n$api_output" >&2; ((failures+=1)); fi
+
 write_issue 1 "$BASE" feat/lease "PR #10" Active "$FIX/issue-1.json"; rebuild_open_issues "$FIX/issue-1.json"
 jq -n --arg sha "$PARENT_SHA" '{number:10,state:"open",merged_at:null,merge_commit_sha:null,head:{sha:$sha}}' > "$FIX/pr-10.json"
 run_case fail "open parent must be contained" "is open at" --issue 1 --branch feat/lease --head "$HEAD_SHA" --target-base "$BASE"
@@ -127,6 +148,13 @@ jq -n --arg sha "$PARENT_SHA" '{number:10,state:"closed",merged_at:null,merge_co
 run_case fail "closed-unmerged parent fails" "closed without merge" --issue 1 --branch feat/lease --head "$HEAD_SHA" --target-base "$BASE"
 jq -n --arg sha "$PARENT_SHA" '{number:10,state:"closed",merged_at:"2026-09-04T00:00:00Z",merge_commit_sha:$sha,head:{sha:$sha}}' > "$FIX/pr-10.json"
 run_case fail "merged parent not refreshed into child" "merged at" --issue 1 --branch feat/lease --head "$HEAD_SHA" --target-base "$BASE"
+
+if grep -q '^  issues:' "$WORKFLOW" && grep -q '^  workflow_dispatch:' "$WORKFLOW" && grep -q 'Revalidate every open PR' "$WORKFLOW"; then
+  echo "PASS: workflow declares live-state revalidation triggers"
+else
+  echo "FAIL: workflow is missing live-state revalidation triggers" >&2
+  ((failures+=1))
+fi
 
 if ((failures>0)); then echo "TASK_LEASE_REGRESSION_FAIL failures=$failures" >&2; exit 1; fi
 echo TASK_LEASE_REGRESSION_PASS
