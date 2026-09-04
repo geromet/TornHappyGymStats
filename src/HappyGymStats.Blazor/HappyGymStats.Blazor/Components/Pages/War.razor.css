@@ -15,12 +15,12 @@
 }
 
 .war-hole-critical {
-    border-left-color: #ef5350;
+    border-left-color: var(--mud-palette-error);
     background: rgba(239, 83, 80, 0.12);
 }
 
 .war-hole-high {
-    border-left-color: #ff9800;
+    border-left-color: var(--mud-palette-warning);
     background: rgba(255, 152, 0, 0.12);
 }
 
@@ -30,6 +30,6 @@
 }
 
 .war-hole-low {
-    border-left-color: #66bb6a;
+    border-left-color: var(--mud-palette-success);
     background: rgba(102, 187, 106, 0.12);
 }
