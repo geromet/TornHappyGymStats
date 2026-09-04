@@ -20,11 +20,20 @@ applied panel by panel, so most of the board still renders extrapolations in the
 same typeface as measurements. That is the subject of U001, and it is first
 because it changes what people *believe*, not how the site looks.
 
-## The constraint I am working under
+## Looking at it
 
-I cannot see the rendered site. Everything below is inferred from markup, so any
-slice touching layout or spacing needs a screenshot from the operator before it
-is called done. Slices are sized to be reviewable in one screenshot each.
+`bash scripts/screenshot-board.sh` (menu: **Look at it → Screenshot the war
+board**) boots the app locally with development auth and the seeded war, shoots
+phone / tablet / desktop, and stops both hosts. Output lands in
+`workspace/tmp/screenshots/` and is gitignored — regenerate, never commit.
+
+Playwright lives in `.venv/` with its own Chromium under `~/.cache/ms-playwright`.
+No sudo, and no browser anyone uses personally is involved.
+
+This exists because U001 shipped a caption reading "Last hit (inferred) inferred"
+and an operator diagnostic inside an error banner — both invisible in the source,
+both obvious in the first rendered frame. **A UX slice is not done until someone
+has looked at it**, and that someone should not have to be the operator.
 
 ---
 
@@ -168,8 +177,18 @@ a route a signed-in user can reach.
 
 ## U003 — Mobile and the war-night layout
 
-**The problem.** War nights happen on phones. The board is MudBlazor grids with
-`xs="6"` cells written on a desktop, and the point cloud is a desktop-sized plot.
+**The problem, now measured rather than assumed.** At 390px the board is
+**8322px tall** — roughly twenty screens. Nothing overflows horizontally (the
+MudTable breakpoint does stack), so this is not a broken layout; it is a
+priority problem. The chain command panel, the one thing that is time-critical,
+sits about 40% of the way down, below four summary cards, the faction header and
+six figures. On a war night the reader scrolls past everything that can wait to
+reach the thing that cannot.
+
+**What it does.** Establishes an order for narrow screens: alert banner and chain
+command first, then holes, then score and roster. Summary cards collapse into a
+single row of numbers. The member table becomes a list rather than a stacked
+label/value pair per cell — currently each member costs six rows.
 
 **What it does.** Establishes what the board must do at 390px: which panels come
 first, what collapses, what is dropped. The chain command and the alert banner are
@@ -207,8 +226,26 @@ labels on icon-only controls, and a keyboard path to the admin toggle and refres
 ## U006 — Visual coherence
 
 Last on purpose. Typography scale, spacing rhythm, and the alert/severity palette
-applied consistently — including the dark-mode pass. Doing this before U001–U005
-would be decorating a house whose rooms are still being moved.
+applied consistently. Doing this before U001–U005 would be decorating a house
+whose rooms are still being moved.
+
+**Two concrete defects found by screenshotting, waiting here:**
+
+1. **Every muted caption renders bright pink.** `MainLayout.razor` defines
+   `TextSecondary = "#b8e1ff"` (pale blue), but 48 call sites use
+   `Color="Color.Secondary"`, which selects the *Secondary palette colour* —
+   MudBlazor's default `#FF4081` — not the secondary *text* colour. So "Faction
+   ID 111", "Available members who are swinging", "50.0% of available attackers"
+   and the footer are all pink. It reads as alarm everywhere, which directly
+   undercuts U001: if everything shouts, a marker that shouts says nothing.
+   The correct fix is at the call sites (muted text is not the secondary palette),
+   not defining `Secondary` to match, because a few of those 48 use it as a
+   deliberate accent.
+
+2. **There is no light theme.** `MudThemeProvider IsDarkMode="true"` is
+   hardcoded, so `prefers-color-scheme` is ignored and the `--theme light`
+   screenshots are identical to the dark ones. Either honour the OS preference
+   or drop the pretence and document that the site is dark-only.
 
 ---
 

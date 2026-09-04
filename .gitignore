@@ -91,3 +91,6 @@ com[1-9]
 com[1-9].*
 lpt[1-9]
 lpt[1-9].*
+
+# UX screenshots — regenerate with scripts/screenshot-board.sh, never commit
+workspace/tmp/screenshots/

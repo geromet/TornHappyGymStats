@@ -220,6 +220,21 @@ reg_add adminpanel-setup "Dev host" \
   "Installs the AdminPanel nginx route. Validates with nginx -t before reloading."
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Look at it
+# ─────────────────────────────────────────────────────────────────────────────
+
+reg_add shots-war "Look at it" \
+  "Screenshot the war board (phone / tablet / desktop)" \
+  "screenshot-board.sh" "-" "NONE" "" \
+  "Boots the app locally with dev auth and the seeded war, shoots every viewport into workspace/tmp/screenshots, then stops both hosts. Nothing touches the server."
+
+reg_add shots-setup "Look at it" \
+  "Install the screenshot tooling (Playwright + its own Chromium)" \
+  "screenshot-board.sh" "--check" "--setup" "" \
+  "Creates .venv and downloads Chromium into ~/.cache/ms-playwright. No sudo; no browser you use yourself is involved." \
+  "Downloads about 115 MB on first run."
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Verify
 # ─────────────────────────────────────────────────────────────────────────────
 
