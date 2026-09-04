@@ -1,0 +1,15 @@
+<MudAlert Severity="Severity.Info" Dense="@Dense" Class="@Class">
+    @Message
+    @if (!string.IsNullOrWhiteSpace(ActionHref))
+    {
+        <MudButton Variant="Variant.Text" Size="Size.Small" Href="@ActionHref" Class="ml-2">@(ActionLabel ?? "Set up")</MudButton>
+    }
+</MudAlert>
+
+@code {
+    [Parameter, EditorRequired] public string Message { get; set; } = string.Empty;
+    [Parameter] public string? ActionHref { get; set; }
+    [Parameter] public string? ActionLabel { get; set; }
+    [Parameter] public bool Dense { get; set; } = true;
+    [Parameter] public string Class { get; set; } = "mb-4";
+}

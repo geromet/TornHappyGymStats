@@ -1,0 +1,8 @@
+<MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Filled" Class="@Class">
+    <strong>Stale data.</strong> @Message
+</MudAlert>
+
+@code {
+    [Parameter] public string Message { get; set; } = "Review data freshness before acting.";
+    [Parameter] public string Class { get; set; } = "mb-4";
+}
