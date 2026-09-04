@@ -29,7 +29,7 @@ set -uo pipefail
 
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-cd "${ROOT_DIR}"
+cd "${ROOT_DIR}" || exit 1
 
 failures=0
 fail() { echo "[FAIL] $1" >&2; failures=$((failures + 1)); }

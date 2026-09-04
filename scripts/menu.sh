@@ -40,6 +40,7 @@ build_command() {
     args="$(reg_field "${record}" 6)"
     env_pairs="$(reg_field "${record}" 7)"
     if [[ -n "${env_pairs}" ]]; then
+      # shellcheck disable=SC2206  # deliberate split; see the note below.
       MENU_CMD+=(env ${env_pairs})
     fi
   else
@@ -49,6 +50,7 @@ build_command() {
   MENU_CMD+=(bash "${SCRIPT_DIR}/${script}")
   # Unquoted on purpose: these are fixed flag strings from this repository's own
   # registry, never operator input, and they must split into separate arguments.
+  # shellcheck disable=SC2206  # the split is the point, per the note above.
   [[ "${args}" != "-" && -n "${args}" ]] && MENU_CMD+=(${args})
   return 0
 }

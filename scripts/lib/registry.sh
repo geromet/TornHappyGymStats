@@ -254,6 +254,7 @@ reg_add verify-prod-smoke "Verify" \
 # Listed by `menu.sh --audit` as known exclusions so the audit stays quiet and
 # the reason is written down rather than rediscovered.
 # ─────────────────────────────────────────────────────────────────────────────
+# shellcheck disable=SC2034  # consumed by menu.sh --audit after sourcing.
 REG_EXCLUDED=(
   "menu.sh:this menu"
   "deploy-config.sh:sourced library, not a task"
