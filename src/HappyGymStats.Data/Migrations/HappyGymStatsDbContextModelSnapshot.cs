@@ -110,6 +110,8 @@ namespace HappyGymStats.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasAlternateKey("Id", "AnonymousId");
+
                     b.HasIndex("AnonymousId", "Purpose", "DocumentVersion");
 
                     b.HasIndex("AnonymousId", "Purpose", "RevokedAtUtc");
@@ -459,6 +461,31 @@ namespace HappyGymStats.Data.Migrations
                     b.ToTable("RankedWarReportMembers", (string)null);
                 });
 
+            modelBuilder.Entity("HappyGymStats.Data.Entities.StoredApiKeyEntity", b =>
+                {
+                    b.Property<Guid>("AnonymousId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("Ciphertext")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<long>("ConsentRecordId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("StoredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("TornPlayerId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("AnonymousId");
+
+                    b.HasIndex("ConsentRecordId");
+
+                    b.ToTable("StoredApiKeys", (string)null);
+                });
+
             modelBuilder.Entity("HappyGymStats.Data.Entities.UserLogEntryEntity", b =>
                 {
                     b.Property<Guid>("AnonymousId")
@@ -725,6 +752,22 @@ namespace HappyGymStats.Data.Migrations
                     b.HasIndex("WarId", "SampledAtUtc");
 
                     b.ToTable("WarScoreSamples", (string)null);
+                });
+
+            modelBuilder.Entity("HappyGymStats.Data.Entities.StoredApiKeyEntity", b =>
+                {
+                    b.HasOne("HappyGymStats.Data.Entities.ConsentRecordEntity", null)
+                        .WithMany()
+                        .HasForeignKey("ConsentRecordId", "AnonymousId")
+                        .HasPrincipalKey("Id", "AnonymousId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("HappyGymStats.Data.Entities.IdentityMapEntity", null)
+                        .WithOne()
+                        .HasForeignKey("HappyGymStats.Data.Entities.StoredApiKeyEntity", "AnonymousId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }
