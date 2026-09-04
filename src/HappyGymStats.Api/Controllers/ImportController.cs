@@ -14,10 +14,13 @@ namespace HappyGymStats.Api.Controllers;
 [Route("api/v1/torn/import-jobs")]
 public sealed class ImportController : ApiControllerBase
 {
+    private const string StatusCapabilityCookie = "hgs-import-status";
+
     private readonly ImportOrchestrator _importService;
     private readonly IIdentityMapRepository _identityMapRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IProvisionalTokenService _provisionalTokenService;
+    private readonly IWebHostEnvironment _environment;
     private readonly ILogger<ImportController> _logger;
 
     public ImportController(
@@ -25,12 +28,14 @@ public sealed class ImportController : ApiControllerBase
         IIdentityMapRepository identityMapRepo,
         IUnitOfWork unitOfWork,
         IProvisionalTokenService provisionalTokenService,
+        IWebHostEnvironment environment,
         ILogger<ImportController> logger)
     {
         _importService = importService;
         _identityMapRepo = identityMapRepo;
         _unitOfWork = unitOfWork;
         _provisionalTokenService = provisionalTokenService;
+        _environment = environment;
         _logger = logger;
     }
 
@@ -52,7 +57,9 @@ public sealed class ImportController : ApiControllerBase
         if (!admission.Accepted)
             return ImportBusy();
 
-        return StatusCode(StatusCodes.Status202Accepted, ToDto(admission.Status!));
+        var status = admission.Status!;
+        SetStatusCapability(status.AnonymousId);
+        return StatusCode(StatusCodes.Status202Accepted, ToDto(status));
     }
 
     [HttpPost("me")]
@@ -90,14 +97,17 @@ public sealed class ImportController : ApiControllerBase
     }
 
     [HttpGet("latest")]
-    [Authorize(Roles = Roles.User)]
     public IActionResult GetLatestImport()
     {
-        var anonymousIdClaim = User.FindFirstValue(Claims.AnonymousId);
-        if (!Guid.TryParse(anonymousIdClaim, out var callerAnonymousId))
-            return ApiError(StatusCodes.Status401Unauthorized, "unauthorized", "Could not resolve caller identity.");
+        ImportJobStatus? status = null;
 
-        var status = _importService.GetLatestForAnonymousId(callerAnonymousId);
+        var anonymousIdClaim = User.FindFirstValue(Claims.AnonymousId);
+        if (Guid.TryParse(anonymousIdClaim, out var callerAnonymousId))
+            status = _importService.GetLatestForAnonymousId(callerAnonymousId);
+
+        if (status is null && Request.Cookies.TryGetValue(StatusCapabilityCookie, out var capability))
+            status = _importService.GetLatestForCapability(capability);
+
         if (status is null)
             return ApiError(StatusCodes.Status404NotFound, "not_found", "No import has been started for this caller.");
 
@@ -139,6 +149,7 @@ public sealed class ImportController : ApiControllerBase
         await _unitOfWork.SaveChangesAsync(ct);
 
         var provisionalToken = _provisionalTokenService.Issue(status.AnonymousId);
+        SetStatusCapability(status.AnonymousId);
 
         return StatusCode(StatusCodes.Status202Accepted, new
         {
@@ -182,6 +193,19 @@ public sealed class ImportController : ApiControllerBase
         }
 
         return AuthenticatedOwnerResolution.Ok(callerAnonymousId, map.PublicKey);
+    }
+
+    private void SetStatusCapability(Guid anonymousId)
+    {
+        var capability = _importService.IssueStatusCapability(anonymousId);
+        Response.Cookies.Append(StatusCapabilityCookie, capability, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = !_environment.IsEnvironment("Testing"),
+            SameSite = SameSiteMode.Strict,
+            MaxAge = TimeSpan.FromHours(24),
+            IsEssential = true,
+        });
     }
 
     private IActionResult ImportBusy()
