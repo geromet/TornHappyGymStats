@@ -74,6 +74,15 @@ jobs:
       - name: scripts/verify/build-and-test.sh
         run: bash scripts/verify/build-and-test.sh
 
+      # Clean-environment run. A runner has no developer configuration, so this
+      # rarely differs here — its job is to make the same guarantee checkable on
+      # a workstation, where WarHistoryIngestWriterTests passed for weeks against
+      # a key the code never reads because the machine supplied the real one.
+      # It also asserts no host appsettings.json reached the test output, which
+      # is the ambient source that stripping variables cannot reach.
+      - name: scripts/verify/hermetic-tests.sh
+        run: bash scripts/verify/hermetic-tests.sh
+
   format:
     name: dotnet format
     runs-on: ubuntu-latest
