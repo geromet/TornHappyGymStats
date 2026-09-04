@@ -23,15 +23,52 @@ fi
 
 # PREFLIGHT BEFORE ANY VERIFIER CAN PRINT PASS.
 #
-# These are real transitive dependencies of the canonical gate, including the
-# clean-environment test runner. A missing tool is an unavailable proof, never a
-# successful "no violations found" result.
-ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+# The gate used to carry a hand-maintained command list. That proved the current
+# tools existed, but the list could drift when a required verifier (or the
+# hermetic test runner this file always invokes) gained a new dependency without
+# the list here being updated to match. The manifest already declares those
+# dependencies, so use it as the source of truth and preflight the union before
+# any assertion runs. Only `bash`/`dotnet` are hardcoded, because this file
+# needs `dotnet` directly for the build step and nothing here can preflight
+# itself running under something other than bash.
+ROOT_DIR="$(cd "${BASH_SOURCE[0]%/*}/../.." && pwd)"
 # shellcheck source=scripts/verify/verify-common.sh
 source "${ROOT_DIR}/scripts/verify/verify-common.sh"
-echo "==> preflight: tools the gate depends on"
-verify_require_commands rg dotnet grep sed awk wc env find sort head cut
-echo "PASS: canonical gate tool dependencies are present"
+cd "${ROOT_DIR}" || verify_die "cannot cd to ${ROOT_DIR}"
+
+# Overridable so verifier-manifest-union-regression.sh can prove the union
+# below actually comes from the manifest, not a value only this file knows.
+readonly VERIFY_MANIFEST="${HAPPYGYMSTATS_VERIFY_MANIFEST:-scripts/verify/manifest.tsv}"
+verify_require_file "${VERIFY_MANIFEST}"
+
+declare -A gate_commands=(
+  [bash]=1
+  [dotnet]=1
+)
+
+# Union required-gate verifier dependencies, plus the hermetic test runner's own
+# — it is invoked unconditionally below (step 3) even though its manifest tier
+# is "test-runner", not "required", so a dependency only it needs would
+# otherwise preflight-pass and then fail mid-run.
+manifest_row=0
+while IFS=$'\t' read -r id _script _tier gate dependencies _exclusion_reason; do
+  ((manifest_row += 1))
+  (( manifest_row == 1 )) && continue
+  [[ "${gate}" == "required" || "${id}" == "hermetic-test-runner" ]] || continue
+  [[ -n "${dependencies}" && "${dependencies}" != "-" ]] || continue
+
+  IFS=',' read -r -a dependency_list <<< "${dependencies}"
+  for dependency in "${dependency_list[@]}"; do
+    [[ -n "${dependency}" && "${dependency}" != "-" ]] || continue
+    gate_commands["${dependency}"]=1
+  done
+done < "${VERIFY_MANIFEST}"
+
+echo "==> preflight: tools the required gate (and the hermetic test runner it always invokes) depend on"
+for command_name in "${!gate_commands[@]}"; do
+  verify_require_command "${command_name}"
+done
+echo "PASS: all declared required-gate dependencies are available"
 
 # ROUTING COMES FROM THE MANIFEST, NOT FROM THIS FILE.
 #
@@ -40,7 +77,6 @@ echo "PASS: canonical gate tool dependencies are present"
 echo "==> verify: verifier graph"
 bash scripts/verify/verifier-graph.sh
 
-readonly VERIFY_MANIFEST="scripts/verify/manifest.tsv"
 manifest_row=0
 required_run=0
 while IFS=$'\t' read -r id script tier gate _dependencies _exclusion_reason; do

@@ -10,7 +10,7 @@
 # no verifier.
 set -euo pipefail
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
 readonly ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 readonly TEST_PROJECT="${ROOT_DIR}/tests/HappyGymStats.Tests/HappyGymStats.Tests.csproj"
 

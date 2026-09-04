@@ -11,7 +11,7 @@
 # source of truth.
 set -euo pipefail
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
 readonly ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # shellcheck source=scripts/verify/verify-common.sh
 source "${SCRIPT_DIR}/verify-common.sh"

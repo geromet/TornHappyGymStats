@@ -7,7 +7,7 @@
 # REASON — not merely that it exited non-zero, which any crash would satisfy.
 set -euo pipefail
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
 readonly GRAPH="${SCRIPT_DIR}/verifier-graph.sh"
 
 [[ -f "${GRAPH}" ]] || { printf 'FAIL: %s missing\n' "${GRAPH}" >&2; exit 2; }

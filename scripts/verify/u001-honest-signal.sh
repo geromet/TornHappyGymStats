@@ -13,7 +13,7 @@
 # a bad word; it is the next person adding a panel that quietly prints a number.
 set -euo pipefail
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
 readonly ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 readonly BOARD="${ROOT_DIR}/src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/War.razor"

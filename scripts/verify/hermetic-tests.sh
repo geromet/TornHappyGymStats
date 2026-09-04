@@ -28,7 +28,7 @@ set -euo pipefail
 # design and are gated separately (#60) with
 # HAPPYGYMSTATS_REQUIRE_POSTGRES_INTEGRATION so a skip becomes a hard failure.
 
-readonly ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+readonly ROOT_DIR="$(cd "${BASH_SOURCE[0]%/*}/../.." && pwd)"
 readonly TEST_PROJECT="${ROOT_DIR}/tests/HappyGymStats.Tests/HappyGymStats.Tests.csproj"
 # shellcheck source=scripts/verify/verify-common.sh
 source "${ROOT_DIR}/scripts/verify/verify-common.sh"
@@ -86,7 +86,7 @@ fi
 test_dll="$(find tests/HappyGymStats.Tests/bin -name 'HappyGymStats.Tests.dll' -newer tests/HappyGymStats.Tests/HappyGymStats.Tests.csproj -printf '%T@ %p\n' 2>/dev/null \
   | sort -rn | head -1 | cut -d' ' -f2- || true)"
 if [[ -n "${test_dll}" ]]; then
-  out_dir="$(dirname "${test_dll}")"
+  out_dir="${test_dll%/*}"
   leaked="$(find "${out_dir}" -maxdepth 1 -name 'appsettings*.json' -print 2>/dev/null || true)"
   if [[ -n "${leaked}" ]]; then
     printf '%s\n' "${leaked}" >&2
