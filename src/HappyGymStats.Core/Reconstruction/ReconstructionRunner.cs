@@ -49,12 +49,9 @@ public sealed class ReconstructionRunner
             throw new ArgumentException("anchorTimeUtc must be in UTC (offset +00:00).", nameof(anchorTimeUtc));
 
         if (anonymousId == Guid.Empty)
-            anonymousId = await _importRunRepo.ResolveAnonymousIdAsync(ct) ?? Guid.Empty;
-
-        if (anonymousId == Guid.Empty)
             return new RunResult(
                 Success: false,
-                ErrorMessage: "Could not resolve anonymousId: no import runs found in the database.",
+                ErrorMessage: "anonymousId is required; reconstruction must be scoped to an explicit owner.",
                 DerivedGymTrains: Array.Empty<DerivedGymTrain>(),
                 Stats: null,
                 AnchorTimeUtc: anchorTimeUtc);
