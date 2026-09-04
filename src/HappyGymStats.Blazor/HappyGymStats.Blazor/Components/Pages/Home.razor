@@ -375,8 +375,8 @@ else if (!_loading && _loadError == null && _surfaces != null && !_gymPointCloud
 
     private static string BuildLoadFailureMessage(ApiFailure failure) => failure.Category switch
     {
-        ApiFailureCategory.ApiUnavailable => "Could not load surfaces data: API is unavailable. Verify the API service is running on the configured boundary.",
-        ApiFailureCategory.BadGateway => "Could not load surfaces data: reverse proxy returned 502 Bad Gateway. Verify nginx upstream to the API boundary.",
+        ApiFailureCategory.ApiUnavailable => "Could not load surfaces data. The service is temporarily unavailable — try again shortly.",
+        ApiFailureCategory.BadGateway => "Could not load surfaces data. The service is temporarily unavailable — try again shortly.",
         ApiFailureCategory.NotFound => "No surfaces data found. Run an import first.",
         ApiFailureCategory.Deserialization => "Could not load surfaces data: API response format was invalid.",
         _ => $"Could not load surfaces data: {failure.SafeMessage}"
@@ -384,8 +384,8 @@ else if (!_loading && _loadError == null && _surfaces != null && !_gymPointCloud
 
     private static string BuildImportFailureMessage(ApiFailure failure) => failure.Category switch
     {
-        ApiFailureCategory.ApiUnavailable => "Import failed: API is unavailable. Verify the API service is running.",
-        ApiFailureCategory.BadGateway => "Import failed: reverse proxy returned 502 Bad Gateway. Check nginx upstream.",
+        ApiFailureCategory.ApiUnavailable => "Import failed. The service is temporarily unavailable — try again shortly.",
+        ApiFailureCategory.BadGateway => "Import failed. The service is temporarily unavailable — try again shortly.",
         ApiFailureCategory.ImportFailure => "Import failed: backend rejected or could not process the import.",
         ApiFailureCategory.Validation => "Import rejected: request validation failed.",
         ApiFailureCategory.Deserialization => "Import failed: API response format was invalid.",
