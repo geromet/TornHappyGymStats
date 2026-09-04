@@ -27,4 +27,26 @@
     <ProjectReference Include="..\..\src\HappyGymStats.WarPoller\HappyGymStats.WarPoller.csproj" />
     <ProjectReference Include="..\..\src\HappyGymStats.Blazor\HappyGymStats.Blazor\HappyGymStats.Blazor.csproj"  />
   </ItemGroup>
+
+  <!--
+    The test project references four hosts, and each of them ships its own
+    appsettings.json. Exactly one file can land in the output directory, and
+    which one wins is build-order dependent — so a test host reading
+    appsettings.json from AppContext.BaseDirectory got the API's real
+    ConnectionStrings on this machine and something else on a CI runner.
+
+    That non-determinism is what made WarHistoryIngestWriterTests pass locally
+    and fail in CI while asserting a key the code never reads (#58, #93).
+
+    Tests inject their own configuration. Nothing in this suite needs an
+    inherited appsettings.json: verified by deleting both files and running the
+    full non-Postgres suite, which passes 357/357.
+  -->
+  <Target Name="RemoveInheritedHostAppSettings" AfterTargets="Build;Publish">
+    <ItemGroup>
+      <_InheritedHostAppSettings Include="$(OutDir)appsettings.json" />
+      <_InheritedHostAppSettings Include="$(OutDir)appsettings.*.json" />
+    </ItemGroup>
+    <Delete Files="@(_InheritedHostAppSettings)" />
+  </Target>
 </Project>

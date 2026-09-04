@@ -16,6 +16,7 @@ using Xunit;
 
 namespace HappyGymStats.Tests;
 
+[Collection(AmbientEnvironmentCollection.Name)]
 public sealed class DbPipelineIntegrationTests
 {
     [Fact]

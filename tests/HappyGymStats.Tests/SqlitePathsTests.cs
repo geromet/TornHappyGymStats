@@ -3,6 +3,7 @@ using Xunit;
 
 namespace HappyGymStats.Tests;
 
+[Collection(AmbientEnvironmentCollection.Name)]
 public sealed class SqlitePathsTests
 {
     [Fact]
