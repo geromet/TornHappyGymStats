@@ -38,15 +38,18 @@ echo "==> calling GET /v2/user/basic (read-only, no game action)"
 RESPONSE="$(curl -sS -m 15 "https://api.torn.com/v2/user/basic?key=${TORN_API_KEY}")"
 
 if echo "${RESPONSE}" | grep -q '"error"'; then
-  CODE="$(echo "${RESPONSE}" | grep -o '"code":[0-9]*' | head -1)"
+  CODE="$(echo "${RESPONSE}" | grep -o '"code":[0-9]*' | head -1 || true)"
   echo "FAIL: Torn API rejected the key (${CODE:-unknown error})." >&2
   echo "  Response: ${RESPONSE}" >&2
   echo "  Get a fresh key and update TORN_API_KEY in .env, then re-run this script." >&2
   exit 1
 fi
 
-PLAYER_ID="$(echo "${RESPONSE}" | grep -o '"player_id":[0-9]*' | head -1 | cut -d: -f2)"
-echo "PASS: key is live, resolves to player_id=${PLAYER_ID:-unknown}"
+# The real shape is {"profile":{"id":...}}, not a top-level "player_id" — the
+# first version of this script guessed wrong, and with pipefail a no-match
+# grep -o here silently killed the script before printing anything.
+PLAYER_ID="$(echo "${RESPONSE}" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2 || true)"
+echo "PASS: key is live, resolves to player id=${PLAYER_ID:-unknown}"
 echo
 echo "This confirms the key can make a basic call. It does NOT confirm it has"
 echo "faction/roster-stat access, which #104's M010 gate needs — that check"
