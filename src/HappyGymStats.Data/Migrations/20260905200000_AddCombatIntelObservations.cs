@@ -52,6 +52,11 @@ public partial class AddCombatIntelObservations : Migration
             columns: new[] { "Provider", "ObservedAtUtc" });
 
         migrationBuilder.CreateIndex(
+            name: "IX_CombatIntelObservations_Provider_FetchedAtUtc",
+            table: "CombatIntelObservations",
+            columns: new[] { "Provider", "FetchedAtUtc" });
+
+        migrationBuilder.CreateIndex(
             name: "IX_CombatIntelObservations_PlayerId_Provider_ObservedAtUtc",
             table: "CombatIntelObservations",
             columns: new[] { "PlayerId", "Provider", "ObservedAtUtc" });

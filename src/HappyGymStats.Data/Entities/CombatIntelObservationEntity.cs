@@ -1,7 +1,9 @@
 using HappyGymStats.Core.War;
+using Microsoft.EntityFrameworkCore;
 
 namespace HappyGymStats.Data.Entities;
 
+[Index(nameof(Provider), nameof(FetchedAtUtc))]
 public sealed class CombatIntelObservationEntity
 {
     public string ObservationId { get; set; } = string.Empty;

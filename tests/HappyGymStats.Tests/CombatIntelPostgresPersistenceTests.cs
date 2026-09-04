@@ -191,6 +191,7 @@ public sealed class CombatIntelPostgresPersistenceTests : IAsyncLifetime
 
         Assert.Contains("IX_CombatIntelObservations_PlayerId_ObservedAtUtc", indexNames);
         Assert.Contains("IX_CombatIntelObservations_Provider_ObservedAtUtc", indexNames);
+        Assert.Contains("IX_CombatIntelObservations_Provider_FetchedAtUtc", indexNames);
         Assert.Contains("IX_CombatIntelObservations_PlayerId_Provider_ObservedAtUtc", indexNames);
         Assert.Contains("IX_CombatIntelObservations_VisibilityScope_VisibilityOwner_ObservedAtUtc", indexNames);
     }
