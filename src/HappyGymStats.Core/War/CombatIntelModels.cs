@@ -99,22 +99,32 @@ public sealed record CombatIntelObservation
             throw new ArgumentException("Observed time cannot be later than fetch time.", nameof(observedAtUtc));
         }
 
+        if (string.Equals(supersedesObservationId, observationId, StringComparison.Ordinal))
+        {
+            throw new ArgumentException("An observation cannot supersede itself.", nameof(supersedesObservationId));
+        }
+
         switch (classification)
         {
             case CombatIntelClassification.Exact:
-                if (!value.HasValue || lowerBound.HasValue || upperBound.HasValue)
+                if (!value.HasValue || value.Value < 0 || lowerBound.HasValue || upperBound.HasValue)
                 {
                     throw new ArgumentException(
-                        "Exact observations require Value and may not carry estimate bounds.",
+                        "Exact observations require a non-negative Value and may not carry estimate bounds.",
                         nameof(classification));
                 }
                 break;
 
             case CombatIntelClassification.Estimated:
-                if (value.HasValue || !lowerBound.HasValue || !upperBound.HasValue || lowerBound.Value > upperBound.Value)
+                if (value.HasValue ||
+                    !lowerBound.HasValue ||
+                    !upperBound.HasValue ||
+                    lowerBound.Value < 0 ||
+                    upperBound.Value < 0 ||
+                    lowerBound.Value > upperBound.Value)
                 {
                     throw new ArgumentException(
-                        "Estimated observations require LowerBound <= UpperBound and may not carry an exact Value.",
+                        "Estimated observations require non-negative LowerBound <= UpperBound and may not carry an exact Value.",
                         nameof(classification));
                 }
                 break;
