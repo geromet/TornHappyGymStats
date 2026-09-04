@@ -195,6 +195,53 @@ public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTest
     }
 
     [Fact]
+    public async Task Surfaces_raw_cache_files_are_not_directly_served()
+    {
+        // Resolve the surfaces cache directory using the same priority the host uses
+        // (env var → repo-relative web/data/surfaces → ContentRootPath/data/surfaces).
+        var env = _factory.Services.GetRequiredService<IWebHostEnvironment>();
+        var configuredDir = Environment.GetEnvironmentVariable("HAPPYGYMSTATS_SURFACES_CACHE_DIR");
+        string cacheDir;
+        if (!string.IsNullOrWhiteSpace(configuredDir))
+        {
+            cacheDir = configuredDir;
+        }
+        else
+        {
+            var candidate = Path.GetFullPath(
+                Path.Combine(env.ContentRootPath, "..", "..", "..", "web", "data", "surfaces"));
+            cacheDir = Directory.Exists(candidate) || File.Exists(Path.Combine(candidate, "meta.json"))
+                ? candidate
+                : Path.GetFullPath(Path.Combine(env.ContentRootPath, "data", "surfaces"));
+        }
+
+        // Write a representative working file so the negative control is structural,
+        // not dependent on the cache being empty.
+        Directory.CreateDirectory(cacheDir);
+        var probeFile = Path.Combine(cacheDir, "raw-denial-probe.json");
+        await File.WriteAllTextAsync(probeFile, """{"probe": true}""");
+
+        try
+        {
+            using var client = _factory.CreateClient();
+
+            // The raw cache path must not be served by the API host.
+            var rawResponse = await client.GetAsync("/data/surfaces/raw-denial-probe.json");
+            Assert.Equal(HttpStatusCode.NotFound, rawResponse.StatusCode);
+
+            // The sanitised projection endpoint must still be reachable (structured 404 = cache empty).
+            var apiResponse = await client.GetAsync("/api/v1/torn/surfaces/latest");
+            var payload = await apiResponse.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
+            Assert.NotNull(payload);
+            Assert.Equal("not_found", payload.Error.Code);
+        }
+        finally
+        {
+            File.Delete(probeFile);
+        }
+    }
+
+    [Fact]
     public async Task Surfaces_me_returns_unauthorized_when_anonymous_id_claim_missing_or_invalid()
     {
         using var clientWithoutClaim = _factory.CreateAuthenticatedClient(null);
