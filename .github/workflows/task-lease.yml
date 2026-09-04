@@ -1,0 +1,41 @@
+name: Task Lease
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  lease:
+    name: task lease
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Regression-test lease validator
+        run: bash .github/agent/task-lease-regression.sh
+
+      - name: Validate declared agent task lease
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_BRANCH: ${{ github.head_ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          printf '%s\n' "${PR_BODY}" > "${RUNNER_TEMP}/pr-body.md"
+          bash .github/agent/task-lease.sh \
+            --pr-body-file "${RUNNER_TEMP}/pr-body.md" \
+            --allow-no-lease \
+            --repo "${GITHUB_REPOSITORY}" \
+            --branch "${PR_BRANCH}" \
+            --head "${PR_HEAD_SHA}" \
+            --target-base "${PR_BASE_SHA}"
