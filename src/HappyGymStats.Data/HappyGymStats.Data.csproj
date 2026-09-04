@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\HappyGymStats.Contracts\HappyGymStats.Contracts.csproj" />
+    <ProjectReference Include="..\HappyGymStats.Core\HappyGymStats.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
