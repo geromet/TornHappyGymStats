@@ -1,0 +1,85 @@
+name: Agent task lease
+description: Reserve one branch for one bounded AI-agent task.
+title: "[agent-task] "
+labels:
+  - area:agent-workflow
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One active task owns one branch. Keep this issue open while the lease is active.
+        Close it when the task is done/abandoned. Reusing a branch after its PR closes
+        requires explicitly changing State to `Reopened`; normal follow-on work gets a
+        fresh task and branch.
+
+  - type: input
+    id: base_sha
+    attributes:
+      label: Base SHA
+      description: Full commit SHA the branch was created from.
+      placeholder: 0123456789abcdef0123456789abcdef01234567
+    validations:
+      required: true
+
+  - type: input
+    id: branch
+    attributes:
+      label: Branch
+      description: Exact branch owned by this task.
+      placeholder: feat/example-task
+    validations:
+      required: true
+
+  - type: input
+    id: owner_session
+    attributes:
+      label: Owner/session
+      description: Agent/session identifier or short human-readable owner label; no secrets.
+      placeholder: chat-2026-09-04-example
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What this task is allowed to change.
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_scope
+    attributes:
+      label: Non-scope
+      description: Adjacent work this branch must not absorb.
+    validations:
+      required: true
+
+  - type: input
+    id: depends_on
+    attributes:
+      label: Depends on
+      description: "Use `none`, `PR #123`, `issue #123`, or `branch:some-parent-branch`; comma-separate multiple dependencies."
+      value: none
+    validations:
+      required: true
+
+  - type: input
+    id: required_evidence
+    attributes:
+      label: Required evidence
+      description: Canonical tier union for the intended scope, for example T1 or T1,T4.
+      placeholder: T1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: state
+    attributes:
+      label: State
+      options:
+        - Active
+        - Blocked
+        - Reopened
+    validations:
+      required: true
