@@ -11,8 +11,6 @@ public interface IImportRunRepository
     // no-op. Caller commits via IUnitOfWork to flush mutations.
     Task UpdateAsync(ImportRunEntity run, CancellationToken ct);
 
-    Task<ImportRunEntity?> GetLatestIncompleteAsync(CancellationToken ct);
-
-    // Returns AnonymousId from the most recent ImportRun with a non-null AnonymousId, or null if none.
-    Task<Guid?> ResolveAnonymousIdAsync(CancellationToken ct);
+    // Resume lookup is always tenant-scoped. Callers must provide the authorized owner.
+    Task<ImportRunEntity?> GetLatestIncompleteAsync(Guid anonymousId, CancellationToken ct);
 }
