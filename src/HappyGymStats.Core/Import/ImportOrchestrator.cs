@@ -21,13 +21,14 @@ public sealed class ImportOrchestrator : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly SurfacesCacheWriter _surfacesCacheWriter;
+    private readonly ILogger<ImportOrchestrator> _logger;
 
     private readonly SemaphoreSlim _slot = new(1, 1);
     private readonly ConcurrentQueue<ImportJobRequest> _queue = new();
+    private readonly object _stateGate = new();
+    private readonly Dictionary<Guid, ImportJobStatus> _latestByOwner = new();
 
-    private volatile ImportJobStatus? _latest;
-
-    private readonly ILogger<ImportOrchestrator> _logger;
+    private ImportJobStatus? _active;
 
     public ImportOrchestrator(IServiceScopeFactory scopeFactory, SurfacesCacheWriter surfacesCacheWriter, ILogger<ImportOrchestrator> logger)
     {
@@ -36,49 +37,67 @@ public sealed class ImportOrchestrator : BackgroundService
         _logger = logger;
     }
 
-    public ImportJobStatus? Latest => _latest;
+    /// <summary>
+    /// Returns only status owned by the supplied caller identity. There is deliberately
+    /// no process-global latest status because import state is private tenant data.
+    /// </summary>
+    public ImportJobStatus? GetLatestForAnonymousId(Guid anonymousId)
+    {
+        if (anonymousId == Guid.Empty)
+            return null;
+
+        lock (_stateGate)
+            return _latestByOwner.GetValueOrDefault(anonymousId);
+    }
 
     /// <summary>
-    /// Enqueue an import if none is already running.
-    /// Returns the status of the enqueued (or already-running) job.
+    /// Starts a new anonymous/fresh import with a newly allocated owner identity.
+    /// A busy worker returns a tenant-neutral rejection and never another job's status.
     /// </summary>
-    public ImportJobStatus Enqueue(string apiKey, bool fresh, byte[]? publicKey = null)
+    public ImportEnqueueResult TryEnqueueFresh(string apiKey, byte[]? publicKey = null)
+        => TryEnqueueInternal(apiKey, fresh: true, Guid.NewGuid(), publicKey);
+
+    /// <summary>
+    /// Starts or resumes work for a server-authorized owner identity.
+    /// </summary>
+    public ImportEnqueueResult TryEnqueueForAnonymousId(
+        string apiKey,
+        Guid anonymousId,
+        bool fresh,
+        byte[]? publicKey = null)
     {
-        if (_latest is { IsTerminal: false })
-            return _latest;
+        if (anonymousId == Guid.Empty)
+            throw new ArgumentException("AnonymousId must identify the import owner.", nameof(anonymousId));
 
-        // Generate AnonymousId here for fresh imports so callers can use it immediately
-        // (e.g. to create an IdentityMap entry before the background job runs).
-        // Resume imports resolve the existing AnonymousId from the DB in RunImportAsync.
-        var anonymousId = fresh ? Guid.NewGuid() : Guid.Empty;
-
-        return EnqueueInternal(apiKey, fresh, anonymousId, publicKey);
+        return TryEnqueueInternal(apiKey, fresh, anonymousId, publicKey);
     }
 
-    public ImportJobStatus EnqueueForAnonymousId(string apiKey, Guid anonymousId, byte[]? publicKey = null)
+    private ImportEnqueueResult TryEnqueueInternal(string apiKey, bool fresh, Guid anonymousId, byte[]? publicKey)
     {
-        if (_latest is { IsTerminal: false })
-            return _latest;
+        if (string.IsNullOrWhiteSpace(apiKey))
+            throw new ArgumentException("API key is required.", nameof(apiKey));
 
-        return EnqueueInternal(apiKey, fresh: true, anonymousId, publicKey);
-    }
+        lock (_stateGate)
+        {
+            if (_active is { IsTerminal: false })
+                return ImportEnqueueResult.Busy;
 
-    private ImportJobStatus EnqueueInternal(string apiKey, bool fresh, Guid anonymousId, byte[]? publicKey)
-    {
-        var status = new ImportJobStatus(
-            Id: Guid.NewGuid().ToString("N"),
-            AnonymousId: anonymousId,
-            Outcome: "queued",
-            StartedAtUtc: DateTimeOffset.UtcNow,
-            CompletedAtUtc: null,
-            PagesFetched: 0,
-            LogsFetched: 0,
-            LogsAppended: 0,
-            ErrorMessage: null);
+            var status = new ImportJobStatus(
+                Id: Guid.NewGuid().ToString("N"),
+                AnonymousId: anonymousId,
+                Outcome: "queued",
+                StartedAtUtc: DateTimeOffset.UtcNow,
+                CompletedAtUtc: null,
+                PagesFetched: 0,
+                LogsFetched: 0,
+                LogsAppended: 0,
+                ErrorMessage: null);
 
-        _latest = status;
-        _queue.Enqueue(new ImportJobRequest(apiKey, fresh, status.Id, anonymousId, publicKey));
-        return status;
+            _active = status;
+            _latestByOwner[anonymousId] = status;
+            _queue.Enqueue(new ImportJobRequest(apiKey, fresh, status.Id, anonymousId, publicKey));
+            return ImportEnqueueResult.AcceptedJob(status);
+        }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -106,7 +125,7 @@ public sealed class ImportOrchestrator : BackgroundService
     private async Task RunImportAsync(ImportJobRequest request, CancellationToken stoppingToken)
     {
         _logger.LogInformation("Import job {JobId} started. Mode={Mode}", request.JobId, request.Fresh ? "fresh" : "resume");
-        Update(request.JobId, s => s with { Outcome = "running" });
+        Update(request.JobId, request.AnonymousId, s => s with { Outcome = "running" });
 
         try
         {
@@ -115,17 +134,12 @@ public sealed class ImportOrchestrator : BackgroundService
             var logFetcher = scope.ServiceProvider.GetRequiredService<LogFetcher>();
             var perkFetcher = scope.ServiceProvider.GetRequiredService<PerkLogFetcher>();
             var reconstructionRunner = scope.ServiceProvider.GetRequiredService<ReconstructionRunner>();
-            var importRunRepo = scope.ServiceProvider.GetRequiredService<IImportRunRepository>();
             var identityMapRepo = scope.ServiceProvider.GetRequiredService<IIdentityMapRepository>();
             var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
             var tornPlayerId = await tornClient.GetPlayerIdAsync(request.ApiKey, stoppingToken).ConfigureAwait(false);
-
             var mode = request.Fresh ? FetchMode.Fresh : FetchMode.Resume;
-
-            Guid anonymousId = request.AnonymousId != Guid.Empty
-                ? request.AnonymousId
-                : await importRunRepo.ResolveAnonymousIdAsync(stoppingToken).ConfigureAwait(false) ?? Guid.NewGuid();
+            var anonymousId = request.AnonymousId;
 
             _logger.LogInformation("Import job {JobId} API key validated for AnonymousId {AnonymousId}", request.JobId, anonymousId);
 
@@ -156,7 +170,7 @@ public sealed class ImportOrchestrator : BackgroundService
                     if (msg.StartsWith("Page "))
                         pagesRunning++;
 
-                    Update(request.JobId, s => s with
+                    Update(request.JobId, request.AnonymousId, s => s with
                     {
                         PagesFetched = pagesRunning,
                     });
@@ -189,9 +203,7 @@ public sealed class ImportOrchestrator : BackgroundService
                 ct: stoppingToken);
 
             if (!reconstruction.Success)
-            {
                 throw new InvalidOperationException(reconstruction.ErrorMessage ?? "Reconstruction failed after import.");
-            }
 
             _logger.LogInformation(
                 "Import job {JobId} reconstruction complete: gymTrains={GymTrains} warnings={Warnings}",
@@ -210,7 +222,7 @@ public sealed class ImportOrchestrator : BackgroundService
                 result.LogsFetched,
                 result.LogsAppended);
 
-            Update(request.JobId, s => s with
+            Update(request.JobId, request.AnonymousId, s => s with
             {
                 Outcome = "completed",
                 CompletedAtUtc = syncedAtUtc,
@@ -221,7 +233,7 @@ public sealed class ImportOrchestrator : BackgroundService
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            Update(request.JobId, s => s with
+            Update(request.JobId, request.AnonymousId, s => s with
             {
                 Outcome = "cancelled",
                 CompletedAtUtc = DateTimeOffset.UtcNow,
@@ -230,7 +242,7 @@ public sealed class ImportOrchestrator : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Import job {JobId} failed", request.JobId);
-            Update(request.JobId, s => s with
+            Update(request.JobId, request.AnonymousId, s => s with
             {
                 Outcome = "failed",
                 CompletedAtUtc = DateTimeOffset.UtcNow,
@@ -239,13 +251,29 @@ public sealed class ImportOrchestrator : BackgroundService
         }
     }
 
-    private void Update(string jobId, Func<ImportJobStatus, ImportJobStatus> mutate)
+    private void Update(string jobId, Guid anonymousId, Func<ImportJobStatus, ImportJobStatus> mutate)
     {
-        if (_latest?.Id == jobId)
-            _latest = mutate(_latest);
+        lock (_stateGate)
+        {
+            if (!_latestByOwner.TryGetValue(anonymousId, out var current) || current.Id != jobId)
+                return;
+
+            var updated = mutate(current);
+            _latestByOwner[anonymousId] = updated;
+
+            if (_active?.Id == jobId)
+                _active = updated.IsTerminal ? null : updated;
+        }
     }
 
     private sealed record ImportJobRequest(string ApiKey, bool Fresh, string JobId, Guid AnonymousId, byte[]? PublicKey);
+}
+
+public sealed record ImportEnqueueResult(bool Accepted, ImportJobStatus? Status)
+{
+    public static ImportEnqueueResult Busy { get; } = new(false, null);
+
+    public static ImportEnqueueResult AcceptedJob(ImportJobStatus status) => new(true, status);
 }
 
 public sealed record ImportJobStatus(
