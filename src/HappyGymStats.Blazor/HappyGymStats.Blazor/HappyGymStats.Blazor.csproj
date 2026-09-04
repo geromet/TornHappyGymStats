@@ -2,8 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
   </PropertyGroup>
 
@@ -11,10 +9,10 @@
     <ProjectReference Include="..\HappyGymStats.Blazor.Client\HappyGymStats.Blazor.Client.csproj" />
     <ProjectReference Include="..\..\HappyGymStats.Core\HappyGymStats.Core.csproj" />
     <ProjectReference Include="..\..\HappyGymStats.Identity\HappyGymStats.Identity.csproj" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.11" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.11" />
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.11" />
-    <PackageReference Include="MudBlazor" Version="8.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
+    <PackageReference Include="MudBlazor" />
   </ItemGroup>
 
 </Project>
