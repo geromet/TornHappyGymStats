@@ -1,0 +1,45 @@
+name: PR Evidence
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  evidence:
+    name: PR evidence
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Resolve live PR state
+        shell: bash
+        run: |
+          set -euo pipefail
+          pr_json="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
+          {
+            echo "PR_HEAD_SHA=$(jq -r '.head.sha' <<<"${pr_json}")"
+            echo "PR_BASE_SHA=$(jq -r '.base.sha' <<<"${pr_json}")"
+          } >> "${GITHUB_ENV}"
+          jq -r '.body // ""' <<<"${pr_json}" > "${RUNNER_TEMP}/pr-body.md"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PR_HEAD_SHA }}
+          fetch-depth: 0
+
+      - name: Regression-test evidence classifier
+        run: bash .github/evidence/required-evidence-regression.sh
+
+      - name: Regression-test PR evidence parser
+        run: bash .github/evidence/validate-pr-evidence-regression.sh
+
+      - name: Validate this pull request's evidence declaration against live base
+        run: |
+          bash .github/evidence/validate-pr-evidence.sh \
+            --body-file "${RUNNER_TEMP}/pr-body.md" \
+            --base "${PR_BASE_SHA}"
