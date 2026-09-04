@@ -1,5 +1,6 @@
+using System.Data;
+using System.Data.Common;
 using HappyGymStats.Core.War;
-using HappyGymStats.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace HappyGymStats.Data.Repositories;
@@ -12,6 +13,7 @@ public sealed class CombatIntelRepository(HappyGymStatsDbContext db) : ICombatIn
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(observation);
+        EnsurePostgres();
 
         var latestAllowedProviderTime = trustedReferenceTimeUtc.ToUniversalTime()
             + CombatIntelObservation.MaxProviderFutureSkew;
@@ -23,51 +25,76 @@ public sealed class CombatIntelRepository(HappyGymStatsDbContext db) : ICombatIn
                 nameof(observation));
         }
 
-        if (db.CombatIntelObservations.Local.Any(e => e.ObservationId == observation.ObservationId)
-            || await db.CombatIntelObservations.AsNoTracking()
-                .AnyAsync(e => e.ObservationId == observation.ObservationId, ct))
+        await WithOpenConnectionAsync(async connection =>
         {
-            throw new InvalidOperationException(
-                $"Combat-intel observation '{observation.ObservationId}' is already persisted.");
-        }
-
-        if (observation.SupersedesObservationId is not null)
-        {
-            var superseded = db.CombatIntelObservations.Local
-                .FirstOrDefault(e => e.ObservationId == observation.SupersedesObservationId)
-                ?? await db.CombatIntelObservations.AsNoTracking()
-                    .SingleOrDefaultAsync(e => e.ObservationId == observation.SupersedesObservationId, ct);
-
-            if (superseded is null)
+            if (await ObservationExistsAsync(connection, observation.ObservationId, ct))
             {
                 throw new InvalidOperationException(
-                    $"Superseded combat-intel observation '{observation.SupersedesObservationId}' does not exist.");
+                    $"Combat-intel observation '{observation.ObservationId}' is already persisted.");
             }
 
-            if (superseded.PlayerId != observation.PlayerId)
+            if (observation.SupersedesObservationId is not null)
             {
-                throw new InvalidOperationException(
-                    "A combat-intel observation cannot supersede an observation for another player.");
+                var superseded = await ReadSupersessionIdentityAsync(
+                    connection,
+                    observation.SupersedesObservationId,
+                    ct);
+
+                if (superseded is null)
+                {
+                    throw new InvalidOperationException(
+                        $"Superseded combat-intel observation '{observation.SupersedesObservationId}' does not exist.");
+                }
+
+                if (superseded.Value.PlayerId != observation.PlayerId)
+                {
+                    throw new InvalidOperationException(
+                        "A combat-intel observation cannot supersede an observation for another player.");
+                }
+
+                if (superseded.Value.VisibilityScope != observation.VisibilityScope)
+                {
+                    throw new InvalidOperationException(
+                        "A combat-intel observation cannot change visibility scope through supersession.");
+                }
+
+                if (observation.VisibilityScope != CombatIntelVisibilityScope.Public
+                    && !string.Equals(
+                        superseded.Value.VisibilityOwner,
+                        observation.VisibilityOwner,
+                        StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        "A private combat-intel observation cannot supersede an observation owned by another visibility principal.");
+                }
             }
 
-            if (superseded.VisibilityScope != observation.VisibilityScope)
-            {
-                throw new InvalidOperationException(
-                    "A combat-intel observation cannot change visibility scope through supersession.");
-            }
-
-            if (observation.VisibilityScope != CombatIntelVisibilityScope.Public
-                && !string.Equals(
-                    superseded.VisibilityOwner,
-                    observation.VisibilityOwner,
-                    StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException(
-                    "A private combat-intel observation cannot supersede an observation owned by another visibility principal.");
-            }
-        }
-
-        db.CombatIntelObservations.Add(ToEntity(observation));
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO "CombatIntelObservations" (
+                    "ObservationId", "PlayerId", "Provider", "FetchedAtUtc", "ObservedAtUtc",
+                    "Classification", "Value", "LowerBound", "UpperBound", "ProviderMetadata",
+                    "VisibilityScope", "VisibilityOwner", "SupersedesObservationId")
+                VALUES (
+                    @observationId, @playerId, @provider, @fetchedAtUtc, @observedAtUtc,
+                    @classification, @value, @lowerBound, @upperBound, @providerMetadata,
+                    @visibilityScope, @visibilityOwner, @supersedesObservationId)
+                """;
+            AddParameter(command, "observationId", DbType.String, observation.ObservationId);
+            AddParameter(command, "playerId", DbType.Int64, observation.PlayerId);
+            AddParameter(command, "provider", DbType.String, observation.Provider);
+            AddParameter(command, "fetchedAtUtc", DbType.DateTime, observation.FetchedAtUtc.UtcDateTime);
+            AddParameter(command, "observedAtUtc", DbType.DateTime, observation.ObservedAtUtc.UtcDateTime);
+            AddParameter(command, "classification", DbType.Int32, (int)observation.Classification);
+            AddParameter(command, "value", DbType.Decimal, observation.Value);
+            AddParameter(command, "lowerBound", DbType.Decimal, observation.LowerBound);
+            AddParameter(command, "upperBound", DbType.Decimal, observation.UpperBound);
+            AddParameter(command, "providerMetadata", DbType.String, observation.ProviderMetadata);
+            AddParameter(command, "visibilityScope", DbType.Int32, (int)observation.VisibilityScope);
+            AddParameter(command, "visibilityOwner", DbType.String, observation.VisibilityOwner);
+            AddParameter(command, "supersedesObservationId", DbType.String, observation.SupersedesObservationId);
+            await command.ExecuteNonQueryAsync(ct);
+        }, ct);
     }
 
     public async Task<IReadOnlyList<CombatIntelObservation>> GetHistoryAsync(
@@ -76,6 +103,7 @@ public sealed class CombatIntelRepository(HappyGymStatsDbContext db) : ICombatIn
         DateTimeOffset? observedSinceUtc,
         CancellationToken ct)
     {
+        EnsurePostgres();
         if (playerId <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(playerId), playerId, "Player id must be positive.");
@@ -86,60 +114,153 @@ public sealed class CombatIntelRepository(HappyGymStatsDbContext db) : ICombatIn
             throw new ArgumentException("Provider filter must be non-empty when supplied.", nameof(provider));
         }
 
-        var query = db.CombatIntelObservations
-            .AsNoTracking()
-            .Where(e => e.PlayerId == playerId);
-
-        if (provider is not null)
+        return await WithOpenConnectionAsync(async connection =>
         {
-            query = query.Where(e => e.Provider == provider);
-        }
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT
+                    "ObservationId", "PlayerId", "Provider", "FetchedAtUtc", "ObservedAtUtc",
+                    "Classification", "Value", "LowerBound", "UpperBound", "ProviderMetadata",
+                    "VisibilityScope", "VisibilityOwner", "SupersedesObservationId"
+                FROM "CombatIntelObservations"
+                WHERE "PlayerId" = @playerId
+                  AND (@provider IS NULL OR "Provider" = @provider)
+                  AND (@observedSinceUtc IS NULL OR "ObservedAtUtc" >= @observedSinceUtc)
+                ORDER BY "ObservedAtUtc" DESC, "FetchedAtUtc" DESC, "ObservationId"
+                """;
+            AddParameter(command, "playerId", DbType.Int64, playerId);
+            AddParameter(command, "provider", DbType.String, provider);
+            AddParameter(
+                command,
+                "observedSinceUtc",
+                DbType.DateTime,
+                observedSinceUtc?.ToUniversalTime().UtcDateTime);
 
-        if (observedSinceUtc.HasValue)
-        {
-            var sinceUtc = observedSinceUtc.Value.ToUniversalTime();
-            query = query.Where(e => e.ObservedAtUtc >= sinceUtc);
-        }
+            var observations = new List<CombatIntelObservation>();
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                observations.Add(CombatIntelObservation.Create(
+                    reader.GetString(0),
+                    reader.GetInt64(1),
+                    reader.GetString(2),
+                    ToUtcOffset(reader.GetDateTime(3)),
+                    ToUtcOffset(reader.GetDateTime(4)),
+                    (CombatIntelClassification)reader.GetInt32(5),
+                    GetNullableDecimal(reader, 6),
+                    GetNullableDecimal(reader, 7),
+                    GetNullableDecimal(reader, 8),
+                    (CombatIntelVisibilityScope)reader.GetInt32(10),
+                    GetNullableString(reader, 11),
+                    GetNullableString(reader, 9),
+                    GetNullableString(reader, 12)));
+            }
 
-        var rows = await query
-            .OrderByDescending(e => e.ObservedAtUtc)
-            .ThenByDescending(e => e.FetchedAtUtc)
-            .ThenBy(e => e.ObservationId)
-            .ToListAsync(ct);
-
-        return rows.Select(ToDomain).ToArray();
+            return (IReadOnlyList<CombatIntelObservation>)observations;
+        }, ct);
     }
 
-    private static CombatIntelObservationEntity ToEntity(CombatIntelObservation observation) => new()
+    private void EnsurePostgres()
     {
-        ObservationId = observation.ObservationId,
-        PlayerId = observation.PlayerId,
-        Provider = observation.Provider,
-        FetchedAtUtc = observation.FetchedAtUtc.ToUniversalTime(),
-        ObservedAtUtc = observation.ObservedAtUtc.ToUniversalTime(),
-        Classification = observation.Classification,
-        Value = observation.Value,
-        LowerBound = observation.LowerBound,
-        UpperBound = observation.UpperBound,
-        ProviderMetadata = observation.ProviderMetadata,
-        VisibilityScope = observation.VisibilityScope,
-        VisibilityOwner = observation.VisibilityOwner,
-        SupersedesObservationId = observation.SupersedesObservationId,
-    };
+        var provider = db.Database.ProviderName ?? string.Empty;
+        if (!provider.Contains("Npgsql", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new NotSupportedException(
+                "Combat-intel persistence currently requires the PostgreSQL/Npgsql provider.");
+        }
+    }
 
-    private static CombatIntelObservation ToDomain(CombatIntelObservationEntity entity) =>
-        CombatIntelObservation.Create(
-            entity.ObservationId,
-            entity.PlayerId,
-            entity.Provider,
-            entity.FetchedAtUtc,
-            entity.ObservedAtUtc,
-            entity.Classification,
-            entity.Value,
-            entity.LowerBound,
-            entity.UpperBound,
-            entity.VisibilityScope,
-            entity.VisibilityOwner,
-            entity.ProviderMetadata,
-            entity.SupersedesObservationId);
+    private async Task<T> WithOpenConnectionAsync<T>(
+        Func<DbConnection, Task<T>> action,
+        CancellationToken ct)
+    {
+        var connection = db.Database.GetDbConnection();
+        var shouldClose = connection.State != ConnectionState.Open;
+        if (shouldClose)
+        {
+            await connection.OpenAsync(ct);
+        }
+
+        try
+        {
+            return await action(connection);
+        }
+        finally
+        {
+            if (shouldClose)
+            {
+                await connection.CloseAsync();
+            }
+        }
+    }
+
+    private Task WithOpenConnectionAsync(
+        Func<DbConnection, Task> action,
+        CancellationToken ct) =>
+        WithOpenConnectionAsync(async connection =>
+        {
+            await action(connection);
+            return true;
+        }, ct);
+
+    private static async Task<bool> ObservationExistsAsync(
+        DbConnection connection,
+        string observationId,
+        CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT EXISTS (
+                SELECT 1
+                FROM "CombatIntelObservations"
+                WHERE "ObservationId" = @observationId)
+            """;
+        AddParameter(command, "observationId", DbType.String, observationId);
+        return (bool)(await command.ExecuteScalarAsync(ct)
+            ?? throw new InvalidOperationException("PostgreSQL did not return the observation existence result."));
+    }
+
+    private static async Task<(long PlayerId, CombatIntelVisibilityScope VisibilityScope, string? VisibilityOwner)?>
+        ReadSupersessionIdentityAsync(
+            DbConnection connection,
+            string observationId,
+            CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT "PlayerId", "VisibilityScope", "VisibilityOwner"
+            FROM "CombatIntelObservations"
+            WHERE "ObservationId" = @observationId
+            """;
+        AddParameter(command, "observationId", DbType.String, observationId);
+
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return (
+            reader.GetInt64(0),
+            (CombatIntelVisibilityScope)reader.GetInt32(1),
+            GetNullableString(reader, 2));
+    }
+
+    private static void AddParameter(DbCommand command, string name, DbType type, object? value)
+    {
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = name;
+        parameter.DbType = type;
+        parameter.Value = value ?? DBNull.Value;
+        command.Parameters.Add(parameter);
+    }
+
+    private static DateTimeOffset ToUtcOffset(DateTime value) =>
+        new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
+
+    private static decimal? GetNullableDecimal(DbDataReader reader, int ordinal) =>
+        reader.IsDBNull(ordinal) ? null : reader.GetDecimal(ordinal);
+
+    private static string? GetNullableString(DbDataReader reader, int ordinal) =>
+        reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
 }
