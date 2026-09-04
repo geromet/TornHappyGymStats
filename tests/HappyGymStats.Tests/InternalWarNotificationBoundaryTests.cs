@@ -64,7 +64,7 @@ public sealed class InternalWarNotificationBoundaryTests : IClassFixture<SqliteA
     }
 
     [Theory]
-    [InlineData("infra/nginx-torn.conf")]
+    [InlineData("infra/torn.conf")]
     [InlineData("infra/nginx-torndev.conf")]
     public void Public_nginx_configs_explicitly_hide_internal_notify_route(string relativePath)
     {
