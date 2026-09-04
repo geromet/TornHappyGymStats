@@ -21,6 +21,23 @@ public sealed class WarController(
     public async Task<IActionResult> GetCurrent(CancellationToken ct)
     {
         var dto = (await warDerivedStateService.GetCurrentAsync(WarHubBroadcaster.ScopeKey, ct: ct)).ToStateDto();
+
+        // "No war is running" is a successful answer, not a service fault.
+        //
+        // This used to fall into the 503 below together with `degraded`, so on
+        // any evening between wars the board rendered a red "War board
+        // unavailable. The API service is currently unavailable." The API was
+        // fine; there was simply no war. 503 also tells monitoring and every
+        // other caller that the service is down, which it is not.
+        //
+        // `degraded` keeps its 503: there a war IS running and the state cannot
+        // be trusted, which is exactly what that status code is for.
+        if (dto.Status == WarStatus.NotReady)
+        {
+            logger.LogInformation("War current request served with no active war for scope {Scope}", WarHubBroadcaster.ScopeKey);
+            return Ok(dto);
+        }
+
         if (!dto.IsReady)
         {
             logger.LogWarning(

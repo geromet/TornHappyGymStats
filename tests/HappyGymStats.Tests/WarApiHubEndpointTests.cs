@@ -61,6 +61,29 @@ public sealed class WarApiHubEndpointTests : IClassFixture<SqliteApiEndpointTest
     }
 
     [Fact]
+    public async Task Current_endpoint_returns_ok_and_not_ready_when_no_war_is_running()
+    {
+        // Nothing seeded: the constructor resets the war tables, so this is an
+        // ordinary evening between wars.
+        //
+        // This used to answer 503 with code war_state_not_ready, which the board
+        // rendered as "War board unavailable. The API service is currently
+        // unavailable." Nothing was unavailable. A 503 here also tells
+        // monitoring the service is down.
+        using var client = _factory.CreateAuthenticatedClient(Guid.NewGuid().ToString());
+
+        var response = await client.GetAsync("/api/v1/war/current");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var state = await response.Content.ReadFromJsonAsync<WarStateDto>(JsonOptions);
+        Assert.NotNull(state);
+        Assert.Equal(WarStatus.NotReady, state.Status);
+        Assert.False(state.IsReady);
+        Assert.Null(state.WarId);
+    }
+
+    [Fact]
     public async Task Authenticated_current_and_health_return_seeded_state_and_stale_metadata()
     {
         var report = DeserializeFixture<RankedWarReportResponse>("tests/fixtures/war/ranked-war-report-48377.json");

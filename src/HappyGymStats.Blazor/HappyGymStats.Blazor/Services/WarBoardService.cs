@@ -31,11 +31,24 @@ public sealed class WarBoardService(
     public string? ConnectionError { get; private set; }
     public bool IsLoading { get; private set; }
     public bool HasError => CurrentFailure is not null || (CurrentState?.Errors.Count ?? 0) > 0;
+    /// <summary>True when what the board shows may not reflect the live war.</summary>
+    /// <remarks>
+    /// Guarded on there actually being a war. `IsReady == false` covers both
+    /// "no war running" and "degraded", and until the API stopped reporting the
+    /// former as a 503 it could only ever mean the latter. Without the guard,
+    /// every quiet evening raised "Stale data. Review heartbeat, warnings, and
+    /// hub connection status before acting on roster gaps" — over a board with
+    /// no heartbeat to review and no roster to have gaps in.
+    /// </remarks>
     public bool HasStaleData =>
-        CurrentState?.Heartbeat.IsStale == true ||
-        CurrentState?.IsReady == false ||
-        ContainsOperationalWarning(CurrentState?.Warnings) ||
-        !string.IsNullOrWhiteSpace(ConnectionError);
+        !HasNoActiveWar &&
+        (CurrentState?.Heartbeat.IsStale == true ||
+         CurrentState?.IsReady == false ||
+         ContainsOperationalWarning(CurrentState?.Warnings) ||
+         !string.IsNullOrWhiteSpace(ConnectionError));
+
+    /// <summary>True when the API reports no war in progress — a normal state, not a fault.</summary>
+    public bool HasNoActiveWar => CurrentState?.Status == WarStatus.NotReady;
 
     public async Task InitializeAsync(CancellationToken ct = default)
     {

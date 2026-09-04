@@ -42,6 +42,7 @@ Screenshots the local app at phone/tablet/desktop, light and dark.
 
 Environment:
   SHOT_ROUTE     page to shoot (default /war)
+  SHOT_NO_WAR    1 = start with no war seeded, to shoot the empty board
   SHOT_OUT_DIR   default workspace/tmp/screenshots
   SHOT_API_PORT  default 5047
   SHOT_WEB_PORT  default 5137
@@ -163,9 +164,14 @@ dotnet build "${ROOT_DIR}/HappyGymStats.sln" -v q --nologo > "${LOG_DIR}/build.l
   exit 1
 }
 
-echo "==> Starting API on :${SHOT_API_PORT} (development auth, seeded war)"
+if [[ "${SHOT_NO_WAR:-0}" == "1" ]]; then
+  echo "==> Starting API on :${SHOT_API_PORT} (development auth, NO war seeded)"
+else
+  echo "==> Starting API on :${SHOT_API_PORT} (development auth, seeded war)"
+fi
 ASPNETCORE_ENVIRONMENT=Development \
 HAPPYGYMSTATS_DEV_AUTH=1 \
+HAPPYGYMSTATS_DEV_SKIP_WAR_SEED="${SHOT_NO_WAR:-0}" \
 ASPNETCORE_URLS="http://127.0.0.1:${SHOT_API_PORT}" \
   "${API_BIN}" > "${LOG_DIR}/api.log" 2>&1 &
 API_PID=$!

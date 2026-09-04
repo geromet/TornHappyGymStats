@@ -54,6 +54,50 @@ public sealed class WarBoardServiceTests
         Assert.Null(sut.CurrentState);
     }
 
+    [Fact]
+    public async Task No_active_war_is_a_state_not_a_failure_and_is_not_stale()
+    {
+        // A 200 carrying status "not-ready" is the API saying there is no war on.
+        // Two things must be true of it, and neither was: it is not a failure,
+        // and it is not stale data. HasStaleData tested `IsReady == false`, which
+        // covers "no war" as well as "degraded", so the board raised "Stale data.
+        // Review heartbeat, warnings, and hub connection status before acting on
+        // roster gaps" over a board with no heartbeat and no roster.
+        using var http = CreateHttpClient(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(NoActiveWarPayload, Encoding.UTF8, "application/json")
+        });
+        await using var sut = new WarBoardService(http, new TestAccessTokenProvider(), NullLogger<WarBoardService>.Instance);
+
+        await sut.RefreshAsync();
+
+        Assert.Null(sut.CurrentFailure);
+        Assert.NotNull(sut.CurrentState);
+        Assert.True(sut.HasNoActiveWar);
+        Assert.False(sut.HasStaleData);
+        Assert.False(sut.HasError);
+    }
+
+    private const string NoActiveWarPayload = """
+        {
+          "status": "not-ready",
+          "isReady": false,
+          "warId": null,
+          "asOfUtc": "2026-09-04T00:00:00+00:00",
+          "hasRoster": false,
+          "factionCount": 0,
+          "memberCount": 0,
+          "coverageRatio": 0,
+          "openTargetCount": 0,
+          "holeCount": 0,
+          "heartbeat": { "phase": "idle", "isStale": false },
+          "warnings": [],
+          "errors": [],
+          "factions": [],
+          "holes": []
+        }
+        """;
+
     private static HttpClient CreateHttpClient(Func<HttpRequestMessage, HttpResponseMessage> handler)
     {
         return new HttpClient(new DelegateHandler(handler))

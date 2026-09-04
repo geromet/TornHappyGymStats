@@ -39,7 +39,17 @@
         </MudAlert>
     }
 
-    @if (WarBoard.CurrentState is { } state)
+    @if (WarBoard.HasNoActiveWar)
+    {
+        @* Not an error, and must not look like one. Every panel below reads zero
+           when no war is running, which is indistinguishable from a war where
+           nobody has hit anything — so the grid is replaced, not annotated. *@
+        <MudAlert Severity="Severity.Info" Dense="true" Class="war-board-banner">
+            <strong>No war in progress.</strong> The board fills in automatically
+            when the next ranked war starts. Nothing is wrong.
+        </MudAlert>
+    }
+    else if (WarBoard.CurrentState is { } state)
     {
         <MudGrid>
             <MudItem xs="12" md="3">
