@@ -14,11 +14,3 @@ public sealed class ConsentRecordEntity
     public DateTimeOffset AcceptedAtUtc { get; set; }
     public DateTimeOffset? RevokedAtUtc { get; set; }
 }
-
-public static class ConsentPurposes
-{
-    /// <summary>
-    /// Consent to store and use an encrypted member Torn API key for exact war telemetry.
-    /// </summary>
-    public const string WarMemberApiKey = "war-member-api-key";
-}
