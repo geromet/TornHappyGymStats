@@ -173,6 +173,23 @@ happened during this session's own sign-in debugging.
 **Acceptance.** No blank panel with no explanation; no raw framework error page on
 a route a signed-in user can reach.
 
+**Partly delivered — the war board's own empty state.** `WarController.GetCurrent`
+answered 503 `war_state_not_ready` for *no war running* as well as for *degraded*,
+so between wars the board showed "War board unavailable. The API service is
+currently unavailable." Nothing was unavailable. `not-ready` is now a 200 carrying
+the state, and the board says "No war in progress". `WarStatus` in Contracts holds
+the three values so the two sides cannot drift.
+
+Looking at it found a second defect the tests could not: the orange "Stale data"
+banner still fired, because `HasStaleData` tested `IsReady == false`, which covers
+both cases and — until this change — could only ever mean `degraded`.
+
+`HAPPYGYMSTATS_DEV_SKIP_WAR_SEED=1` (or `SHOT_NO_WAR=1` for the screenshot script)
+clears the seeded war, so the empty board is reachable for the rest of this slice.
+
+Still open under U002: `Faction.razor`, `Error.razor`, and the other panels' empty
+states.
+
 ---
 
 ## U003 — Mobile and the war-night layout

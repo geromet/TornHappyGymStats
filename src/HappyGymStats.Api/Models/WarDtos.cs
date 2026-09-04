@@ -17,7 +17,7 @@ public static class WarDtoMapper
 
         return new WarStateDto(
             Status: status,
-            IsReady: status == "ok",
+            IsReady: status == WarStatus.Ok,
             WarId: state.WarId,
             AsOfUtc: state.AsOfUtc,
             HasRoster: memberCount > 0,
@@ -40,7 +40,7 @@ public static class WarDtoMapper
 
         return new WarHealthDto(
             Status: status,
-            IsReady: status == "ok",
+            IsReady: status == WarStatus.Ok,
             WarId: state.WarId,
             AsOfUtc: state.AsOfUtc,
             HasRoster: memberCount > 0,
@@ -57,12 +57,12 @@ public static class WarDtoMapper
     private static string ComputeStatus(WarDerivedState state)
     {
         if (state.WarId is null)
-            return "not-ready";
+            return WarStatus.NotReady;
 
         if (state.Errors.Count > 0 || state.IsHeartbeatStale)
-            return "degraded";
+            return WarStatus.Degraded;
 
-        return "ok";
+        return WarStatus.Ok;
     }
 
     private static WarHeartbeatDto ToHeartbeatDto(WarDerivedState state)

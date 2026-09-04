@@ -142,9 +142,26 @@ using (var scope = app.Services.CreateScope())
         await db.Database.MigrateAsync();
     }
 
+    // HAPPYGYMSTATS_DEV_SKIP_WAR_SEED exists so the "no war in progress" state is
+    // reachable locally. Without it the seed always creates a war, and the empty
+    // board — the thing an operator sees on any evening between wars — could not
+    // be rendered, screenshotted, or looked at at all.
+    // Compared as a string, not GetValue<bool>: the other dev flags here are set
+    // to "1", and GetValue<bool> throws on "1" rather than reading it as true —
+    // which crashed the API on startup the first time this was written.
+    var skipWarSeedRaw = builder.Configuration["HAPPYGYMSTATS_DEV_SKIP_WAR_SEED"];
+    var skipWarSeed = string.Equals(skipWarSeedRaw, "1", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(skipWarSeedRaw, "true", StringComparison.OrdinalIgnoreCase);
     if (developmentAuthEnabled)
     {
-        await DevelopmentWarSeed.SeedAsync(db, app.Logger);
+        if (skipWarSeed)
+        {
+            await DevelopmentWarSeed.ClearAsync(db, app.Logger);
+        }
+        else
+        {
+            await DevelopmentWarSeed.SeedAsync(db, app.Logger);
+        }
     }
 }
 

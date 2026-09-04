@@ -11,7 +11,22 @@ internal static class DevelopmentWarSeed
     private const long FactionId = 111;
     private const long OpponentFactionId = 222;
 
-    public static async Task SeedAsync(HappyGymStatsDbContext db, ILogger logger, CancellationToken ct = default)
+    /// <summary>
+    /// Removes the seeded war, leaving the board with no war in progress.
+    /// </summary>
+    /// <remarks>
+    /// The development database outlives a single run, so "skip the seed" is not
+    /// the same as "no war": skipping alone leaves whatever the previous run
+    /// wrote, and the board renders a fully populated war. This clears it, so
+    /// the empty state is reachable deterministically.
+    /// </remarks>
+    public static async Task ClearAsync(HappyGymStatsDbContext db, ILogger logger, CancellationToken ct = default)
+    {
+        await RemoveExistingAsync(db, ct);
+        logger.LogWarning("Development war seed SKIPPED and existing war state cleared; the board will show no war in progress.");
+    }
+
+    private static async Task RemoveExistingAsync(HappyGymStatsDbContext db, CancellationToken ct)
     {
         var existingWarIds = await db.WarCurrent
             .Where(e => e.ScopeKey == WarHubBroadcaster.ScopeKey && e.WarId != null)
@@ -26,6 +41,11 @@ internal static class DevelopmentWarSeed
         db.WarCurrent.RemoveRange(db.WarCurrent.Where(e => e.ScopeKey == WarHubBroadcaster.ScopeKey));
         db.WarPollerHeartbeats.RemoveRange(db.WarPollerHeartbeats.Where(e => e.ScopeKey == WarHubBroadcaster.ScopeKey));
         await db.SaveChangesAsync(ct);
+    }
+
+    public static async Task SeedAsync(HappyGymStatsDbContext db, ILogger logger, CancellationToken ct = default)
+    {
+        await RemoveExistingAsync(db, ct);
 
         var now = DateTimeOffset.UtcNow;
         var capturedAt = now.AddSeconds(-30);

@@ -1,6 +1,26 @@
 namespace HappyGymStats.Core.Models;
 
 /// <summary>
+/// The three values <c>WarStateDto.Status</c> can take. They are not
+/// interchangeable and the distinction is load-bearing: <see cref="NotReady"/>
+/// means there is no war on, which is an ordinary state of the world, while
+/// <see cref="Degraded"/> means the board cannot be trusted. Rendering the
+/// first as if it were the second told operators the API was down on every
+/// quiet evening.
+/// </summary>
+public static class WarStatus
+{
+    /// <summary>A war is running and the board is trustworthy.</summary>
+    public const string Ok = "ok";
+
+    /// <summary>No war is currently running. Not an error.</summary>
+    public const string NotReady = "not-ready";
+
+    /// <summary>A war is running, but the state has errors or a stale heartbeat.</summary>
+    public const string Degraded = "degraded";
+}
+
+/// <summary>
 /// Shared war board DTOs (single definition for Api and Blazor). Mapping from Core
 /// derived-state records lives in <c>HappyGymStats.Api.Models.WarDtoMapper</c>.
 /// </summary>
