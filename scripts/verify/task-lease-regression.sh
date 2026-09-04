@@ -12,7 +12,7 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 repo="$tmp/repo"
 mkdir -p "$repo"
-git -C "$repo" init -q
+git -C "$repo" init -q -b base
 git -C "$repo" config user.email task-lease@example.invalid
 git -C "$repo" config user.name task-lease-test
 printf 'base\n' > "$repo/base.txt"
@@ -61,7 +61,7 @@ run_lease() {
     TASK_LEASE_ISSUES_JSON_FILE="$tmp/issues.json" \
     TASK_LEASE_PRS_JSON_FILE="$tmp/prs.json" \
     TASK_LEASE_DEPENDENCY_DIR="$tmp/deps" \
-    TASK_LEASE_BASE_REF=refs/heads/master \
+    TASK_LEASE_BASE_REF=refs/heads/base \
     bash "$LEASE_SCRIPT" 62 "$@")
 }
 
@@ -88,7 +88,7 @@ fi
 grep -q "another active lease" "$tmp/out"
 printf '[{"number":62,"body":""}]\n' > "$tmp/issues.json"
 
-git -C "$repo" switch -q master
+git -C "$repo" switch -q base
 printf 'dependency\n' > "$repo/dependency.txt"
 git -C "$repo" add dependency.txt
 git -C "$repo" commit -qm dependency
@@ -108,7 +108,7 @@ if run_lease >"$tmp/out" 2>&1; then
 fi
 grep -q "merged after this task base" "$tmp/out"
 
-git -C "$repo" merge -q --no-edit master
+git -C "$repo" merge -q --no-edit base
 write_body "$base_sha" feat/task-62 '#123' active
 run_lease | grep -q '^PASS:'
 
