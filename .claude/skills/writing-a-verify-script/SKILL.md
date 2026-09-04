@@ -72,6 +72,23 @@ just "assertion failed".
 | Comment *why* each assertion exists | The next reader must be able to tell a real regression from a stale check |
 | Count-based checks for closed vocabularies | e.g. `FigureKind` has exactly three values — a fourth must be a deliberate edit |
 
+## Register it in the manifest — this is the routing table
+
+Every new `scripts/verify/*.sh` file must be registered in
+`scripts/verify/manifest.tsv` in the same change; choose `gate=required` or give
+a concrete `gate=excluded` reason. **Never wire a verifier directly into
+`build-and-test.sh`** — it routes from the manifest, and a hand-added call is a
+second routing table that will drift from the first.
+
+`scripts/verify/verifier-graph.sh` fails if a script exists with no row, if a row
+points at a deleted script, if an id or path is duplicated, or if an exclusion has
+no reason. It runs first in the canonical gate, so a missing row is a red build
+rather than silently reduced coverage.
+
+This is separate from the operator-console registry below. Both are lists, but
+they answer different questions: what an operator may run, versus what the merge
+gate proves.
+
 ## Register it, or the console check fails
 
 `scripts/verify/menu-contract.sh` runs `menu.sh --audit`, which fails on any script
