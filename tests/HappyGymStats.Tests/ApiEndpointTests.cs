@@ -154,17 +154,13 @@ public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTest
     }
 
     [Fact]
-    public async Task Import_latest_returns_not_found_before_any_import()
+    public async Task Import_latest_route_is_not_exposed()
     {
         using var client = _factory.CreateClient();
 
         var response = await client.GetAsync("/api/v1/torn/import-jobs/latest");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        var payload = await response.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
-
-        Assert.NotNull(payload);
-        Assert.Equal("not_found", payload.Error.Code);
     }
 
     [Fact]
@@ -349,17 +345,17 @@ public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTest
 
         Assert.True(response.StatusCode is HttpStatusCode.Accepted or HttpStatusCode.OK);
 
-        var latestResponse = await client.GetAsync("/api/v1/torn/import-jobs/latest");
-        latestResponse.EnsureSuccessStatusCode();
-
         using var scope = _factory.Services.CreateScope();
         var orchestrator = scope.ServiceProvider.GetRequiredService<HappyGymStats.Core.Import.ImportOrchestrator>();
         Assert.NotNull(orchestrator.Latest);
         Assert.Equal(callerAnonymousId, orchestrator.Latest!.AnonymousId);
+
+        var publicLatestResponse = await client.GetAsync("/api/v1/torn/import-jobs/latest");
+        Assert.Equal(HttpStatusCode.NotFound, publicLatestResponse.StatusCode);
     }
 
     [Fact]
-    public async Task Import_endpoint_accepts_request_and_exposes_latest_status()
+    public async Task Import_endpoint_returns_own_status_without_global_latest_projection()
     {
         using var client = _factory.CreateClient();
 
@@ -369,14 +365,10 @@ public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTest
         var startPayload = await startResponse.Content.ReadFromJsonAsync<ImportStatusDto>(JsonOptions);
         Assert.NotNull(startPayload);
         Assert.False(string.IsNullOrWhiteSpace(startPayload.Id));
+        Assert.Contains(startPayload.Outcome, new[] { "queued", "running", "failed", "completed", "cancelled" });
 
         var latestResponse = await client.GetAsync("/api/v1/torn/import-jobs/latest");
-        latestResponse.EnsureSuccessStatusCode();
-
-        var latestPayload = await latestResponse.Content.ReadFromJsonAsync<ImportStatusDto>(JsonOptions);
-        Assert.NotNull(latestPayload);
-        Assert.Equal(startPayload.Id, latestPayload.Id);
-        Assert.Contains(latestPayload.Outcome, new[] { "queued", "running", "failed", "completed", "cancelled" });
+        Assert.Equal(HttpStatusCode.NotFound, latestResponse.StatusCode);
     }
 
     public sealed class SqliteTestApplicationFactory : WebApplicationFactory<Program>
