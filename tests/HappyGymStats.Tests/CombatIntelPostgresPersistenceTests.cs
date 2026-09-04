@@ -96,7 +96,6 @@ public sealed class CombatIntelPostgresPersistenceTests : IAsyncLifetime
             providerMetadata: "{\"source\":\"roundtrip\"}");
 
         await repository.AppendAsync(original, trustedReference, CancellationToken.None);
-        await db.SaveChangesAsync();
 
         var replacement = CombatIntelObservation.CreateFromProvider(
             "intel-2",
@@ -113,7 +112,6 @@ public sealed class CombatIntelPostgresPersistenceTests : IAsyncLifetime
             supersedesObservationId: "intel-1");
 
         await repository.AppendAsync(replacement, trustedReference, CancellationToken.None);
-        await db.SaveChangesAsync();
 
         var history = await repository.GetHistoryAsync(
             12345,
@@ -174,7 +172,12 @@ public sealed class CombatIntelPostgresPersistenceTests : IAsyncLifetime
         await Assert.ThrowsAsync<ArgumentException>(() =>
             repository.AppendAsync(bypassedProviderClockValidation, trustedReference, CancellationToken.None));
 
-        Assert.Equal(2, await db.CombatIntelObservations.CountAsync());
+        var historyAfterRejectedWrites = await repository.GetHistoryAsync(
+            12345,
+            null,
+            null,
+            CancellationToken.None);
+        Assert.Equal(2, historyAfterRejectedWrites.Count);
 
         var indexNames = new HashSet<string>(StringComparer.Ordinal);
         var connection = db.Database.GetDbConnection();
