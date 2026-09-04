@@ -9,6 +9,8 @@ u001-honest-signal	scripts/verify/u001-honest-signal.sh	offline	required	rg	-
 w05-scouting-contract	scripts/verify/w05-scouting-contract.sh	offline	required	grep,dotnet	-
 w06-chain-contract	scripts/verify/w06-chain-contract.sh	offline	required	rg,dotnet	-
 w07-key-vault-contract	scripts/verify/w07-key-vault-contract.sh	offline	required	rg,sed,dotnet	-
+task-lease	scripts/verify/task-lease.sh	handoff	excluded	bash,git,gh,python3	Validates a live GitHub task/branch lease at agent handoff; requires repository issue/PR state.
+task-lease-regression	scripts/verify/task-lease-regression.sh	offline	required	bash,git,python3,grep	-
 hermetic-test-runner	scripts/verify/hermetic-tests.sh	test-runner	excluded	dotnet,env	Invoked after build as the ordinary test runner; it is not a contract verifier.
 devhost-contract	scripts/verify/devhost-contract.sh	operator	excluded	bash	Targets the configured dev-host deployment rather than a clean repository clone.
 devhost-smoke	scripts/verify/devhost-smoke.sh	operator	excluded	bash,curl	Requires a running dev host and network access.
