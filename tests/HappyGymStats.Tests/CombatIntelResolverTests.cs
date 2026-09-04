@@ -1,4 +1,5 @@
 using HappyGymStats.Core.War;
+using Xunit;
 
 namespace HappyGymStats.Tests;
 
@@ -71,16 +72,18 @@ public sealed class CombatIntelResolverTests
     public void Resolve_rejects_private_faction_intel_from_another_faction()
     {
         var publicObservation = Observation("public", provider: "public", observedMinutesAgo: 5);
-        var ownFaction = Observation("own", provider: "private", observedMinutesAgo: 1) with
-        {
-            VisibilityScope = CombatIntelVisibilityScope.Faction,
-            VisibilityOwner = "faction-10",
-        };
-        var otherFaction = Observation("other", provider: "private", observedMinutesAgo: 0) with
-        {
-            VisibilityScope = CombatIntelVisibilityScope.Faction,
-            VisibilityOwner = "faction-20",
-        };
+        var ownFaction = Observation(
+            "own",
+            provider: "private",
+            observedMinutesAgo: 1,
+            visibilityScope: CombatIntelVisibilityScope.Faction,
+            visibilityOwner: "faction-10");
+        var otherFaction = Observation(
+            "other",
+            provider: "private",
+            observedMinutesAgo: 0,
+            visibilityScope: CombatIntelVisibilityScope.Faction,
+            visibilityOwner: "faction-20");
 
         var result = CombatIntelResolver.Resolve(
             42,
@@ -97,11 +100,12 @@ public sealed class CombatIntelResolverTests
     [Fact]
     public void Resolve_rejects_member_private_intel_for_another_member()
     {
-        var privateObservation = Observation("private", provider: "linked", observedMinutesAgo: 0) with
-        {
-            VisibilityScope = CombatIntelVisibilityScope.Member,
-            VisibilityOwner = "member-a",
-        };
+        var privateObservation = Observation(
+            "private",
+            provider: "linked",
+            observedMinutesAgo: 0,
+            visibilityScope: CombatIntelVisibilityScope.Member,
+            visibilityOwner: "member-a");
 
         var denied = CombatIntelResolver.Resolve(
             42,
@@ -123,10 +127,7 @@ public sealed class CombatIntelResolverTests
     public void Resolve_never_mixes_different_players()
     {
         var target = Observation("target", provider: "provider", observedMinutesAgo: 10);
-        var newerOtherPlayer = Observation("other-player", provider: "provider", observedMinutesAgo: 0) with
-        {
-            PlayerId = 99,
-        };
+        var newerOtherPlayer = Observation("other-player", provider: "provider", observedMinutesAgo: 0, playerId: 99);
 
         var result = CombatIntelResolver.Resolve(42, [newerOtherPlayer, target], new(), Now);
 
@@ -142,11 +143,9 @@ public sealed class CombatIntelResolverTests
             provider: "provider-neutral-name",
             observedMinutesAgo: 1,
             lower: 1_000m,
-            upper: 2_000m) with
-        {
-            ProviderMetadata = "opaque-provider-metadata",
-            SupersedesObservationId = "estimate-old",
-        };
+            upper: 2_000m,
+            providerMetadata: "opaque-provider-metadata",
+            supersedesObservationId: "estimate-old");
 
         var result = CombatIntelResolver.Resolve(42, [observation], new(), Now);
 
@@ -157,6 +156,80 @@ public sealed class CombatIntelResolverTests
         Assert.Equal("estimate-old", result.Winner?.SupersedesObservationId);
     }
 
+    [Theory]
+    [InlineData(CombatIntelClassification.Exact, null, null, null)]
+    [InlineData(CombatIntelClassification.Exact, 100d, 90d, null)]
+    [InlineData(CombatIntelClassification.Estimated, 100d, 90d, 110d)]
+    [InlineData(CombatIntelClassification.Estimated, null, null, 110d)]
+    [InlineData(CombatIntelClassification.Estimated, null, 120d, 110d)]
+    public void Observation_creation_rejects_invalid_value_shapes(
+        CombatIntelClassification classification,
+        double? value,
+        double? lower,
+        double? upper)
+    {
+        Assert.Throws<ArgumentException>(() => CombatIntelObservation.Create(
+            "bad-shape",
+            42,
+            "provider",
+            Now,
+            Now,
+            classification,
+            value is null ? null : (decimal)value.Value,
+            lower is null ? null : (decimal)lower.Value,
+            upper is null ? null : (decimal)upper.Value));
+    }
+
+    [Theory]
+    [InlineData("", 42, "provider")]
+    [InlineData("id", 0, "provider")]
+    [InlineData("id", -1, "provider")]
+    [InlineData("id", 42, "")]
+    [InlineData("id", 42, "   ")]
+    public void Observation_creation_rejects_invalid_identity_and_provenance(string id, long playerId, string provider)
+    {
+        Assert.ThrowsAny<ArgumentException>(() => CombatIntelObservation.Create(
+            id,
+            playerId,
+            provider,
+            Now,
+            Now,
+            CombatIntelClassification.Estimated,
+            lowerBound: 100m,
+            upperBound: 200m));
+    }
+
+    [Fact]
+    public void Observation_creation_rejects_observed_time_after_fetch_time()
+    {
+        Assert.Throws<ArgumentException>(() => CombatIntelObservation.Create(
+            "bad-time",
+            42,
+            "provider",
+            Now,
+            Now.AddSeconds(1),
+            CombatIntelClassification.Estimated,
+            lowerBound: 100m,
+            upperBound: 200m));
+    }
+
+    [Theory]
+    [InlineData(CombatIntelVisibilityScope.Faction)]
+    [InlineData(CombatIntelVisibilityScope.Member)]
+    public void Observation_creation_rejects_private_scope_without_owner(CombatIntelVisibilityScope scope)
+    {
+        Assert.Throws<ArgumentException>(() => CombatIntelObservation.Create(
+            "private-without-owner",
+            42,
+            "provider",
+            Now,
+            Now,
+            CombatIntelClassification.Estimated,
+            lowerBound: 100m,
+            upperBound: 200m,
+            visibilityScope: scope));
+    }
+
     private static CombatIntelObservation Observation(
         string id,
         string provider,
@@ -164,21 +237,27 @@ public sealed class CombatIntelResolverTests
         CombatIntelClassification classification = CombatIntelClassification.Estimated,
         decimal? value = null,
         decimal? lower = 100m,
-        decimal? upper = 200m)
+        decimal? upper = 200m,
+        long playerId = 42,
+        CombatIntelVisibilityScope visibilityScope = CombatIntelVisibilityScope.Public,
+        string? visibilityOwner = null,
+        string? providerMetadata = null,
+        string? supersedesObservationId = null)
     {
         var observedAt = Now.AddMinutes(-observedMinutesAgo);
-        return new CombatIntelObservation
-        {
-            ObservationId = id,
-            PlayerId = 42,
-            Provider = provider,
-            ObservedAtUtc = observedAt,
-            FetchedAtUtc = observedAt,
-            Classification = classification,
-            Value = value,
-            LowerBound = value.HasValue ? null : lower,
-            UpperBound = value.HasValue ? null : upper,
-            VisibilityScope = CombatIntelVisibilityScope.Public,
-        };
+        return CombatIntelObservation.Create(
+            id,
+            playerId,
+            provider,
+            observedAt,
+            observedAt,
+            classification,
+            value,
+            classification == CombatIntelClassification.Exact ? null : lower,
+            classification == CombatIntelClassification.Exact ? null : upper,
+            visibilityScope,
+            visibilityOwner,
+            providerMetadata,
+            supersedesObservationId);
     }
 }
