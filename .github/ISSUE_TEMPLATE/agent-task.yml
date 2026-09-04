@@ -1,0 +1,74 @@
+name: Agent task lease
+description: Claim one implementation task/branch so parallel agents do not collide.
+title: "Agent task: "
+labels:
+  - agent-task
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One active task owns one branch. Use a fresh task/branch after merge or closure unless this task is explicitly reopened.
+  - type: input
+    id: base-sha
+    attributes:
+      label: Base SHA
+      description: Exact commit this task branch started from.
+      placeholder: 40-character commit SHA
+    validations:
+      required: true
+  - type: input
+    id: branch
+    attributes:
+      label: Branch
+      description: One branch owned by this task.
+      placeholder: feat/example-task
+    validations:
+      required: true
+  - type: input
+    id: owner-session
+    attributes:
+      label: Owner/session
+      description: Agent/session identifier responsible for the branch.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What this branch is allowed to change.
+    validations:
+      required: true
+  - type: textarea
+    id: non-scope
+    attributes:
+      label: Non-scope
+      description: Explicitly excluded work to prevent adjacent agents from overlapping.
+    validations:
+      required: true
+  - type: input
+    id: depends-on
+    attributes:
+      label: Depends on
+      description: Parent issue/PR/branch, or none. Use #123 syntax for PR dependencies so the validator can check merged parents.
+      placeholder: none
+    validations:
+      required: true
+  - type: input
+    id: required-evidence
+    attributes:
+      label: Required evidence
+      description: Evidence tier(s) required by the task/diff.
+      placeholder: T1
+    validations:
+      required: true
+  - type: dropdown
+    id: state
+    attributes:
+      label: State
+      options:
+        - active
+        - blocked
+        - handoff
+        - complete
+    validations:
+      required: true
