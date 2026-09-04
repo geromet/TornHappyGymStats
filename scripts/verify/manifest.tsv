@@ -2,7 +2,7 @@ id	script	tier	gate	dependencies	exclusion_reason
 build-entrypoint	scripts/verify/build-and-test.sh	orchestrator	excluded	bash,dotnet	Bootstrap entrypoint; consumes this manifest and therefore cannot route itself.
 verify-common	scripts/verify/verify-common.sh	library	excluded	bash	Sourced helper library; not an executable verification assertion.
 verifier-graph	scripts/verify/verifier-graph.sh	bootstrap	excluded	bash	Bootstraps and validates the manifest before manifest routing begins.
-verifier-graph-regression	scripts/verify/verifier-graph-regression.sh	offline	required	bash	-
+verifier-graph-regression	scripts/verify/verifier-graph-regression.sh	offline	required	bash,mktemp,mkdir,rm,chmod,cat,cp,ln,grep,wc,rg,dirname,touch	-
 privacy-playerid-logs	scripts/verify/no-raw-playerid-log-templates.sh	offline	required	rg,wc	-
 menu-contract	scripts/verify/menu-contract.sh	offline	required	bash,grep,awk,wc	-
 u001-honest-signal	scripts/verify/u001-honest-signal.sh	offline	required	rg	-
