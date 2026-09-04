@@ -29,6 +29,20 @@ public sealed class PostgresApiIntegrationTests : IAsyncLifetime
     private const string SkipEnvVar = "HAPPYGYMSTATS_SKIP_POSTGRES_INTEGRATION";
     private const string StartupTimeoutEnvVar = "HAPPYGYMSTATS_POSTGRES_START_TIMEOUT_SECONDS";
 
+    // Set this where the tier MUST actually execute — CI, above all.
+    //
+    // WHY THIS EXISTS. Every skip path below reports the test as PASSED. That is
+    // the right default on a laptop with no Docker daemon, but it means a green
+    // suite is not evidence the Postgres tier ran: three of these tests were
+    // green and vacuous for months (see aee793d, f731316). A CI job that merely
+    // ran `dotnet test` would inherit exactly that, and we would have automated
+    // the false reassurance instead of the check.
+    //
+    // With this set, a skip becomes a hard failure naming the reason. It wins
+    // over SkipEnvVar deliberately: asking to require and to skip at once is a
+    // configuration mistake, and the safe reading of it is "run the tests".
+    private const string RequireEnvVar = "HAPPYGYMSTATS_REQUIRE_POSTGRES_INTEGRATION";
+
     private PostgreSqlContainer? _postgres;
     private string? _skipReason;
     private string _surfacesCacheDirectory = string.Empty;
@@ -216,16 +230,35 @@ public sealed class PostgresApiIntegrationTests : IAsyncLifetime
         if (_skipReason is null)
             return false;
 
+        // The single choke point every test already routes through, so requiring
+        // the tier cannot be forgotten in a new test the way an attribute could.
+        if (IsRequired())
+        {
+            Assert.True(
+                false,
+                $"{RequireEnvVar} is set, so this tier must run, but it did not: {_skipReason}");
+        }
+
         _output.WriteLine(_skipReason);
         return true;
     }
 
+    private static bool IsRequired() => IsTruthy(Environment.GetEnvironmentVariable(RequireEnvVar));
+
+    private static bool IsTruthy(string? raw) =>
+        string.Equals(raw, "1", StringComparison.Ordinal)
+        || string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(raw, "yes", StringComparison.OrdinalIgnoreCase);
+
     private bool ShouldForceSkipFromEnvironment()
     {
-        var raw = Environment.GetEnvironmentVariable(SkipEnvVar);
-        if (!string.Equals(raw, "1", StringComparison.Ordinal)
-            && !string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(raw, "yes", StringComparison.OrdinalIgnoreCase))
+        // Requiring the tier overrides asking to skip it; ShouldSkipIntegration
+        // turns the resulting _skipReason into a failure either way, but not
+        // setting it here keeps the reported reason honest.
+        if (IsRequired())
+            return false;
+
+        if (!IsTruthy(Environment.GetEnvironmentVariable(SkipEnvVar)))
             return false;
 
         _skipReason = $"[skip] {SkipEnvVar} is set; Postgres integration tier intentionally skipped.";
