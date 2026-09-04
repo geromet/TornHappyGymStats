@@ -157,6 +157,8 @@ else if (!_loading && _loadError == null && _surfaces != null && !_gymPointCloud
 
     protected override async Task OnInitializedAsync()
     {
+        // Read the switch before the data so a disabled cloud never briefly
+        // renders on load.
         _gymPointCloudEnabled = (await UiSettings.GetAsync()).GymPointCloudEnabled;
         await LoadSurfacesAsync();
     }
@@ -171,6 +173,8 @@ else if (!_loading && _loadError == null && _surfaces != null && !_gymPointCloud
             if (await UiSettings.SetGymPointCloudAsync(target))
             {
                 _gymPointCloudEnabled = target;
+                // The chart is torn down with the card, so it must be redrawn
+                // when the cloud is switched back on.
                 _chartsDrawn = false;
                 _statusSeverity = Severity.Success;
                 _statusMessage = target
