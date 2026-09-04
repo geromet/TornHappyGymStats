@@ -39,28 +39,30 @@ public sealed class ImportOrchestrator : BackgroundService
     public ImportJobStatus? Latest => _latest;
 
     /// <summary>
-    /// Enqueue an import if none is already running.
-    /// Returns the status of the enqueued (or already-running) job.
+    /// Enqueue a fresh anonymous import if none is already running.
+    /// Anonymous resume is intentionally forbidden because it has no authorized owner identity.
     /// </summary>
     public ImportJobStatus Enqueue(string apiKey, bool fresh, byte[]? publicKey = null)
     {
+        if (!fresh)
+            throw new ArgumentException("Anonymous imports must be fresh.", nameof(fresh));
+
         if (_latest is { IsTerminal: false })
             return _latest;
 
-        // Generate AnonymousId here for fresh imports so callers can use it immediately
-        // (e.g. to create an IdentityMap entry before the background job runs).
-        // Resume imports resolve the existing AnonymousId from the DB in RunImportAsync.
-        var anonymousId = fresh ? Guid.NewGuid() : Guid.Empty;
-
-        return EnqueueInternal(apiKey, fresh, anonymousId, publicKey);
+        var anonymousId = Guid.NewGuid();
+        return EnqueueInternal(apiKey, fresh: true, anonymousId, publicKey);
     }
 
-    public ImportJobStatus EnqueueForAnonymousId(string apiKey, Guid anonymousId, byte[]? publicKey = null)
+    public ImportJobStatus EnqueueForAnonymousId(string apiKey, Guid anonymousId, bool fresh, byte[]? publicKey = null)
     {
+        if (anonymousId == Guid.Empty)
+            throw new ArgumentException("AnonymousId must identify the import owner.", nameof(anonymousId));
+
         if (_latest is { IsTerminal: false })
             return _latest;
 
-        return EnqueueInternal(apiKey, fresh: true, anonymousId, publicKey);
+        return EnqueueInternal(apiKey, fresh, anonymousId, publicKey);
     }
 
     private ImportJobStatus EnqueueInternal(string apiKey, bool fresh, Guid anonymousId, byte[]? publicKey)
@@ -115,17 +117,12 @@ public sealed class ImportOrchestrator : BackgroundService
             var logFetcher = scope.ServiceProvider.GetRequiredService<LogFetcher>();
             var perkFetcher = scope.ServiceProvider.GetRequiredService<PerkLogFetcher>();
             var reconstructionRunner = scope.ServiceProvider.GetRequiredService<ReconstructionRunner>();
-            var importRunRepo = scope.ServiceProvider.GetRequiredService<IImportRunRepository>();
             var identityMapRepo = scope.ServiceProvider.GetRequiredService<IIdentityMapRepository>();
             var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
             var tornPlayerId = await tornClient.GetPlayerIdAsync(request.ApiKey, stoppingToken).ConfigureAwait(false);
-
             var mode = request.Fresh ? FetchMode.Fresh : FetchMode.Resume;
-
-            Guid anonymousId = request.AnonymousId != Guid.Empty
-                ? request.AnonymousId
-                : await importRunRepo.ResolveAnonymousIdAsync(stoppingToken).ConfigureAwait(false) ?? Guid.NewGuid();
+            var anonymousId = request.AnonymousId;
 
             _logger.LogInformation("Import job {JobId} API key validated for AnonymousId {AnonymousId}", request.JobId, anonymousId);
 

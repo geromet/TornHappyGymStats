@@ -44,6 +44,9 @@ public sealed class LogFetcher
         if (string.IsNullOrWhiteSpace(apiKey))
             throw new ArgumentException("API key must be provided.", nameof(apiKey));
 
+        if (anonymousId == Guid.Empty)
+            throw new ArgumentException("AnonymousId must identify the import owner.", nameof(anonymousId));
+
         if (options is null)
             throw new ArgumentNullException(nameof(options));
 
@@ -69,8 +72,8 @@ public sealed class LogFetcher
         }
         else
         {
-            // Resume: find latest incomplete run for this player that has a NextUrl.
-            var priorRun = await _importRunRepo.GetLatestIncompleteAsync(ct);
+            // Resume: find latest incomplete run for this owner that has a NextUrl.
+            var priorRun = await _importRunRepo.GetLatestIncompleteAsync(anonymousId, ct);
 
             if (priorRun is null || string.IsNullOrWhiteSpace(priorRun.NextUrl))
             {

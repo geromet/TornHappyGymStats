@@ -41,7 +41,14 @@ public sealed class ImportController : ApiControllerBase
         if (string.IsNullOrWhiteSpace(apiKey))
             return ValidationError("apiKey is required.", new { field = "apiKey" });
 
-        var status = _importService.Enqueue(apiKey, request?.Fresh ?? false);
+        if (request?.Fresh != true)
+        {
+            return ValidationError(
+                "Anonymous import requests must be fresh. Resume through the authenticated /me endpoint.",
+                new { field = "fresh" });
+        }
+
+        var status = _importService.Enqueue(apiKey, fresh: true);
         var statusCode = status.IsTerminal ? StatusCodes.Status200OK : StatusCodes.Status202Accepted;
 
         return StatusCode(statusCode, ToDto(status));
@@ -84,7 +91,11 @@ public sealed class ImportController : ApiControllerBase
             return ApiError(StatusCodes.Status403Forbidden, "forbidden", "Caller identity does not match the mapped owner.");
         }
 
-        var status = _importService.EnqueueForAnonymousId(apiKey, callerAnonymousId, map.PublicKey);
+        var status = _importService.EnqueueForAnonymousId(
+            apiKey,
+            callerAnonymousId,
+            request?.Fresh ?? false,
+            map.PublicKey);
         var statusCode = status.IsTerminal ? StatusCodes.Status200OK : StatusCodes.Status202Accepted;
 
         _logger.LogInformation(

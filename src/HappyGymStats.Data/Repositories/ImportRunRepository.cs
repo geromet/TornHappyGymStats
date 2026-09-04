@@ -10,29 +10,22 @@ public sealed class ImportRunRepository(HappyGymStatsDbContext db) : IImportRunR
     {
         db.ImportRuns.Add(run);
         return Task.FromResult(run);
-        // No save — caller commits via IUnitOfWork
     }
 
     public Task UpdateAsync(ImportRunEntity run, CancellationToken ct)
     {
-        // Entity already tracked by shared scoped DbContext. No-op here.
-        // Caller commits via IUnitOfWork to flush mutations.
         return Task.CompletedTask;
     }
 
-    public Task<ImportRunEntity?> GetLatestIncompleteAsync(CancellationToken ct)
-        => db.ImportRuns
-            .Where(r => r.CompletedAtUtc == null && r.NextUrl != null)
-            .OrderByDescending(r => r.StartedAtUtc)
-            .FirstOrDefaultAsync(ct);
-
-    public async Task<Guid?> ResolveAnonymousIdAsync(CancellationToken ct)
+    public Task<ImportRunEntity?> GetLatestIncompleteAsync(Guid anonymousId, CancellationToken ct)
     {
-        return await db.ImportRuns
+        if (anonymousId == Guid.Empty)
+            throw new ArgumentException("AnonymousId must identify the import owner.", nameof(anonymousId));
+
+        return db.ImportRuns
             .AsNoTracking()
-            .Where(r => r.AnonymousId != null)
+            .Where(r => r.AnonymousId == anonymousId && r.CompletedAtUtc == null && r.NextUrl != null)
             .OrderByDescending(r => r.StartedAtUtc)
-            .Select(r => r.AnonymousId)
             .FirstOrDefaultAsync(ct);
     }
 }
