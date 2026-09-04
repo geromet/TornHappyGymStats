@@ -1,0 +1,38 @@
+id	script	tier	gate	dependencies	exclusion_reason
+build-entrypoint	scripts/verify/build-and-test.sh	orchestrator	excluded	bash,dotnet	Bootstrap entrypoint; consumes this manifest and therefore cannot route itself.
+verify-common	scripts/verify/verify-common.sh	library	excluded	bash	Sourced helper library; not an executable verification assertion.
+verifier-graph	scripts/verify/verifier-graph.sh	bootstrap	excluded	bash	Bootstraps and validates the manifest before manifest routing begins.
+verifier-graph-regression	scripts/verify/verifier-graph-regression.sh	offline	required	bash	-
+privacy-playerid-logs	scripts/verify/no-raw-playerid-log-templates.sh	offline	required	rg,wc	-
+menu-contract	scripts/verify/menu-contract.sh	offline	required	bash,grep,awk,wc	-
+u001-honest-signal	scripts/verify/u001-honest-signal.sh	offline	required	rg	-
+w05-scouting-contract	scripts/verify/w05-scouting-contract.sh	offline	required	grep,dotnet	-
+w06-chain-contract	scripts/verify/w06-chain-contract.sh	offline	required	rg,dotnet	-
+w07-key-vault-contract	scripts/verify/w07-key-vault-contract.sh	offline	required	rg,sed,dotnet	-
+hermetic-test-runner	scripts/verify/hermetic-tests.sh	test-runner	excluded	dotnet,env	Invoked after build as the ordinary test runner; it is not a contract verifier.
+devhost-contract	scripts/verify/devhost-contract.sh	operator	excluded	bash	Targets the configured dev-host deployment rather than a clean repository clone.
+devhost-smoke	scripts/verify/devhost-smoke.sh	operator	excluded	bash,curl	Requires a running dev host and network access.
+m004-final-gate	scripts/verify/m004-my-stats-final-gate.sh	operator	excluded	bash	Milestone/operator gate with deployment prerequisites; not a merge-safe offline verifier.
+production-smoke	scripts/verify/production-smoke.sh	operator	excluded	bash,curl	Requires production network endpoints and credentials/configuration.
+publish-smoke	scripts/verify/publish-smoke.sh	operator	excluded	bash	Validates publish/deploy output rather than source-only merge correctness.
+remote-heredoc-lint	scripts/verify/remote-heredoc-lint.sh	offline	excluded	bash	Legacy targeted verifier; keep registered until folded into the canonical shell contract rather than silently expanding the gate.
+remote-layout-check	scripts/verify/remote-layout-check.sh	operator	excluded	bash	Validates remote deployment layout and therefore needs a prepared target.
+s01-api-production-contract	scripts/verify/s01-api-production-contract.sh	offline	excluded	bash	Legacy milestone contract; register explicitly until its assertions are consolidated into canonical architecture tests.
+s02-blazor-api-boundary	scripts/verify/s02-blazor-api-boundary.sh	offline	excluded	bash	Legacy milestone boundary verifier; register explicitly until issue #76 moves source invariants into tests.
+s03-adminpanel-setup	scripts/verify/s03-adminpanel-setup.sh	operator	excluded	bash	Admin-panel setup verifier has host/deployment assumptions.
+s04-adminpanel-nginx-config	scripts/verify/s04-adminpanel-nginx-config.sh	operator	excluded	bash,nginx	Requires nginx configuration/tooling not guaranteed on a clean runner.
+s04-adminpanel-route	scripts/verify/s04-adminpanel-route.sh	operator	excluded	bash,curl	Requires a configured/running admin route.
+s05-local-surfaces	scripts/verify/s05-local-surfaces.sh	operator	excluded	bash	Exercises generated/local surface state rather than a source-only clone.
+s05-production-smoke-contract	scripts/verify/s05-production-smoke-contract.sh	operator	excluded	bash	Contract for production smoke tooling; keep explicit but outside the merge gate pending consolidation.
+s06-deploy-script-contract	scripts/verify/s06-deploy-script-contract.sh	offline	excluded	bash	Legacy deploy contract; keep registered and migrate under #76/#77 rather than silently changing canonical coverage.
+s06-provenance-warnings	scripts/verify/s06-provenance-warnings.sh	offline	excluded	bash	Legacy milestone verifier; keep explicit until provenance rules are represented by tests.
+s07-postgres-integration	scripts/verify/s07-postgres-integration.sh	postgres	excluded	docker,dotnet	Runs only in the dedicated non-skippable Postgres job from issue #60.
+s08-docs-contract	scripts/verify/s08-docs-contract.sh	offline	excluded	bash	Legacy docs milestone verifier; registered but not promoted to canonical gate by this routing-only change.
+s09-package-restore-policy	scripts/verify/s09-package-restore-policy.sh	offline	excluded	bash,dotnet	Package policy is being centralized under issue #68; avoid two competing merge gates during the transition.
+s09-runtime-reproducibility	scripts/verify/s09-runtime-reproducibility.sh	operator	excluded	bash	Runtime/deployment reproducibility has machine-level assumptions and belongs in its dedicated tier.
+scrub-playerid-payload	scripts/verify/scrub-playerid-logs-payload.sh	operator	excluded	bash	Mutation/remediation payload; not a verifier to run on a clean checkout.
+scrub-playerid-remote	scripts/verify/scrub-playerid-logs-remote.sh	operator	excluded	bash,ssh	Remote remediation wrapper; never run automatically in merge CI.
+w01-war-core-api-foundation	scripts/verify/w01-war-core-api-foundation.sh	offline	excluded	bash	Legacy milestone contract; registered explicitly until consolidated under architecture/tests work.
+w02-war-persistence-poller	scripts/verify/w02-war-persistence-and-poller.sh	offline	excluded	bash	Legacy milestone contract; registered explicitly until consolidated under architecture/tests work.
+w03-war-derived-state	scripts/verify/w03-war-derived-state-and-holes.sh	offline	excluded	bash	Legacy milestone contract; registered explicitly until consolidated under architecture/tests work.
+w04-war-api-hub-board	scripts/verify/w04-war-api-hub-board.sh	offline	excluded	bash	Legacy milestone contract; registered explicitly until consolidated under architecture/tests work.

@@ -253,6 +253,11 @@ reg_add verify-chain "Verify" \
   "verify/w06-chain-contract.sh" "-" "NONE" "" \
   "Pinned chain acceptance tests, board literals, and the Core boundary guardrail."
 
+reg_add verify-graph "Verify" \
+  "Verifier graph (manifest completeness, offline)" \
+  "verify/verifier-graph.sh" "-" "NONE" "" \
+  "Fails if a verifier script has no manifest row, a row points at a deleted script, or an exclusion has no stated reason."
+
 reg_add verify-hermetic "Verify" \
   "Hermetic test suite (developer config stripped)" \
   "verify/hermetic-tests.sh" "-" "NONE" "" \
@@ -294,6 +299,7 @@ REG_EXCLUDED=(
   "server-create-containers-user.sh:one-time server bootstrap, run once and done"
   "deploy-containers.sh:container stack deploy, superseded by upgrade-containers.sh for the live stack"
   "github-auth.sh:local developer setup, not a server operation"
+  "verifier-graph-regression.sh:negative control for the verifier graph, run by the canonical gate"
   "verify-common.sh:sourced library of fail-closed primitives, not a runnable task"
   "verify-s01-taxonomy.sh:one-off milestone check, superseded by the wNN contract verifiers"
 )
