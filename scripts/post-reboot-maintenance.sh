@@ -259,7 +259,6 @@ if grep -q 'REBOOT STILL PENDING' "${SURVEY_TMP}"; then
 fi
 
 KC_COMPOSE_FILE="$(grep -E '^\s*compose:' "${SURVEY_TMP}" | head -1 | sed 's/.*compose:[[:space:]]*//')"
-KC_SERVICE="$(grep -E '^\s*service:' "${SURVEY_TMP}" | head -1 | sed 's/.*service:[[:space:]]*//')"
 
 # ── Plan ──────────────────────────────────────────────────────────────────
 echo "==> Plan"

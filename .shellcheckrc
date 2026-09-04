@@ -1,0 +1,18 @@
+# ShellCheck configuration for this repository.
+#
+# One blanket exclusion, with a reason. Everything else is expected to pass, so
+# a new finding means a new problem rather than more of the existing noise.
+
+# SC2155 — "declare and assign separately to avoid masking return values".
+#
+# 87 of the 95 findings over these scripts were this one code, essentially all
+# of them the same idiom repeated at the top of every script:
+#
+#     readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+#
+# The masked status is real in general, but here `set -euo pipefail` is on
+# everywhere and the substitution is a `cd`/`dirname` pair whose failure would
+# take the script down anyway. Splitting 87 of these would churn every file in
+# scripts/ to satisfy a warning none of them has ever been bitten by, and would
+# bury the eight findings that do matter.
+disable=SC2155

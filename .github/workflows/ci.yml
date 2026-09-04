@@ -1,0 +1,114 @@
+# CI — run the gate this repo already has, somewhere it cannot be skipped.
+#
+# The repo's checks were always executable (scripts/verify/build-and-test.sh);
+# nothing ran them except a person remembering to. This is that, on every PR.
+#
+# It deliberately does NOT reimplement any check. build-and-test.sh is the
+# entrypoint, exactly as docs and CLAUDE.md say it is, so CI and a local run
+# cannot drift apart.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: build, verify contracts, test
+    runs-on: ubuntu-latest
+    env:
+      # THE POINT OF RUNNING THIS IN CI AT ALL.
+      #
+      # Every skip path in PostgresApiIntegrationTests reports the test as
+      # PASSED — correct on a laptop with no Docker daemon, and the reason
+      # three of those tests were green and vacuous for months (aee793d,
+      # f731316). A runner HAS Docker, so here the tier must actually execute;
+      # this flag turns a skip into a hard failure naming the reason.
+      HAPPYGYMSTATS_REQUIRE_POSTGRES_INTEGRATION: "1"
+      # Pulling and starting the postgres image on a cold runner is slower than
+      # a warm local daemon; the default 90s is not always enough.
+      HAPPYGYMSTATS_POSTGRES_START_TIMEOUT_SECONDS: "300"
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install .NET (version from global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore
+
+      # The whole gate: offline contract checks, then build, then the suite.
+      - name: scripts/verify/build-and-test.sh
+        run: bash scripts/verify/build-and-test.sh
+
+  format:
+    name: dotnet format
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore
+
+      # `whitespace`, not bare `dotnet format` — THIS MATTERS.
+      #
+      # Bare `dotnet format` also applies analyzer code fixes. Run once here it
+      # rewrote two ExecuteSqlRawAsync calls to ExecuteSqlAsync, which
+      # parameterises an interpolated string and so changed the SQL those tests
+      # generate. A failing test caught it. A CI job with --verify-no-changes
+      # would instead have told someone to run the command that does it.
+      - name: Check formatting
+        run: dotnet format whitespace --verify-no-changes --no-restore
+
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Blocking from the start, because the tree is clean at this severity.
+      # The first run over 65 never-linted scripts found 95 warnings, 87 of them
+      # SC2155 on one idiom (disabled with a reason in .shellcheckrc). Of the
+      # remaining eight, four were cross-file false positives, two were a split
+      # the author had already documented as deliberate, one was a genuinely
+      # missing `cd || exit`, and two were dead assignments now removed.
+      #
+      # patch-gsd-milestone-validator.sh is excluded because it is a Python
+      # script that was given a .sh extension. Worth renaming; not in this PR.
+      - name: Run shellcheck
+        run: |
+          shopt -s globstar nullglob
+          files=()
+          for f in scripts/**/*.sh; do
+            [[ "$(basename "$f")" == "patch-gsd-milestone-validator.sh" ]] && continue
+            files+=("$f")
+          done
+          printf 'linting %d scripts\n' "${#files[@]}"
+          shellcheck --severity=warning "${files[@]}"

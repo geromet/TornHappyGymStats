@@ -109,6 +109,7 @@ ui_menu() {
       return 0
     fi
     if [[ "${reply}" =~ ^[0-9]+$ ]] && (( reply >= 1 && reply <= ${#items[@]} )); then
+      # shellcheck disable=SC2034  # read by menu.sh after ui_select returns.
       UI_CHOICE="${reply}"
       return 0
     fi
