@@ -30,12 +30,20 @@ public sealed class Program
             .AddInteractiveServerComponents()
             .AddInteractiveWebAssemblyComponents();
 
+        // Data-protection key ring. Unset (localhost) keeps the framework default;
+        // the server units point it at their systemd StateDirectory, which
+        // survives both a restart and the release-symlink swap of a deploy.
+        // Without a stable ring every deploy invalidates every auth cookie and
+        // signs the whole site out.
         var keyRingPath = builder.Configuration["DataProtection:KeyRingPath"];
         if (!string.IsNullOrWhiteSpace(keyRingPath))
         {
             builder.Services
                 .AddDataProtection()
                 .PersistKeysToFileSystem(new DirectoryInfo(keyRingPath))
+                // Pinned, so production and dev never derive different keys from
+                // a changing entry-assembly name, and so the two hosts stay
+                // distinguishable if a ring is ever shared by mistake.
                 .SetApplicationName(builder.Configuration["DataProtection:ApplicationName"] ?? "HappyGymStats.Blazor");
         }
 
@@ -45,11 +53,15 @@ public sealed class Program
         builder.Services.AddScoped<IServerAccessTokenProvider, ServerAccessTokenProvider>();
         builder.Services.AddTransient<AccessTokenForwardingHandler>();
 
+        // Policy scaffold for future RBAC rollout.
+        // Inactive by default until pages/endpoints explicitly opt-in via [Authorize(Policy = "RequireRole")].
         builder.Services.AddAuthorization(options =>
         {
             options.AddPolicy("RequireRole", policy => policy.RequireRole("hgs-user"));
         });
 
+        // Reported after the host is built, so the message reaches the same log
+        // sinks as everything else rather than a half-configured logger.
         var startupClientSecretMissing = false;
         string? startupClientId = null;
 
@@ -68,6 +80,13 @@ public sealed class Program
                 ?? throw new InvalidOperationException("Missing required configuration key: Keycloak:ClientId");
             var keycloakClientSecret = keycloakSection["ClientSecret"];
 
+            // A confidential client whose secret went missing (an unreadable or
+            // unmounted EnvironmentFile, or a misspelled key in it) otherwise
+            // fails only at the token exchange, as an opaque invalid_client from
+            // Keycloak. Say so loudly at startup instead — but keep serving:
+            // this is the public site, and taking every anonymous page down over
+            // a sign-in misconfiguration is the worse failure of the two.
+            // Both server deployments set this; localhost leaves it unset.
             var requireClientSecret =
                 string.Equals(keycloakSection["RequireClientSecret"], "1", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(keycloakSection["RequireClientSecret"], "true", StringComparison.OrdinalIgnoreCase);
@@ -107,15 +126,21 @@ public sealed class Program
                     options.TokenValidationParameters.RoleClaimType = "roles";
                 });
 
+            // Maps the raw Keycloak "groups" claim onto roles, the same way the
+            // API and AdminPanel do. Without it, membership of /admins is
+            // invisible to <AuthorizeView Roles="admin">, so an administrator
+            // signs in successfully and still sees no admin controls.
             builder.Services.AddScoped<IClaimsTransformation, KeycloakGroupClaimsTransformer>();
         }
 
+        // In production we intentionally target API loopback (127.0.0.1:5047) to avoid external proxy/CDN hops.
         var apiBaseUrl = builder.Configuration["ApiBaseUrl"]
             ?? throw new InvalidOperationException("Missing required configuration key: ApiBaseUrl.");
 
         builder.Services.AddHttpClient<SurfacesService>(client =>
             client.BaseAddress = new Uri(apiBaseUrl));
 
+        // Writing a flag is admin-only, so this client forwards the access token.
         builder.Services.AddHttpClient<UiSettingsService>(client =>
                 client.BaseAddress = new Uri(apiBaseUrl))
             .AddHttpMessageHandler<AccessTokenForwardingHandler>();
@@ -170,7 +195,12 @@ public sealed class Program
         app.UseHttpsRedirection();
         app.UseAuthentication();
         app.UseAuthorization();
+
+        // Opt-in whole-site admin gate (Access:RestrictToAdmins). Off unless the
+        // deployment sets it, so production behaviour is unchanged; the dev host
+        // at torndev.geromet.com turns it on via its systemd unit.
         app.UseAdminOnlyAccessWhenConfigured(builder.Configuration);
+
         app.UseAntiforgery();
         app.MapStaticAssets();
 
