@@ -46,16 +46,11 @@
 
 @if (_loading)
 {
-    <MudCard Class="mb-4">
-        <MudCardContent Class="d-flex justify-center align-center pa-10">
-            <MudProgressCircular Indeterminate="true" Color="Color.Primary" Class="mr-4" />
-            <MudText Color="Color.Secondary">Loading your stats…</MudText>
-        </MudCardContent>
-    </MudCard>
+    <LoadingState Message="Loading your stats…" />
 }
 else if (_loadError != null)
 {
-    <MudAlert Severity="Severity.Warning" Class="mb-4">@_loadError</MudAlert>
+    <ErrorState Message="@_loadError" />
 }
 else if (_surfaces != null)
 {

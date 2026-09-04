@@ -1,0 +1,11 @@
+<MudCard Class="@Class">
+    <MudCardContent Class="d-flex justify-center align-center pa-10">
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" Class="mr-4" />
+        <MudText Color="Color.Secondary">@Message</MudText>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter] public string Message { get; set; } = "Loading…";
+    [Parameter] public string Class { get; set; } = "mb-4";
+}
