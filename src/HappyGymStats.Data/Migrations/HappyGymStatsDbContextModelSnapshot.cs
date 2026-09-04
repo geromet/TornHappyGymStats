@@ -483,6 +483,8 @@ namespace HappyGymStats.Data.Migrations
 
                     b.HasIndex("ConsentRecordId");
 
+                    b.HasIndex("ConsentRecordId", "AnonymousId");
+
                     b.ToTable("StoredApiKeys", (string)null);
                 });
 
