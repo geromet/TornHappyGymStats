@@ -1,17 +1,26 @@
-pattern	tier	reason
-*.razor	T2	Rendered Blazor surface; requires screenshot/browser evidence.
-*.razor.cs	T2	Rendered Blazor code-behind; requires screenshot/browser evidence.
-*.css	T2	Rendered styling; requires screenshot/browser evidence.
-*Theme*.cs	T2	Theme/rendering policy; requires screenshot/browser evidence.
-scripts/screenshot*.sh	T2	Rendering/screenshot tooling; requires visual proof that the resulting surface is correct.
-scripts/deploy*.sh	T3	Deployment behavior crosses the operator/remote boundary.
-scripts/recon-*.sh	T3	Remote reconnaissance behavior crosses the SSH/operator boundary.
-scripts/setup-*.sh	T3	Remote/server setup behavior crosses the operator boundary.
-scripts/*remote-exec*.sh	T3	Remote execution transport requires disposable/operator-boundary proof.
-infra/*	T3	Systemd/nginx/runtime infrastructure changes require environment-specific proof.
-src/HappyGymStats.Data/*	T4	Persistence/provider code requires real PostgreSQL proof.
-tests/*Postgres*	T4	PostgreSQL integration coverage itself requires the relational tier.
-*/Migrations/*	T4	EF migration/model changes require real PostgreSQL proof.
-*.sql	T4	Relational SQL behavior requires real PostgreSQL proof.
-*/*Npgsql*	T4	Npgsql-specific behavior requires real PostgreSQL proof.
-*/*EntityFramework*	T4	EF-specific behavior requires real PostgreSQL proof.
+pattern	tier	security	reason
+*.razor	T2	unchanged	Rendered Blazor surface; requires screenshot/browser evidence.
+*.razor.cs	T2	unchanged	Rendered Blazor code-behind; requires screenshot/browser evidence.
+*.css	T2	unchanged	Rendered styling; requires screenshot/browser evidence.
+*Theme*.cs	T2	unchanged	Theme/rendering policy; requires screenshot/browser evidence.
+scripts/screenshot*.sh	T2	unchanged	Rendering/screenshot tooling; requires visual proof that the resulting surface is correct.
+scripts/deploy*.sh	T3	unchanged	Deployment behavior crosses the operator/remote boundary.
+scripts/recon-*.sh	T3	unchanged	Remote reconnaissance behavior crosses the SSH/operator boundary.
+scripts/setup-*.sh	T3	unchanged	Remote/server setup behavior crosses the operator boundary.
+scripts/*remote-exec*.sh	T3	unchanged	Remote execution transport requires disposable/operator-boundary proof.
+scripts/menu.sh	T3	unchanged	Operator entrypoint can change which remote/deploy actions are executed.
+scripts/lib/registry.sh	T3	unchanged	Operator registry controls exposed remote/deploy commands and flags.
+infra/*	T3	changed	Runtime/reverse-proxy infrastructure is both operator-boundary and security-boundary sensitive.
+src/HappyGymStats.Identity/*	T1	changed	Identity/authentication code changes a security boundary.
+src/HappyGymStats.Api/Infrastructure/*	T1	changed	API infrastructure contains request/auth/public-boundary enforcement.
+src/HappyGymStats.Api/Controllers/*Auth*.cs	T1	changed	Authentication/authorization controller behavior is security-boundary sensitive.
+src/HappyGymStats.Api/Controllers/ImportController.cs	T1	changed	Import ownership and caller-scoped state are tenant security boundaries.
+*ImportOrchestrator*.cs	T1	changed	Import orchestration owns tenant/job isolation semantics.
+*WarKeyVault*.cs	T1	changed	Secret/key-vault behavior is a credential security boundary.
+*Redirect*.cs	T1	changed	Redirect locality/validation is a security boundary.
+src/HappyGymStats.Data/*	T4	unchanged	Persistence/provider code requires real PostgreSQL proof.
+tests/*Postgres*	T4	unchanged	PostgreSQL integration coverage itself requires the relational tier.
+*/Migrations/*	T4	unchanged	EF migration/model changes require real PostgreSQL proof.
+*.sql	T4	unchanged	Relational SQL behavior requires real PostgreSQL proof.
+*/*Npgsql*	T4	unchanged	Npgsql-specific behavior requires real PostgreSQL proof.
+*/*EntityFramework*	T4	unchanged	EF-specific behavior requires real PostgreSQL proof.
