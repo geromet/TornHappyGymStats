@@ -255,7 +255,7 @@ else if (!_loading && _loadError == null && _surfaces != null && !_gymPointCloud
 
             if (status?.Outcome == "failed")
             {
-                _statusMessage = $"Import failed: {status.ErrorMessage}";
+                _statusMessage = "Import failed. Please try again.";
                 _statusSeverity = Severity.Error;
                 return;
             }
