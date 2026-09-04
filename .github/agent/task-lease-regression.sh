@@ -1,38 +1,22 @@
 #!/usr/bin/env bash
-# Synthetic stale-branch/dependency controls for task-lease.sh.
+# Synthetic stale-branch/dependency/parser controls for task-lease.sh.
 set -euo pipefail
-
 readonly ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 readonly VALIDATOR="${ROOT_DIR}/.github/agent/task-lease.sh"
-for command_name in git jq mktemp base64 tr; do
-  command -v "${command_name}" >/dev/null 2>&1 || { echo "ERROR: missing ${command_name}" >&2; exit 2; }
-done
-
+for command_name in git jq mktemp base64 tr; do command -v "$command_name" >/dev/null || exit 2; done
 readonly TMP="$(mktemp -d)"
-trap 'rm -rf "${TMP}"' EXIT
-readonly REPO="${TMP}/repo"
-readonly FIX="${TMP}/fixtures"
-readonly BIN="${TMP}/bin"
-mkdir -p "${REPO}" "${FIX}" "${BIN}"
-
-git -C "${REPO}" init -q -b main
-git -C "${REPO}" config user.name fixture
-git -C "${REPO}" config user.email fixture@example.invalid
-printf 'base\n' > "${REPO}/file.txt"
-git -C "${REPO}" add file.txt
-git -C "${REPO}" commit -q -m base
-BASE="$(git -C "${REPO}" rev-parse HEAD)"
-git -C "${REPO}" switch -q -c feat/lease
-printf 'child\n' >> "${REPO}/file.txt"
-git -C "${REPO}" commit -qam child
-HEAD_SHA="$(git -C "${REPO}" rev-parse HEAD)"
-
-# A parent/main commit the child does not yet contain.
-git -C "${REPO}" switch -q main
-printf 'parent\n' >> "${REPO}/file.txt"
-git -C "${REPO}" commit -qam parent
-PARENT_SHA="$(git -C "${REPO}" rev-parse HEAD)"
-git -C "${REPO}" switch -q feat/lease
+trap 'rm -rf "$TMP"' EXIT
+readonly REPO="$TMP/repo" FIX="$TMP/fixtures" BIN="$TMP/bin"
+mkdir -p "$REPO" "$FIX" "$BIN"
+git -C "$REPO" init -q -b main
+git -C "$REPO" config user.name fixture
+git -C "$REPO" config user.email fixture@example.invalid
+printf 'base\n' > "$REPO/file.txt"; git -C "$REPO" add .; git -C "$REPO" commit -q -m base
+BASE="$(git -C "$REPO" rev-parse HEAD)"
+git -C "$REPO" switch -q -c feat/lease; printf 'child\n' >> "$REPO/file.txt"; git -C "$REPO" commit -qam child
+HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
+git -C "$REPO" switch -q main; printf 'parent\n' >> "$REPO/file.txt"; git -C "$REPO" commit -qam parent
+PARENT_SHA="$(git -C "$REPO" rev-parse HEAD)"; git -C "$REPO" switch -q feat/lease
 
 write_issue() {
   local number="$1" base="$2" branch="$3" depends="$4" state="$5" path="$6"
@@ -71,122 +55,78 @@ T1
 ${state}
 EOF
 )"
-  jq -n --argjson number "${number}" --arg body "${body}" '{number:$number,state:"open",body:$body}' > "${path}"
+  jq -n --argjson number "$number" --arg body "$body" '{number:$number,state:"open",title:"[agent-task] fixture",labels:[{name:"area:agent-workflow"}],body:$body}' > "$path"
 }
-
-write_issue 1 "${BASE}" feat/lease none Active "${FIX}/issue-1.json"
-write_issue 2 "${BASE}" other/branch none Active "${FIX}/issue-2.json"
-printf '[]\n' > "${FIX}/closed-prs.json"
-jq -n --arg sha "${PARENT_SHA}" '{number:10,state:"closed",merged_at:"2026-09-04T00:00:00Z",merge_commit_sha:$sha,head:{sha:$sha}}' > "${FIX}/pr-10.json"
+write_issue 1 "$BASE" feat/lease none Active "$FIX/issue-1.json"
+write_issue 2 "$BASE" other/branch none Active "$FIX/issue-2.json"
+printf '[]\n' > "$FIX/closed-prs.json"
 
 rebuild_open_issues() {
-  : > "${FIX}/open-issues.b64"
-  local file encoded
-  for file in "$@"; do
-    encoded="$(base64 < "${file}" | tr -d '\n')"
-    printf '%s\n' "${encoded}" >> "${FIX}/open-issues.b64"
-  done
+  : > "$FIX/open-issues.b64"
+  local file
+  for file in "$@"; do base64 < "$file" | tr -d '\n' >> "$FIX/open-issues.b64"; printf '\n' >> "$FIX/open-issues.b64"; done
 }
-rebuild_open_issues "${FIX}/issue-1.json"
+rebuild_open_issues "$FIX/issue-1.json"
 
-cat > "${BIN}/gh" <<'EOF'
+cat > "$BIN/gh" <<'EOF'
 #!/bin/sh
 set -eu
 : "${TASK_LEASE_FAKE_DIR:?}"
 args="$*"
 case "$args" in
-  *"issues?state=open"*) cat "${TASK_LEASE_FAKE_DIR}/open-issues.b64" ;;
-  *"issues/1"*) cat "${TASK_LEASE_FAKE_DIR}/issue-1.json" ;;
-  *"issues/2"*) cat "${TASK_LEASE_FAKE_DIR}/issue-2.json" ;;
-  *"pulls?state=closed"*) cat "${TASK_LEASE_FAKE_DIR}/closed-prs.json" ;;
-  *"pulls/10"*) cat "${TASK_LEASE_FAKE_DIR}/pr-10.json" ;;
-  *) echo "fake gh: unsupported call: $args" >&2; exit 64 ;;
+  *"issues?state=open"*) cat "$TASK_LEASE_FAKE_DIR/open-issues.b64" ;;
+  *"issues/1"*) cat "$TASK_LEASE_FAKE_DIR/issue-1.json" ;;
+  *"issues/2"*) cat "$TASK_LEASE_FAKE_DIR/issue-2.json" ;;
+  *"pulls?state=closed"*) cat "$TASK_LEASE_FAKE_DIR/closed-prs.json" ;;
+  *"pulls/10"*) cat "$TASK_LEASE_FAKE_DIR/pr-10.json" ;;
+  *) echo "unsupported fake gh call: $args" >&2; exit 64 ;;
 esac
 EOF
-chmod +x "${BIN}/gh"
+chmod +x "$BIN/gh"
 
 failures=0
 run_case() {
-  local expected="$1" label="$2" needle="$3"
-  shift 3
+  local expected="$1" label="$2" needle="$3"; shift 3
   local output status
   set +e
-  output="$(cd "${REPO}" && PATH="${BIN}:${PATH}" TASK_LEASE_FAKE_DIR="${FIX}" \
-    bash "${VALIDATOR}" --repo test/repo "$@" 2>&1)"
-  status=$?
+  output="$(cd "$REPO" && PATH="$BIN:$PATH" TASK_LEASE_FAKE_DIR="$FIX" bash "$VALIDATOR" --repo test/repo "$@" 2>&1)"; status=$?
   set -e
-
-  if [[ "${expected}" == pass ]]; then
-    if (( status == 0 )) && [[ "${output}" == *"TASK_LEASE_PASS"* ]]; then
-      printf 'PASS: %s\n' "${label}"
-    else
-      printf 'FAIL: %s unexpectedly failed\n%s\n' "${label}" "${output}" >&2
-      ((failures += 1))
-    fi
-    return
-  fi
-
-  if (( status == 0 )); then
-    printf 'FAIL: %s unexpectedly passed\n%s\n' "${label}" "${output}" >&2
-    ((failures += 1))
-  elif [[ "${output}" == *"${needle}"* ]]; then
-    printf 'PASS: %s\n' "${label}"
-  else
-    printf 'FAIL: %s failed for wrong reason; expected %q\n%s\n' "${label}" "${needle}" "${output}" >&2
-    ((failures += 1))
-  fi
+  if [[ "$expected" == pass ]]; then
+    if ((status==0)) && [[ "$output" == *TASK_LEASE_PASS* ]]; then echo "PASS: $label"; else echo "FAIL: $label\n$output" >&2; ((failures+=1)); fi
+  elif ((status!=0)) && [[ "$output" == *"$needle"* ]]; then echo "PASS: $label"; else echo "FAIL: $label expected '$needle'\n$output" >&2; ((failures+=1)); fi
 }
 
-run_case pass "valid active lease" "" \
-  --issue 1 --branch feat/lease --head "${HEAD_SHA}" --target-base "${BASE}"
+run_case pass "valid active lease" "" --issue 1 --branch feat/lease --head "$HEAD_SHA" --target-base "$BASE"
+run_case fail "branch mismatch" "branch mismatch" --issue 1 --branch other --head "$HEAD_SHA" --target-base "$BASE"
+run_case fail "stale target base" "refresh/rebase before handoff" --issue 1 --branch feat/lease --head "$HEAD_SHA" --target-base "$PARENT_SHA"
 
-run_case fail "branch mismatch" "branch mismatch" \
-  --issue 1 --branch feat/other --head "${HEAD_SHA}" --target-base "${BASE}"
+write_issue 1 main feat/lease none Active "$FIX/issue-1.json"; rebuild_open_issues "$FIX/issue-1.json"
+run_case fail "short/ref base is rejected" "full 40-hex" --issue 1 --branch feat/lease --head "$HEAD_SHA" --target-base "$BASE"
+write_issue 1 "$BASE" feat/lease none Active "$FIX/issue-1.json"; rebuild_open_issues "$FIX/issue-1.json"
 
-# The target branch advanced after the child forked.
-run_case fail "stale target base" "refresh/rebase before handoff" \
-  --issue 1 --branch feat/lease --head "${HEAD_SHA}" --target-base "${PARENT_SHA}"
+jq '.body += "\n### Branch\n\nfeat/lease\n"' "$FIX/issue-1.json" > "$FIX/tmp"; mv "$FIX/tmp" "$FIX/issue-1.json"; rebuild_open_issues "$FIX/issue-1.json"
+run_case fail "duplicate generated heading rejected" "exactly once" --issue 1 --branch feat/lease --head "$HEAD_SHA" --target-base "$BASE"
+write_issue 1 "$BASE" feat/lease none Active "$FIX/issue-1.json"; rebuild_open_issues "$FIX/issue-1.json"
 
-# Moving the lease's recorded base to a commit outside the child ancestry catches
-# rewritten/replaced work even when the branch name stayed the same.
-write_issue 1 "${PARENT_SHA}" feat/lease none Active "${FIX}/issue-1.json"
-rebuild_open_issues "${FIX}/issue-1.json"
-run_case fail "lease base no longer ancestor" "lease base" \
-  --issue 1 --branch feat/lease --head "${HEAD_SHA}" --target-base "${BASE}"
-write_issue 1 "${BASE}" feat/lease none Active "${FIX}/issue-1.json"
-rebuild_open_issues "${FIX}/issue-1.json"
+cat > "$FIX/pr-body.md" <<'EOF'
+<!-- hgs-evidence
+lease: none
+-->
+Task lease: #1
+EOF
+run_case fail "conflicting lease declarations rejected" "conflicting lease declarations" --pr-body-file "$FIX/pr-body.md" --allow-no-lease --branch feat/lease --head "$HEAD_SHA" --target-base "$BASE"
 
-# A branch is not silently reused after its task PR closes.
-jq -n --arg sha "${HEAD_SHA}" '[{number:9,state:"closed",closed_at:"2026-09-04T00:00:00Z",merged_at:null,head:{sha:$sha}}]' > "${FIX}/closed-prs.json"
-run_case fail "closed PR owns the finished branch" "already belongs to closed PR #9" \
-  --issue 1 --branch feat/lease --head "${HEAD_SHA}" --target-base "${BASE}"
+write_issue 2 "$BASE" feat/lease none Active "$FIX/issue-2.json"; rebuild_open_issues "$FIX/issue-1.json" "$FIX/issue-2.json"
+run_case fail "duplicate active branch lease" "duplicate active lease" --issue 1 --branch feat/lease --head "$HEAD_SHA" --target-base "$BASE"
+write_issue 2 "$BASE" other/branch none Active "$FIX/issue-2.json"; rebuild_open_issues "$FIX/issue-1.json"
 
-# Explicit reopening is the one supported exception.
-write_issue 1 "${BASE}" feat/lease none Reopened "${FIX}/issue-1.json"
-rebuild_open_issues "${FIX}/issue-1.json"
-run_case pass "explicitly reopened task may reuse its branch" "" \
-  --issue 1 --branch feat/lease --head "${HEAD_SHA}" --target-base "${BASE}"
-printf '[]\n' > "${FIX}/closed-prs.json"
-write_issue 1 "${BASE}" feat/lease none Active "${FIX}/issue-1.json"
+write_issue 1 "$BASE" feat/lease "PR #10" Active "$FIX/issue-1.json"; rebuild_open_issues "$FIX/issue-1.json"
+jq -n --arg sha "$PARENT_SHA" '{number:10,state:"open",merged_at:null,merge_commit_sha:null,head:{sha:$sha}}' > "$FIX/pr-10.json"
+run_case fail "open parent must be contained" "is open at" --issue 1 --branch feat/lease --head "$HEAD_SHA" --target-base "$BASE"
+jq -n --arg sha "$PARENT_SHA" '{number:10,state:"closed",merged_at:null,merge_commit_sha:null,head:{sha:$sha}}' > "$FIX/pr-10.json"
+run_case fail "closed-unmerged parent fails" "closed without merge" --issue 1 --branch feat/lease --head "$HEAD_SHA" --target-base "$BASE"
+jq -n --arg sha "$PARENT_SHA" '{number:10,state:"closed",merged_at:"2026-09-04T00:00:00Z",merge_commit_sha:$sha,head:{sha:$sha}}' > "$FIX/pr-10.json"
+run_case fail "merged parent not refreshed into child" "merged at" --issue 1 --branch feat/lease --head "$HEAD_SHA" --target-base "$BASE"
 
-# Two open lease issues may not own the same branch.
-write_issue 2 "${BASE}" feat/lease none Active "${FIX}/issue-2.json"
-rebuild_open_issues "${FIX}/issue-1.json" "${FIX}/issue-2.json"
-run_case fail "duplicate active branch lease" "duplicate active lease" \
-  --issue 1 --branch feat/lease --head "${HEAD_SHA}" --target-base "${BASE}"
-write_issue 2 "${BASE}" other/branch none Active "${FIX}/issue-2.json"
-rebuild_open_issues "${FIX}/issue-1.json"
-
-# A dependency that merged after the child forked must be incorporated before
-# handoff; merely changing the issue/PR state is not enough.
-write_issue 1 "${BASE}" feat/lease "PR #10" Active "${FIX}/issue-1.json"
-rebuild_open_issues "${FIX}/issue-1.json"
-run_case fail "merged parent not refreshed into child" "dependency PR #10 merged" \
-  --issue 1 --branch feat/lease --head "${HEAD_SHA}" --target-base "${BASE}"
-
-if (( failures > 0 )); then
-  printf 'TASK_LEASE_REGRESSION_FAIL failures=%d\n' "${failures}" >&2
-  exit 1
-fi
-
-echo "TASK_LEASE_REGRESSION_PASS"
+if ((failures>0)); then echo "TASK_LEASE_REGRESSION_FAIL failures=$failures" >&2; exit 1; fi
+echo TASK_LEASE_REGRESSION_PASS
