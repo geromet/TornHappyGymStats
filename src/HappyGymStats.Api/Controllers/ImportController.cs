@@ -41,10 +41,18 @@ public sealed class ImportController : ApiControllerBase
         if (string.IsNullOrWhiteSpace(apiKey))
             return ValidationError("apiKey is required.", new { field = "apiKey" });
 
-        var status = _importService.Enqueue(apiKey, request?.Fresh ?? false);
-        var statusCode = status.IsTerminal ? StatusCodes.Status200OK : StatusCodes.Status202Accepted;
+        if (request?.Fresh != true)
+        {
+            return ValidationError(
+                "Anonymous import requests must be fresh. Resume through the authenticated /me endpoint.",
+                new { field = "fresh" });
+        }
 
-        return StatusCode(statusCode, ToDto(status));
+        var admission = _importService.TryEnqueueFresh(apiKey);
+        if (!admission.Accepted)
+            return ImportBusy();
+
+        return StatusCode(StatusCodes.Status202Accepted, ToDto(admission.Status!));
     }
 
     [HttpPost("me")]
@@ -57,53 +65,41 @@ public sealed class ImportController : ApiControllerBase
         if (string.IsNullOrWhiteSpace(apiKey))
             return ValidationError("apiKey is required.", new { field = "apiKey" });
 
-        var anonymousIdClaim = User.FindFirstValue(Claims.AnonymousId);
-        if (!Guid.TryParse(anonymousIdClaim, out var callerAnonymousId))
-        {
-            _logger.LogWarning("Authenticated import rejected: endpoint={Endpoint} code={Code}", "/api/v1/torn/import-jobs/me", "invalid_anonymous_id_claim");
-            return ApiError(StatusCodes.Status401Unauthorized, "unauthorized", "Could not resolve caller identity.");
-        }
+        var owner = await ResolveAuthenticatedOwnerAsync(ct);
+        if (!owner.Success)
+            return owner.Error!;
 
-        var callerSub = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (string.IsNullOrWhiteSpace(callerSub))
-        {
-            _logger.LogWarning("Authenticated import rejected: endpoint={Endpoint} code={Code} anonymousId={AnonymousId}", "/api/v1/torn/import-jobs/me", "missing_subject_claim", callerAnonymousId);
-            return ApiError(StatusCodes.Status401Unauthorized, "unauthorized", "Could not resolve caller identity.");
-        }
+        var admission = _importService.TryEnqueueForAnonymousId(
+            apiKey,
+            owner.AnonymousId,
+            request?.Fresh ?? false,
+            owner.PublicKey);
+        if (!admission.Accepted)
+            return ImportBusy();
 
-        var map = await _identityMapRepo.GetByAnonymousIdAsync(callerAnonymousId, ct);
-        if (map is null)
-        {
-            _logger.LogWarning("Authenticated import rejected: endpoint={Endpoint} code={Code} anonymousId={AnonymousId}", "/api/v1/torn/import-jobs/me", "identity_map_missing", callerAnonymousId);
-            return ApiError(StatusCodes.Status409Conflict, "identity_setup_required", "Identity map record is missing. Re-link your account and try again.");
-        }
-
-        if (!string.Equals(map.KeycloakSub, callerSub, StringComparison.Ordinal))
-        {
-            _logger.LogWarning("Authenticated import rejected: endpoint={Endpoint} code={Code} anonymousId={AnonymousId}", "/api/v1/torn/import-jobs/me", "identity_map_subject_mismatch", callerAnonymousId);
-            return ApiError(StatusCodes.Status403Forbidden, "forbidden", "Caller identity does not match the mapped owner.");
-        }
-
-        var status = _importService.EnqueueForAnonymousId(apiKey, callerAnonymousId, map.PublicKey);
-        var statusCode = status.IsTerminal ? StatusCodes.Status200OK : StatusCodes.Status202Accepted;
-
+        var status = admission.Status!;
         _logger.LogInformation(
             "Authenticated import accepted: endpoint={Endpoint} statusCode={StatusCode} jobId={JobId} anonymousId={AnonymousId} outcome={Outcome}",
             "/api/v1/torn/import-jobs/me",
-            statusCode,
+            StatusCodes.Status202Accepted,
             status.Id,
-            callerAnonymousId,
+            owner.AnonymousId,
             status.Outcome);
 
-        return StatusCode(statusCode, ToDto(status));
+        return StatusCode(StatusCodes.Status202Accepted, ToDto(status));
     }
 
     [HttpGet("latest")]
+    [Authorize(Roles = Roles.User)]
     public IActionResult GetLatestImport()
     {
-        var status = _importService.Latest;
+        var anonymousIdClaim = User.FindFirstValue(Claims.AnonymousId);
+        if (!Guid.TryParse(anonymousIdClaim, out var callerAnonymousId))
+            return ApiError(StatusCodes.Status401Unauthorized, "unauthorized", "Could not resolve caller identity.");
+
+        var status = _importService.GetLatestForAnonymousId(callerAnonymousId);
         if (status is null)
-            return ApiError(StatusCodes.Status404NotFound, "not_found", "No import has been started.");
+            return ApiError(StatusCodes.Status404NotFound, "not_found", "No import has been started for this caller.");
 
         return Ok(ToDto(status));
     }
@@ -127,8 +123,11 @@ public sealed class ImportController : ApiControllerBase
             }
         }
 
-        var status = _importService.Enqueue(apiKey, fresh: true, publicKey);
+        var admission = _importService.TryEnqueueFresh(apiKey, publicKey);
+        if (!admission.Accepted)
+            return ImportBusy();
 
+        var status = admission.Status!;
         await _identityMapRepo.CreateAsync(new IdentityMapEntity
         {
             AnonymousId = status.AnonymousId,
@@ -149,7 +148,62 @@ public sealed class ImportController : ApiControllerBase
         });
     }
 
+    private async Task<AuthenticatedOwnerResolution> ResolveAuthenticatedOwnerAsync(CancellationToken ct)
+    {
+        var anonymousIdClaim = User.FindFirstValue(Claims.AnonymousId);
+        if (!Guid.TryParse(anonymousIdClaim, out var callerAnonymousId))
+        {
+            _logger.LogWarning("Authenticated import rejected: code={Code}", "invalid_anonymous_id_claim");
+            return AuthenticatedOwnerResolution.Fail(
+                ApiError(StatusCodes.Status401Unauthorized, "unauthorized", "Could not resolve caller identity."));
+        }
+
+        var callerSub = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(callerSub))
+        {
+            _logger.LogWarning("Authenticated import rejected: code={Code} anonymousId={AnonymousId}", "missing_subject_claim", callerAnonymousId);
+            return AuthenticatedOwnerResolution.Fail(
+                ApiError(StatusCodes.Status401Unauthorized, "unauthorized", "Could not resolve caller identity."));
+        }
+
+        var map = await _identityMapRepo.GetByAnonymousIdAsync(callerAnonymousId, ct);
+        if (map is null)
+        {
+            _logger.LogWarning("Authenticated import rejected: code={Code} anonymousId={AnonymousId}", "identity_map_missing", callerAnonymousId);
+            return AuthenticatedOwnerResolution.Fail(
+                ApiError(StatusCodes.Status409Conflict, "identity_setup_required", "Identity map record is missing. Re-link your account and try again."));
+        }
+
+        if (!string.Equals(map.KeycloakSub, callerSub, StringComparison.Ordinal))
+        {
+            _logger.LogWarning("Authenticated import rejected: code={Code} anonymousId={AnonymousId}", "identity_map_subject_mismatch", callerAnonymousId);
+            return AuthenticatedOwnerResolution.Fail(
+                ApiError(StatusCodes.Status403Forbidden, "forbidden", "Caller identity does not match the mapped owner."));
+        }
+
+        return AuthenticatedOwnerResolution.Ok(callerAnonymousId, map.PublicKey);
+    }
+
+    private IActionResult ImportBusy()
+        => ApiError(
+            StatusCodes.Status409Conflict,
+            "import_busy",
+            "Another import is already running. Try again shortly.");
+
     private static ImportStatusDto ToDto(ImportJobStatus s)
         => new(s.Id, s.Outcome, s.StartedAtUtc, s.CompletedAtUtc,
             s.PagesFetched, s.LogsFetched, s.LogsAppended, s.ErrorMessage);
+
+    private sealed record AuthenticatedOwnerResolution(
+        bool Success,
+        Guid AnonymousId,
+        byte[]? PublicKey,
+        IActionResult? Error)
+    {
+        public static AuthenticatedOwnerResolution Ok(Guid anonymousId, byte[]? publicKey)
+            => new(true, anonymousId, publicKey, null);
+
+        public static AuthenticatedOwnerResolution Fail(IActionResult error)
+            => new(false, Guid.Empty, null, error);
+    }
 }
