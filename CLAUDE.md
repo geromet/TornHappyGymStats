@@ -10,8 +10,8 @@ violation is expensive and silent.
 
 ## Two standing non-goals
 
-These are not preferences. They come from `docs/MILESTONES.md` and the hand-off
-pack, and they hold for every milestone.
+These are not preferences. They come from the hand-off pack and hold for every
+milestone. The stop-and-report gates are issue #104.
 
 1. **No game actions, ever.** No code path may issue a state-changing request to
    Torn — no auto-attack, refill, travel, or scripted click. Links to Torn are
@@ -73,8 +73,9 @@ format` — it also applies analyzer code fixes, and once rewrote
 
 ## Where the plans live, and which copy is real
 
-- `docs/MILESTONES.md` — feature milestones `M007`–`M013`.
-- `docs/UX-PLAN.md` — UX slices `U001`–`U006`.
+- **GitHub issues are authoritative for planned work.** `docs/MILESTONES.md`
+  and `docs/UX-PLAN.md` are pointers into them, kept because code and scripts
+  cite them by name. Do not add plans to those files; open or update an issue.
 - `workspace/V2/` — the authoritative hand-off pack. **Cite `workspace/V2/...`
   paths only.** `workspace/handoff/` (no `V2`) is a stale subset missing docs
   05–11.
@@ -83,9 +84,10 @@ format` — it also applies analyzer code fixes, and once rewrote
 - `workspace/archive/GSD/STATE.md` and `ROADMAP.md` belong to an external tool.
   `STATE.md` is **deliberately stale**. Do not edit or "fix" either.
 
-Some milestones have **gates** — stop-and-report points, not tasks. `docs/MILESTONES.md`
-lists them in a table. A gate's outcome gets written down whether or not it is
-favourable; a documented dead end is a complete outcome.
+Some milestones have **gates** — stop-and-report points, not tasks, listed in
+issue #104. A gate's outcome gets written down whether or not it is favourable;
+a documented dead end is a complete outcome. Three of the four can halt their
+milestone, so check #104 before starting M010, M012 or M013 work.
 
 ## Voice
 

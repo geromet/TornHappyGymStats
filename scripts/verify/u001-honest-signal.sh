@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# u001-honest-signal.sh — an estimate must never look like a fact (docs/UX-PLAN.md, U001).
+# u001-honest-signal.sh — an estimate must never look like a fact (U001; issue #94).
 #
 # WHAT THIS PINS, AND WHY IT IS SHAPED THIS WAY
 #
@@ -42,7 +42,7 @@ for kind in Measured Projected Inferred; do
 done
 if rg -q '^    [A-Z][A-Za-z]+,' "${KINDS}"; then
   count="$(rg -c '^    [A-Z][A-Za-z]+,' "${KINDS}")"
-  [[ "${count}" == "3" ]] || fail "FigureKind has ${count} values; U001 defines exactly three (see docs/UX-PLAN.md)"
+  [[ "${count}" == "3" ]] || fail "FigureKind has ${count} values; U001 defines exactly three (see issue #94)"
 fi
 pass "the vocabulary is exactly measured / projected / inferred"
 
