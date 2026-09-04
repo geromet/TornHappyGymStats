@@ -1,7 +1,7 @@
 using System.Security.Claims;
 using HappyGymStats.Api.Infrastructure;
 using HappyGymStats.Core.Models;
-using HappyGymStats.Core.Services;
+using HappyGymStats.Core.Repositories;
 using HappyGymStats.Identity.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,9 +11,9 @@ namespace HappyGymStats.Api.Controllers;
 [Route("api/v1/torn/gym-trains")]
 public sealed class GymTrainsController : ApiControllerBase
 {
-    private readonly GymTrainsService _service;
+    private readonly IUserLogEntryRepository _userLogs;
 
-    public GymTrainsController(GymTrainsService service) => _service = service;
+    public GymTrainsController(IUserLogEntryRepository userLogs) => _userLogs = userLogs;
 
     [HttpGet]
     public async Task<IActionResult> ListGymTrains(int? limit, string? cursor, CancellationToken ct)
@@ -24,7 +24,7 @@ public sealed class GymTrainsController : ApiControllerBase
         if (!CursorEncoder.TryDecode(cursor, out var pageCursor))
             return ValidationError("Cursor is invalid.", new { field = "cursor" });
 
-        var page = await _service.GetPageAsync(take, pageCursor, ct);
+        var page = await _userLogs.GetGymTrainsPageAsync(take, pageCursor, ct);
         return Ok(page);
     }
 
@@ -42,7 +42,7 @@ public sealed class GymTrainsController : ApiControllerBase
         if (!CursorEncoder.TryDecode(cursor, out var pageCursor))
             return ValidationError("Cursor is invalid.", new { field = "cursor" });
 
-        var page = await _service.GetPageAsync(anonymousId, take, pageCursor, ct);
+        var page = await _userLogs.GetGymTrainsPageAsync(anonymousId, take, pageCursor, ct);
         return Ok(page);
     }
 }
