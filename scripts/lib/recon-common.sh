@@ -70,6 +70,9 @@ else
 fi
 
 # Marker for a section we genuinely could not read.
+# shellcheck disable=SC2120  # recon-ports.sh calls this with an argument; shellcheck
+# cannot see that across a sourced file, and older versions than the local one report
+# it. Kept as an annotation so CI and a laptop agree.
 blind() {
   printf '    BLIND — needs root (%s)\n' "${1:-not readable as $(whoami 2>/dev/null || echo unknown)}"
 }
