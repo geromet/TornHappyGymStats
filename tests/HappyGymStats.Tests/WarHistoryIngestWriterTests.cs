@@ -132,7 +132,12 @@ public sealed class WarHistoryIngestWriterTests
             {
                 builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["ConnectionStrings:Default"] = "Host=localhost;Database=happy-gym-stats-tests;Username=test;Password=test",
+                    // The key Program.ResolveConnectionString actually reads. It used to
+                    // say "Default", which that method never looks at — the test passed
+                    // only because the API project's appsettings.json lands in the test
+                    // output directory and supplies a real-looking one. On a clean CI
+                    // checkout there was nothing to fall back on and this failed.
+                    ["ConnectionStrings:HappyGymStats"] = "Host=localhost;Database=happy-gym-stats-tests;Username=test;Password=test",
                     ["WarPoller:ApiKey"] = "test-key",
                     ["WarPoller:FactionId"] = "123",
                 });
