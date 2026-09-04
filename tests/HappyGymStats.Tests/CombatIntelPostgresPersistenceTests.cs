@@ -196,7 +196,7 @@ public sealed class CombatIntelPostgresPersistenceTests : IAsyncLifetime
         Assert.Contains("IX_CombatIntelObservations_Provider_ObservedAtUtc", indexNames);
         Assert.Contains("IX_CombatIntelObservations_Provider_FetchedAtUtc", indexNames);
         Assert.Contains("IX_CombatIntelObservations_PlayerId_Provider_ObservedAtUtc", indexNames);
-        Assert.Contains("IX_CombatIntelObservations_VisibilityScope_VisibilityOwner_ObservedAtUtc", indexNames);
+        Assert.Contains("IX_CombatIntel_Visibility_Owner_ObservedAtUtc", indexNames);
     }
 
     private static bool IsRequired() => IsTruthy(Environment.GetEnvironmentVariable(RequireEnvVar));
