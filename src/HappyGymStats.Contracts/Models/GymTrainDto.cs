@@ -1,4 +1,5 @@
 namespace HappyGymStats.Core.Models;
+
 public sealed record GymTrainDto(
     string LogId,
     DateTimeOffset OccurredAtUtc,

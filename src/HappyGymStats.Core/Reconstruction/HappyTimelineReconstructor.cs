@@ -140,141 +140,141 @@ public static class HappyTimelineReconstructor
             switch (ev)
             {
                 case MaxHappyEvent max:
-                {
-                    // Max-happy changes only affect the passive regen ceiling.
-                    // They do not immediately clamp current happy; Torn applies that on quarter-hour ticks.
-                    var before = currentHappy;
-                    var after = before;
-
-                    derivedEvents.Add(new DerivedHappyEvent(
-                        EventId: max.LogId,
-                        SourceLogId: max.LogId,
-                        OccurredAtUtc: max.OccurredAtUtc,
-                        EventType: "max_happy",
-                        HappyBeforeEvent: before,
-                        HappyAfterEvent: after,
-                        Delta: before is not null && after is not null ? after.Value - before.Value : null,
-                        HappyUsed: null,
-                        MaxHappyAtTimeUtc: maxAtEvent,
-                        ClampedToMax: false));
-
-                    currentHappy = after;
-                    break;
-                }
-
-                case OverdoseEvent od:
-                {
-                    // Overdose anchors: infer exact before/after based on drug percent loss.
-                    // This overrides currentHappy.
-                    int? inferredBefore;
-                    int? inferredAfter;
-
-                    if (od.PercentLoss >= 1.0)
                     {
-                        inferredBefore = od.HappyDecreased;
-                        inferredAfter = 0;
-                    }
-                    else if (Math.Abs(od.PercentLoss - 0.5) < 0.0001)
-                    {
-                        inferredAfter = od.HappyDecreased;
-                        inferredBefore = od.HappyDecreased * 2;
-                    }
-                    else
-                    {
-                        // Unknown factor: fall back to delta behavior.
-                        inferredBefore = currentHappy;
-                        inferredAfter = inferredBefore is null
-                            ? null
-                            : (int?)ApplyDeltaFloorOnly(inferredBefore.Value, -od.HappyDecreased, ref warnings);
-                        warnings++;
-                    }
+                        // Max-happy changes only affect the passive regen ceiling.
+                        // They do not immediately clamp current happy; Torn applies that on quarter-hour ticks.
+                        var before = currentHappy;
+                        var after = before;
 
-                    derivedEvents.Add(new DerivedHappyEvent(
-                        EventId: od.LogId,
-                        SourceLogId: od.LogId,
-                        OccurredAtUtc: od.OccurredAtUtc,
-                        EventType: "overdose",
-                        HappyBeforeEvent: inferredBefore,
-                        HappyAfterEvent: inferredAfter,
-                        Delta: inferredBefore is not null && inferredAfter is not null ? inferredAfter.Value - inferredBefore.Value : null,
-                        HappyUsed: null,
-                        MaxHappyAtTimeUtc: maxAtEvent,
-                        ClampedToMax: false));
-
-                    currentHappy = inferredAfter;
-                    anchorApplied++;
-                    break;
-                }
-
-                case HappyDeltaEvent delta:
-                {
-                    var before = currentHappy;
-                    int? after = before is null
-                        ? null
-                        : ApplyDeltaFloorOnly(before.Value, delta.Delta, ref warnings);
-
-                    derivedEvents.Add(new DerivedHappyEvent(
-                        EventId: delta.LogId,
-                        SourceLogId: delta.LogId,
-                        OccurredAtUtc: delta.OccurredAtUtc,
-                        EventType: "happy_delta",
-                        HappyBeforeEvent: before,
-                        HappyAfterEvent: after,
-                        Delta: before is not null && after is not null ? after.Value - before.Value : null,
-                        HappyUsed: null,
-                        MaxHappyAtTimeUtc: maxAtEvent,
-                        ClampedToMax: false));
-
-                    currentHappy = after;
-                    break;
-                }
-
-                case GymTrainEvent gym:
-                {
-                    var before = currentHappy;
-                    int? after = null;
-                    if (before is not null)
-                    {
-                        after = before.Value - gym.HappyUsed;
-                        if (after < 0)
-                        {
-                            after = 0;
-                            warnings++;
-                        }
-                    }
-
-                    derivedEvents.Add(new DerivedHappyEvent(
-                        EventId: gym.LogId,
-                        SourceLogId: gym.LogId,
-                        OccurredAtUtc: gym.OccurredAtUtc,
-                        EventType: "gym_train",
-                        HappyBeforeEvent: before,
-                        HappyAfterEvent: after,
-                        Delta: before is not null && after is not null ? after.Value - before.Value : null,
-                        HappyUsed: gym.HappyUsed,
-                        MaxHappyAtTimeUtc: maxAtEvent,
-                        ClampedToMax: false));
-
-                    if (before is not null && after is not null)
-                    {
-                        derivedTrains.Add(new DerivedGymTrain(
-                            LogId: gym.LogId,
-                            OccurredAtUtc: gym.OccurredAtUtc,
-                            HappyBeforeTrain: before.Value,
-                            HappyUsed: gym.HappyUsed,
-                            HappyAfterTrain: after.Value,
-                            RegenTicksApplied: 0,
-                            RegenHappyGained: 0,
+                        derivedEvents.Add(new DerivedHappyEvent(
+                            EventId: max.LogId,
+                            SourceLogId: max.LogId,
+                            OccurredAtUtc: max.OccurredAtUtc,
+                            EventType: "max_happy",
+                            HappyBeforeEvent: before,
+                            HappyAfterEvent: after,
+                            Delta: before is not null && after is not null ? after.Value - before.Value : null,
+                            HappyUsed: null,
                             MaxHappyAtTimeUtc: maxAtEvent,
                             ClampedToMax: false));
 
-                        // Regen between this train and the next real event will be attributed to this row.
-                        pendingTrainIndex = derivedTrains.Count - 1;
+                        currentHappy = after;
+                        break;
                     }
 
-                    currentHappy = after;
-                    break;
-                }
+                case OverdoseEvent od:
+                    {
+                        // Overdose anchors: infer exact before/after based on drug percent loss.
+                        // This overrides currentHappy.
+                        int? inferredBefore;
+                        int? inferredAfter;
+
+                        if (od.PercentLoss >= 1.0)
+                        {
+                            inferredBefore = od.HappyDecreased;
+                            inferredAfter = 0;
+                        }
+                        else if (Math.Abs(od.PercentLoss - 0.5) < 0.0001)
+                        {
+                            inferredAfter = od.HappyDecreased;
+                            inferredBefore = od.HappyDecreased * 2;
+                        }
+                        else
+                        {
+                            // Unknown factor: fall back to delta behavior.
+                            inferredBefore = currentHappy;
+                            inferredAfter = inferredBefore is null
+                                ? null
+                                : (int?)ApplyDeltaFloorOnly(inferredBefore.Value, -od.HappyDecreased, ref warnings);
+                            warnings++;
+                        }
+
+                        derivedEvents.Add(new DerivedHappyEvent(
+                            EventId: od.LogId,
+                            SourceLogId: od.LogId,
+                            OccurredAtUtc: od.OccurredAtUtc,
+                            EventType: "overdose",
+                            HappyBeforeEvent: inferredBefore,
+                            HappyAfterEvent: inferredAfter,
+                            Delta: inferredBefore is not null && inferredAfter is not null ? inferredAfter.Value - inferredBefore.Value : null,
+                            HappyUsed: null,
+                            MaxHappyAtTimeUtc: maxAtEvent,
+                            ClampedToMax: false));
+
+                        currentHappy = inferredAfter;
+                        anchorApplied++;
+                        break;
+                    }
+
+                case HappyDeltaEvent delta:
+                    {
+                        var before = currentHappy;
+                        int? after = before is null
+                            ? null
+                            : ApplyDeltaFloorOnly(before.Value, delta.Delta, ref warnings);
+
+                        derivedEvents.Add(new DerivedHappyEvent(
+                            EventId: delta.LogId,
+                            SourceLogId: delta.LogId,
+                            OccurredAtUtc: delta.OccurredAtUtc,
+                            EventType: "happy_delta",
+                            HappyBeforeEvent: before,
+                            HappyAfterEvent: after,
+                            Delta: before is not null && after is not null ? after.Value - before.Value : null,
+                            HappyUsed: null,
+                            MaxHappyAtTimeUtc: maxAtEvent,
+                            ClampedToMax: false));
+
+                        currentHappy = after;
+                        break;
+                    }
+
+                case GymTrainEvent gym:
+                    {
+                        var before = currentHappy;
+                        int? after = null;
+                        if (before is not null)
+                        {
+                            after = before.Value - gym.HappyUsed;
+                            if (after < 0)
+                            {
+                                after = 0;
+                                warnings++;
+                            }
+                        }
+
+                        derivedEvents.Add(new DerivedHappyEvent(
+                            EventId: gym.LogId,
+                            SourceLogId: gym.LogId,
+                            OccurredAtUtc: gym.OccurredAtUtc,
+                            EventType: "gym_train",
+                            HappyBeforeEvent: before,
+                            HappyAfterEvent: after,
+                            Delta: before is not null && after is not null ? after.Value - before.Value : null,
+                            HappyUsed: gym.HappyUsed,
+                            MaxHappyAtTimeUtc: maxAtEvent,
+                            ClampedToMax: false));
+
+                        if (before is not null && after is not null)
+                        {
+                            derivedTrains.Add(new DerivedGymTrain(
+                                LogId: gym.LogId,
+                                OccurredAtUtc: gym.OccurredAtUtc,
+                                HappyBeforeTrain: before.Value,
+                                HappyUsed: gym.HappyUsed,
+                                HappyAfterTrain: after.Value,
+                                RegenTicksApplied: 0,
+                                RegenHappyGained: 0,
+                                MaxHappyAtTimeUtc: maxAtEvent,
+                                ClampedToMax: false));
+
+                            // Regen between this train and the next real event will be attributed to this row.
+                            pendingTrainIndex = derivedTrains.Count - 1;
+                        }
+
+                        currentHappy = after;
+                        break;
+                    }
             }
         }
 
