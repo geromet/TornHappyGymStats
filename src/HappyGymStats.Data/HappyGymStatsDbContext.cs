@@ -29,6 +29,7 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
     public DbSet<FactionMembershipEntity> FactionMembership => Set<FactionMembershipEntity>();
     public DbSet<UserLogEntryEntity> UserLogEntries => Set<UserLogEntryEntity>();
     public DbSet<LogTypeEntity> LogTypes => Set<LogTypeEntity>();
+    public DbSet<CombatIntelObservationEntity> CombatIntelObservations => Set<CombatIntelObservationEntity>();
     public DbSet<RankedWarHistoryEntity> RankedWarHistory => Set<RankedWarHistoryEntity>();
     public DbSet<RankedWarReportMemberEntity> RankedWarReportMembers => Set<RankedWarReportMemberEntity>();
     public DbSet<WarCurrentEntity> WarCurrent => Set<WarCurrentEntity>();
@@ -125,6 +126,32 @@ public sealed class HappyGymStatsDbContext : DbContext, IUnitOfWork
             entity.HasKey(e => e.LogTypeId);
             entity.Property(e => e.LogTypeId).ValueGeneratedNever();
             entity.Property(e => e.LogTypeTitle).IsRequired();
+        });
+
+        modelBuilder.Entity<CombatIntelObservationEntity>(entity =>
+        {
+            entity.ToTable("CombatIntelObservations");
+            entity.HasKey(e => e.ObservationId);
+            entity.Property(e => e.ObservationId).HasMaxLength(128).ValueGeneratedNever();
+            entity.Property(e => e.Provider).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.FetchedAtUtc).HasConversion(UtcDateTimeOffsetConverter);
+            entity.Property(e => e.ObservedAtUtc).HasConversion(UtcDateTimeOffsetConverter);
+            entity.Property(e => e.Classification).HasConversion<int>();
+            entity.Property(e => e.Value).HasPrecision(29, 6);
+            entity.Property(e => e.LowerBound).HasPrecision(29, 6);
+            entity.Property(e => e.UpperBound).HasPrecision(29, 6);
+            entity.Property(e => e.VisibilityScope).HasConversion<int>();
+            entity.Property(e => e.VisibilityOwner).HasMaxLength(128);
+            entity.Property(e => e.SupersedesObservationId).HasMaxLength(128);
+            entity.HasOne(e => e.SupersedesObservation)
+                .WithMany()
+                .HasForeignKey(e => e.SupersedesObservationId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.PlayerId, e.ObservedAtUtc });
+            entity.HasIndex(e => new { e.Provider, e.ObservedAtUtc });
+            entity.HasIndex(e => new { e.PlayerId, e.Provider, e.ObservedAtUtc });
+            entity.HasIndex(e => new { e.VisibilityScope, e.VisibilityOwner, e.ObservedAtUtc });
+            entity.HasIndex(e => e.SupersedesObservationId);
         });
 
         modelBuilder.Entity<RankedWarHistoryEntity>(entity =>
