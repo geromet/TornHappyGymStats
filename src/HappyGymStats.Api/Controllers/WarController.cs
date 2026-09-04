@@ -1,4 +1,3 @@
-using System.Net;
 using HappyGymStats.Api.Hubs;
 using HappyGymStats.Api.Infrastructure;
 using HappyGymStats.Api.Models;
@@ -64,22 +63,16 @@ public sealed class WarController(
     [HttpPost("internal/notify")]
     public async Task<IActionResult> Notify(CancellationToken ct)
     {
-        if (!IsLoopbackRequest())
+        if (!InternalHttpRequestBoundary.IsDirectLoopback(HttpContext))
         {
             logger.LogWarning(
-                "Rejected non-loopback war notify request: remoteIp={RemoteIp}",
+                "Rejected non-direct war notify request: remoteIp={RemoteIp}",
                 HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown");
 
-            return ApiError(StatusCodes.Status403Forbidden, "forbidden", "This endpoint only accepts loopback requests.");
+            return ApiError(StatusCodes.Status403Forbidden, "forbidden", "This endpoint only accepts direct loopback requests.");
         }
 
         var dto = await hubBroadcaster.BroadcastCurrentStateAsync(ct);
         return Accepted(new WarNotifyAcceptedDto("broadcasted", dto));
-    }
-
-    private bool IsLoopbackRequest()
-    {
-        var remoteIp = HttpContext.Connection.RemoteIpAddress;
-        return remoteIp is null || IPAddress.IsLoopback(remoteIp);
     }
 }
