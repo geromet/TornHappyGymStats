@@ -63,13 +63,13 @@ public sealed class WarController(
     [HttpPost("internal/notify")]
     public async Task<IActionResult> Notify(CancellationToken ct)
     {
-        if (!InternalHttpRequestBoundary.IsDirectLoopback(HttpContext))
+        if (!InternalHttpRequestBoundary.IsDirectInternalTransport(HttpContext))
         {
             logger.LogWarning(
                 "Rejected non-direct war notify request: remoteIp={RemoteIp}",
                 HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown");
 
-            return ApiError(StatusCodes.Status403Forbidden, "forbidden", "This endpoint only accepts direct loopback requests.");
+            return ApiError(StatusCodes.Status403Forbidden, "forbidden", "This endpoint only accepts direct internal requests.");
         }
 
         var dto = await hubBroadcaster.BroadcastCurrentStateAsync(ct);
