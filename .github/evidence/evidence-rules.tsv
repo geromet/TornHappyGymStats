@@ -1,0 +1,17 @@
+pattern	tier	reason
+*.razor	T2	Rendered Blazor surface; requires screenshot/browser evidence.
+*.razor.cs	T2	Rendered Blazor code-behind; requires screenshot/browser evidence.
+*.css	T2	Rendered styling; requires screenshot/browser evidence.
+*Theme*.cs	T2	Theme/rendering policy; requires screenshot/browser evidence.
+scripts/screenshot*.sh	T2	Rendering/screenshot tooling; requires visual proof that the resulting surface is correct.
+scripts/deploy*.sh	T3	Deployment behavior crosses the operator/remote boundary.
+scripts/recon-*.sh	T3	Remote reconnaissance behavior crosses the SSH/operator boundary.
+scripts/setup-*.sh	T3	Remote/server setup behavior crosses the operator boundary.
+scripts/*remote-exec*.sh	T3	Remote execution transport requires disposable/operator-boundary proof.
+infra/*	T3	Systemd/nginx/runtime infrastructure changes require environment-specific proof.
+src/HappyGymStats.Data/*	T4	Persistence/provider code requires real PostgreSQL proof.
+tests/*Postgres*	T4	PostgreSQL integration coverage itself requires the relational tier.
+*/Migrations/*	T4	EF migration/model changes require real PostgreSQL proof.
+*.sql	T4	Relational SQL behavior requires real PostgreSQL proof.
+*/*Npgsql*	T4	Npgsql-specific behavior requires real PostgreSQL proof.
+*/*EntityFramework*	T4	EF-specific behavior requires real PostgreSQL proof.
