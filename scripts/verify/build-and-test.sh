@@ -17,6 +17,20 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   exit 0
 fi
 
+# PREFLIGHT BEFORE ANY VERIFIER CAN PRINT PASS.
+#
+# The gate transitively needs these. ripgrep is the one that actually bites: it
+# is absent from the GitHub runner, and its absence is what let the raw-player-id
+# check report PASS in CI without opening a file. The rest are present on both a
+# workstation and the runner, so preflighting them is cheap insurance rather than
+# a live fix — but a missing tool must be its own loud failure, never a pass.
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+# shellcheck source=scripts/verify/verify-common.sh
+source "${ROOT_DIR}/scripts/verify/verify-common.sh"
+echo "==> preflight: tools the gate depends on"
+verify_require_commands rg dotnet grep sed awk wc
+echo "PASS: rg, dotnet, grep, sed, awk, wc all present"
+
 echo "==> verify: no raw player-id log templates"
 bash scripts/verify/no-raw-playerid-log-templates.sh
 
