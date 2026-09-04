@@ -114,16 +114,6 @@ public sealed class ImportController : ApiControllerBase
         return StatusCode(statusCode, ToDto(status));
     }
 
-    [HttpGet("latest")]
-    public IActionResult GetLatestImport()
-    {
-        var status = _importService.Latest;
-        if (status is null)
-            return ApiError(StatusCodes.Status404NotFound, "not_found", "No import has been started.");
-
-        return Ok(ToDto(status));
-    }
-
     [HttpPost("anonymous")]
     public async Task<IActionResult> StartAnonymousImport(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ImportRequest? request,
