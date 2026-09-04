@@ -45,6 +45,11 @@ public partial class AddStoredApiKeys : Migration
             });
 
         migrationBuilder.CreateIndex(
+            name: "IX_StoredApiKeys_ConsentRecordId",
+            table: "StoredApiKeys",
+            column: "ConsentRecordId");
+
+        migrationBuilder.CreateIndex(
             name: "IX_StoredApiKeys_ConsentRecordId_AnonymousId",
             table: "StoredApiKeys",
             columns: new[] { "ConsentRecordId", "AnonymousId" });
