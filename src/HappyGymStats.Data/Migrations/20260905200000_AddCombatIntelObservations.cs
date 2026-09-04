@@ -62,7 +62,7 @@ public partial class AddCombatIntelObservations : Migration
             columns: new[] { "PlayerId", "Provider", "ObservedAtUtc" });
 
         migrationBuilder.CreateIndex(
-            name: "IX_CombatIntelObservations_VisibilityScope_VisibilityOwner_ObservedAtUtc",
+            name: "IX_CombatIntel_Visibility_Owner_ObservedAtUtc",
             table: "CombatIntelObservations",
             columns: new[] { "VisibilityScope", "VisibilityOwner", "ObservedAtUtc" });
 
