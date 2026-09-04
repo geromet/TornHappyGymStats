@@ -81,6 +81,42 @@ namespace HappyGymStats.Data.Migrations
                     b.ToTable("AppSettings");
                 });
 
+            modelBuilder.Entity("HappyGymStats.Data.Entities.ConsentRecordEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("AcceptedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("AnonymousId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DocumentVersion")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AnonymousId", "Purpose", "DocumentVersion");
+
+                    b.HasIndex("AnonymousId", "Purpose", "RevokedAtUtc");
+
+                    b.ToTable("ConsentRecords", (string)null);
+                });
+
             modelBuilder.Entity("HappyGymStats.Data.Entities.FactionIdMapEntity", b =>
                 {
                     b.Property<int>("AffiliationId")
