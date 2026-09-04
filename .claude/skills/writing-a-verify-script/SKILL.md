@@ -34,7 +34,7 @@ Copy `scripts/verify/u001-honest-signal.sh`. Every script has:
 
 ```bash
 #!/usr/bin/env bash
-# <id>-<slug>.sh — one line saying what it pins, citing the plan (docs/UX-PLAN.md, U00n).
+# <id>-<slug>.sh — one line saying what it pins, citing the issue that asked for it.
 #
 # WHAT THIS PINS, AND WHY IT IS SHAPED THIS WAY
 # <the check you rejected, and why the shipped shape survives a good-faith change>

@@ -1,7 +1,7 @@
 namespace HappyGymStats.Blazor.Components.Shared;
 
 /// <summary>
-/// How much weight a number on the board can bear (UX plan U001, docs/UX-PLAN.md).
+/// How much weight a number on the board can bear (UX slice U001; see issue #94).
 ///
 /// The test that separates these is not how much arithmetic produced the number.
 /// It is: <b>would this change if we polled again right now with nothing else

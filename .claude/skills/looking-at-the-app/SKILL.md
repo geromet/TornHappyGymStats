@@ -1,6 +1,6 @@
 ---
 name: looking-at-the-app
-description: Use when a change affects what the HappyGymStats war board, Blazor pages or any rendered surface looks like, when asked to run or screenshot the app, or before calling any UX slice from docs/UX-PLAN.md finished.
+description: Use when a change affects what the HappyGymStats war board, Blazor pages or any rendered surface looks like, when asked to run or screenshot the app, or before calling any UX issue finished.
 ---
 
 # Looking at the app
