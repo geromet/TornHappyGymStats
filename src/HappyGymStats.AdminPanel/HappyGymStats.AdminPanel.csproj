@@ -13,6 +13,12 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
+    <!-- Npgsql 10.0.3 pulls Relational 10.0.4 transitively, and as the primary
+         reference it won this project's version conflict — so AdminPanel ran
+         against an older Relational than HappyGymStats.Data was compiled with.
+         Pinning it explicitly makes 10.0.11 primary and matches the rest of the
+         solution. Bump this whenever Microsoft.EntityFrameworkCore moves. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
   </ItemGroup>
 
