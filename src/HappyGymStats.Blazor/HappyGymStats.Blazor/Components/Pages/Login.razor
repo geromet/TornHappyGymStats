@@ -86,7 +86,7 @@
 
     protected override void OnParametersSet()
     {
-        _resolvedReturnUrl = SanitizeLocalReturnUrl(ReturnUrl);
+        _resolvedReturnUrl = LocalRedirectPolicy.Normalize(ReturnUrl);
     }
 
     private void SignIn()
@@ -99,19 +99,6 @@
     private void SignOut()
     {
         Navigation.NavigateTo("/auth/logout?returnUrl=%2F", forceLoad: true);
-    }
-
-    private static string SanitizeLocalReturnUrl(string? returnUrl)
-    {
-        if (string.IsNullOrWhiteSpace(returnUrl)) return "/";
-
-        if (Uri.TryCreate(returnUrl, UriKind.Relative, out var parsed)
-            && parsed.OriginalString.StartsWith('/'))
-        {
-            return parsed.OriginalString;
-        }
-
-        return "/";
     }
 
     private static LoginClaimSnapshot BuildSnapshot(ClaimsPrincipal user)
