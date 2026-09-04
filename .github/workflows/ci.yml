@@ -1,11 +1,4 @@
-# CI — run the gate this repo already has, somewhere it cannot be skipped.
-#
-# The repo's checks were always executable (scripts/verify/build-and-test.sh);
-# nothing ran them except a person remembering to. This is that, on every PR.
-#
-# It deliberately does NOT reimplement any check. build-and-test.sh is the
-# entrypoint, exactly as docs and CLAUDE.md say it is, so CI and a local run
-# cannot drift apart.
+# CI — run each proof tier in the environment that can actually prove it.
 name: CI
 
 on:
@@ -26,31 +19,18 @@ jobs:
     name: build, verify contracts, test
     runs-on: ubuntu-latest
     env:
-      # THE POINT OF RUNNING THIS IN CI AT ALL.
-      #
-      # Every skip path in PostgresApiIntegrationTests reports the test as
-      # PASSED — correct on a laptop with no Docker daemon, and the reason
-      # three of those tests were green and vacuous for months (aee793d,
-      # f731316). A runner HAS Docker, so here the tier must actually execute;
-      # this flag turns a skip into a hard failure naming the reason.
-      HAPPYGYMSTATS_REQUIRE_POSTGRES_INTEGRATION: "1"
-      # Pulling and starting the postgres image on a cold runner is slower than
-      # a warm local daemon; the default 90s is not always enough.
-      HAPPYGYMSTATS_POSTGRES_START_TIMEOUT_SECONDS: "300"
       DOTNET_NOLOGO: "1"
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
     steps:
       - uses: actions/checkout@v4
 
-      # ripgrep is NOT on the ubuntu runner, and several verify scripts are built
-      # on it. Until now that was invisible: `rg: command not found` made the
-      # no-raw-playerid check take its negative branch and print PASS, so the
-      # privacy guardrail reported success in CI having never run. Those scripts
-      # now fail closed, so the tool has to actually be here.
+      # ripgrep is not guaranteed on the runner and several required verifiers
+      # depend on it. Missing verifier tooling must be unavailable/red, not a
+      # false "no match" success.
       - name: Install ripgrep
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
 
-      - name: Show tool versions (lint findings differ between shellcheck releases)
+      - name: Show tool versions
         run: |
           rg --version | head -1
           shellcheck --version | grep version:
@@ -64,24 +44,52 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/global.json') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/global.json', 'Directory.Packages.props') }}
           restore-keys: nuget-${{ runner.os }}-
 
       - name: Restore
         run: dotnet restore
 
-      # The whole gate: offline contract checks, then build, then the suite.
+      # Canonical source/contracts/build gate plus the hermetic non-Postgres
+      # suite. The relational tier is a separate required-capable job below so
+      # neither environment can silently stand in for the other.
       - name: scripts/verify/build-and-test.sh
         run: bash scripts/verify/build-and-test.sh
 
-      # Clean-environment run. A runner has no developer configuration, so this
-      # rarely differs here — its job is to make the same guarantee checkable on
-      # a workstation, where WarHistoryIngestWriterTests passed for weeks against
-      # a key the code never reads because the machine supplied the real one.
-      # It also asserts no host appsettings.json reached the test output, which
-      # is the ambient source that stripping variables cannot reach.
-      - name: scripts/verify/hermetic-tests.sh
-        run: bash scripts/verify/hermetic-tests.sh
+  postgres:
+    name: postgres integration
+    runs-on: ubuntu-latest
+    env:
+      # A skipped test is reported as success by GitHub/xUnit, so this job opts
+      # into the repository's inverse semantics: Docker/test unavailability is a
+      # hard failure, never a green skip.
+      HAPPYGYMSTATS_REQUIRE_POSTGRES_INTEGRATION: "1"
+      HAPPYGYMSTATS_POSTGRES_START_TIMEOUT_SECONDS: "300"
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install .NET (version from global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/global.json', 'Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Prove Docker is available
+        run: docker info
+
+      - name: Run non-skippable Postgres integration tier
+        run: bash scripts/verify/s07-postgres-integration.sh
 
   format:
     name: dotnet format
@@ -99,13 +107,8 @@ jobs:
       - name: Restore
         run: dotnet restore
 
-      # `whitespace`, not bare `dotnet format` — THIS MATTERS.
-      #
-      # Bare `dotnet format` also applies analyzer code fixes. Run once here it
-      # rewrote two ExecuteSqlRawAsync calls to ExecuteSqlAsync, which
-      # parameterises an interpolated string and so changed the SQL those tests
-      # generate. A failing test caught it. A CI job with --verify-no-changes
-      # would instead have told someone to run the command that does it.
+      # `whitespace`, not bare `dotnet format`: bare format applies analyzer code
+      # fixes too and has previously changed generated SQL semantics here.
       - name: Check formatting
         run: dotnet format whitespace --verify-no-changes --no-restore
 
@@ -115,12 +118,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Blocking from the start, because the tree is clean at this severity.
-      # The first run over 65 never-linted scripts found 95 warnings, 87 of them
-      # SC2155 on one idiom (disabled with a reason in .shellcheckrc). Of the
-      # remaining eight, four were cross-file false positives, two were a split
-      # the author had already documented as deliberate, one was a genuinely
-      # missing `cd || exit`, and two were dead assignments now removed.
       - name: Run shellcheck
         run: |
           shopt -s globstar nullglob
