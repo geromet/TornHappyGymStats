@@ -103,7 +103,6 @@ builder.Services.AddScoped<IWarHistoryRepository, WarHistoryRepository>();
 builder.Services.AddScoped<LogFetcher>();
 builder.Services.AddScoped<PerkLogFetcher>();
 builder.Services.AddScoped<ReconstructionRunner>();
-builder.Services.AddScoped<GymTrainsService>();
 builder.Services.AddScoped<FactionService>();
 builder.Services.AddScoped<WarDerivedStateService>();
 builder.Services.AddScoped<WarScoutService>();
