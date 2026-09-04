@@ -19,17 +19,49 @@ fi
 
 # PREFLIGHT BEFORE ANY VERIFIER CAN PRINT PASS.
 #
-# The gate transitively needs these. ripgrep is the one that actually bites: it
-# is absent from the GitHub runner, and its absence is what let the raw-player-id
-# check report PASS in CI without opening a file. The rest are present on both a
-# workstation and the runner, so preflighting them is cheap insurance rather than
-# a live fix — but a missing tool must be its own loud failure, never a pass.
-ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+# The gate used to carry a hand-maintained command list. That proved the current
+# tools existed, but the list could drift when a required verifier gained a new
+# dependency. The verifier manifest already declares those dependencies, so use
+# it as the source of truth and preflight the union before any assertion runs.
+ROOT_DIR="$(cd "${BASH_SOURCE[0]%/*}/../.." && pwd)"
 # shellcheck source=scripts/verify/verify-common.sh
 source "${ROOT_DIR}/scripts/verify/verify-common.sh"
-echo "==> preflight: tools the gate depends on"
-verify_require_commands rg dotnet grep sed awk wc
-echo "PASS: rg, dotnet, grep, sed, awk, wc all present"
+cd "${ROOT_DIR}" || verify_die "cannot cd to ${ROOT_DIR}"
+
+readonly VERIFY_MANIFEST="scripts/verify/manifest.tsv"
+verify_require_file "${VERIFY_MANIFEST}"
+
+declare -A gate_commands=(
+  [bash]=1
+  [dotnet]=1
+  # Bootstrap/verifier-graph dependencies retained explicitly because the graph
+  # runs before manifest routing can validate dependency metadata.
+  [rg]=1
+  [grep]=1
+  [sed]=1
+  [awk]=1
+  [wc]=1
+)
+
+manifest_row=0
+while IFS=$'\t' read -r _id _script _tier gate dependencies _exclusion_reason; do
+  ((manifest_row += 1))
+  (( manifest_row == 1 )) && continue
+  [[ "${gate}" == "required" ]] || continue
+  [[ -n "${dependencies}" && "${dependencies}" != "-" ]] || continue
+
+  IFS=',' read -r -a dependency_list <<< "${dependencies}"
+  for dependency in "${dependency_list[@]}"; do
+    [[ -n "${dependency}" && "${dependency}" != "-" ]] || continue
+    gate_commands["${dependency}"]=1
+  done
+done < "${VERIFY_MANIFEST}"
+
+echo "==> preflight: tools the required gate depends on"
+for command_name in "${!gate_commands[@]}"; do
+  verify_require_command "${command_name}"
+done
+echo "PASS: all declared required-gate dependencies are available"
 
 # ROUTING COMES FROM THE MANIFEST, NOT FROM THIS FILE.
 #
@@ -43,7 +75,6 @@ echo "PASS: rg, dotnet, grep, sed, awk, wc all present"
 echo "==> verify: verifier graph"
 bash scripts/verify/verifier-graph.sh
 
-readonly VERIFY_MANIFEST="scripts/verify/manifest.tsv"
 manifest_row=0
 required_run=0
 while IFS=$'\t' read -r id script tier gate _dependencies _exclusion_reason; do
