@@ -79,4 +79,73 @@ public sealed class CombatIntelObservationInvariantTests
             upperBound: 200m,
             supersedesObservationId: "same-id"));
     }
+
+    [Fact]
+    public void CreateFromProvider_rejects_timestamps_beyond_allowed_future_skew()
+    {
+        var tooFarFuture = Now + CombatIntelObservation.MaxProviderFutureSkew + TimeSpan.FromSeconds(1);
+
+        Assert.Throws<ArgumentException>(() => CombatIntelObservation.CreateFromProvider(
+            "future-provider",
+            42,
+            "provider",
+            tooFarFuture,
+            tooFarFuture,
+            Now,
+            CombatIntelClassification.Exact,
+            value: 100m));
+    }
+
+    [Fact]
+    public void CreateFromProvider_allows_timestamp_at_future_skew_boundary()
+    {
+        var allowedFuture = Now + CombatIntelObservation.MaxProviderFutureSkew;
+
+        var observation = CombatIntelObservation.CreateFromProvider(
+            "small-skew",
+            42,
+            "provider",
+            allowedFuture,
+            allowedFuture,
+            Now,
+            CombatIntelClassification.Exact,
+            value: 100m);
+
+        Assert.Equal(allowedFuture, observation.FetchedAtUtc);
+        Assert.Equal(allowedFuture, observation.ObservedAtUtc);
+    }
+
+    [Fact]
+    public void Rejected_future_provider_payload_cannot_dominate_resolver_freshness()
+    {
+        var legitimate = CombatIntelObservation.CreateFromProvider(
+            "legitimate",
+            42,
+            "provider-a",
+            Now,
+            Now,
+            Now,
+            CombatIntelClassification.Exact,
+            value: 100m);
+        var farFuture = Now + TimeSpan.FromDays(30);
+
+        Assert.Throws<ArgumentException>(() => CombatIntelObservation.CreateFromProvider(
+            "malicious-future",
+            42,
+            "provider-b",
+            farFuture,
+            farFuture,
+            Now,
+            CombatIntelClassification.Exact,
+            value: 999m));
+
+        var resolution = CombatIntelResolver.Resolve(
+            42,
+            [legitimate],
+            new CombatIntelAccessContext(),
+            Now);
+
+        Assert.Same(legitimate, resolution.Winner);
+        Assert.Empty(resolution.Alternatives);
+    }
 }
