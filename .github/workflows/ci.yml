@@ -77,8 +77,15 @@ jobs:
       - name: Restore
         run: dotnet restore
 
+      # `whitespace`, not bare `dotnet format` — THIS MATTERS.
+      #
+      # Bare `dotnet format` also applies analyzer code fixes. Run once here it
+      # rewrote two ExecuteSqlRawAsync calls to ExecuteSqlAsync, which
+      # parameterises an interpolated string and so changed the SQL those tests
+      # generate. A failing test caught it. A CI job with --verify-no-changes
+      # would instead have told someone to run the command that does it.
       - name: Check formatting
-        run: dotnet format --verify-no-changes --no-restore
+        run: dotnet format whitespace --verify-no-changes --no-restore
 
   shellcheck:
     name: shellcheck
