@@ -42,6 +42,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ripgrep is NOT on the ubuntu runner, and several verify scripts are built
+      # on it. Until now that was invisible: `rg: command not found` made the
+      # no-raw-playerid check take its negative branch and print PASS, so the
+      # privacy guardrail reported success in CI having never run. Those scripts
+      # now fail closed, so the tool has to actually be here.
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+
+      - name: Show tool versions (lint findings differ between shellcheck releases)
+        run: |
+          rg --version | head -1
+          shellcheck --version | grep version:
+
       - name: Install .NET (version from global.json)
         uses: actions/setup-dotnet@v4
         with:
