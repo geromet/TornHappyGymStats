@@ -4,9 +4,8 @@ namespace HappyGymStats.Api.Infrastructure;
 
 /// <summary>
 /// Defines the transport boundary for HTTP actions that are callable only by a
-/// process connecting directly to the API's loopback listener. A reverse proxy
-/// is not an internal caller even when its upstream connection originates from
-/// 127.0.0.1.
+/// process connecting directly to the API listener. A reverse proxy is not an
+/// internal caller even when its upstream connection originates from 127.0.0.1.
 /// </summary>
 public static class InternalHttpRequestBoundary
 {
@@ -19,20 +18,22 @@ public static class InternalHttpRequestBoundary
         "X-Real-IP",
     ];
 
-    public static bool IsDirectLoopback(HttpContext httpContext)
+    public static bool IsDirectInternalTransport(HttpContext httpContext)
     {
         ArgumentNullException.ThrowIfNull(httpContext);
 
         var remoteIp = httpContext.Connection.RemoteIpAddress;
-        if (remoteIp is null || !IPAddress.IsLoopback(remoteIp))
+        if (remoteIp is not null && !IPAddress.IsLoopback(remoteIp))
         {
             return false;
         }
 
         // Production and dev nginx set forwarding headers on every proxied API
-        // request. A direct poller call does not. Rejecting the proxy shape here
-        // means the application fails closed even before the nginx deny rule is
-        // deployed, while the nginx rule removes the route from the public edge.
+        // request. A direct poller call does not. TestServer and non-IP local
+        // transports may expose no RemoteIpAddress, so the absence of an IP is
+        // accepted only when the request also has no proxy provenance headers.
+        // This makes the current public proxy shape fail closed before the nginx
+        // deny rule is deployed; the nginx rule then removes the route entirely.
         return ProxyHeaders.All(header => !httpContext.Request.Headers.ContainsKey(header));
     }
 }
