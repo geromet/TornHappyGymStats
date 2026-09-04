@@ -13,8 +13,7 @@ public sealed class PostgresImportRunTenantIsolationTests
     [Trait("Category", "PostgresApiIntegration")]
     public async Task Incomplete_resume_lookup_never_crosses_owner_boundary()
     {
-        await using var postgres = new PostgreSqlBuilder()
-            .WithImage("postgres:16-alpine")
+        await using var postgres = new PostgreSqlBuilder("postgres:16-alpine")
             .WithDatabase("happygymstats_resume_scope")
             .WithUsername("postgres")
             .WithPassword("postgres")
@@ -75,6 +74,7 @@ public sealed class PostgresImportRunTenantIsolationTests
         Assert.Equal(ownerBNewerRun.NextUrl, resolvedForB.NextUrl);
 
         Assert.Null(resolvedForUnknown);
-        Assert.Throws<ArgumentException>(() => repository.GetLatestIncompleteAsync(Guid.Empty, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            repository.GetLatestIncompleteAsync(Guid.Empty, CancellationToken.None));
     }
 }
