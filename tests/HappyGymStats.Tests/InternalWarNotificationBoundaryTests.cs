@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.RegularExpressions;
 using HappyGymStats.Api.Infrastructure;
 using Microsoft.AspNetCore.Http;
+using Xunit;
 
 namespace HappyGymStats.Tests;
 
