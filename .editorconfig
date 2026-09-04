@@ -1,0 +1,37 @@
+# Formatting rules for this solution, so `dotnet format` checks an intent that
+# is written down rather than whatever the current SDK happens to default to.
+#
+# These values were not chosen fresh: they are what the tree already does.
+# Before this file existed, `dotnet format` reported 125 whitespace findings in
+# 8 files out of ~150 — the codebase was already consistent, it just had no
+# record of what it was consistent about. That record is the point: a future
+# SDK changing a default must not silently reformat the repository.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{yml,yaml,json,csproj,props,targets}]
+indent_size = 2
+
+[*.md]
+# Two trailing spaces are a hard line break in Markdown.
+trim_trailing_whitespace = false
+
+[*.sh]
+indent_size = 2
+
+[Makefile]
+indent_style = tab
+
+[**/Migrations/*.cs]
+# EF writes generated migrations with a UTF-8 BOM. Policing that to match the
+# rest of the tree would strip it here and CI would then fail on every
+# `dotnet ef migrations add` — churn caused entirely by the rule, so the rule
+# bends to the generator instead.
+charset = utf-8-bom

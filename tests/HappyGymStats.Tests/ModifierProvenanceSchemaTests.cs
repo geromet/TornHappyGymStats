@@ -84,21 +84,24 @@ public sealed class ModifierProvenanceSchemaTests
         db.ModifierProvenance.AddRange(
             new ModifierProvenanceEntity
             {
-                AnonymousId = new Guid("00000000-0000-0000-0000-000000000001"), LogEntryId = "log-1",
+                AnonymousId = new Guid("00000000-0000-0000-0000-000000000001"),
+                LogEntryId = "log-1",
                 Scope = (int)ModifierScope.Personal,
                 SubjectId = 1,
                 VerificationStatus = (int)VerificationStatus.Verified,
             },
             new ModifierProvenanceEntity
             {
-                AnonymousId = new Guid("00000000-0000-0000-0000-000000000001"), LogEntryId = "log-2",
+                AnonymousId = new Guid("00000000-0000-0000-0000-000000000001"),
+                LogEntryId = "log-2",
                 Scope = (int)ModifierScope.Faction,
                 FactionId = 9,
                 VerificationStatus = (int)VerificationStatus.Unresolved,
             },
             new ModifierProvenanceEntity
             {
-                AnonymousId = new Guid("00000000-0000-0000-0000-000000000001"), LogEntryId = "log-3",
+                AnonymousId = new Guid("00000000-0000-0000-0000-000000000001"),
+                LogEntryId = "log-3",
                 Scope = (int)ModifierScope.Company,
                 CompanyId = 5,
                 VerificationStatus = (int)VerificationStatus.Unresolved,
