@@ -23,8 +23,8 @@ public sealed class SharedStateRenderedTests : BunitContext
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Contains("No surfaces data found. Run an import first.", cut.Markup, StringComparison.Ordinal);
-            Assert.DoesNotContain("Could not load surfaces data", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("No training data found yet. Run an import first.", cut.Markup, StringComparison.Ordinal);
+            Assert.DoesNotContain("Could not load training data", cut.Markup, StringComparison.Ordinal);
         });
     }
 
@@ -37,8 +37,8 @@ public sealed class SharedStateRenderedTests : BunitContext
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Contains("Could not load surfaces data. The service is temporarily unavailable", cut.Markup, StringComparison.Ordinal);
-            Assert.DoesNotContain("No surfaces data found", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Could not load training data. The service is temporarily unavailable", cut.Markup, StringComparison.Ordinal);
+            Assert.DoesNotContain("No training data found", cut.Markup, StringComparison.Ordinal);
         });
     }
 
