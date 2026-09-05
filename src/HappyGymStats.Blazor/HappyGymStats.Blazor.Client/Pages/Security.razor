@@ -1,6 +1,5 @@
 @page "/security"
-@rendermode InteractiveWebAssembly
-@inject CryptoService Crypto
+@inject IJSRuntime JS
 @inject ISnackbar Snackbar
 
 <PageTitle>Security — Happy Gym Stats</PageTitle>
@@ -26,14 +25,14 @@ else if (!_hasKey)
             <MudText Class="mb-4">
                 Generate a P-256 keypair. Your private key is encrypted with a password and stored
                 in your browser's localStorage. The public key is used to encrypt your Torn player ID
-                on the server — only you can decrypt it.
+                on the server; the wrapped private key stays in this browser.
             </MudText>
             <MudStack Spacing="3">
                 <MudTextField @bind-Value="_password"
                               Label="Password"
                               InputType="InputType.Password"
                               Variant="Variant.Outlined"
-                              HelperText="Used to protect your private key. Not sent to any server."
+                              HelperText="Used to protect your private key. The password is not stored by HappyGymStats."
                               Disabled="@_generating" />
                 <MudTextField @bind-Value="_passwordConfirm"
                               Label="Confirm password"
@@ -161,6 +160,11 @@ else
 }
 
 @code {
+    // Routes.razor owns this page's InteractiveServer render mode. Resolve the stateless
+    // crypto helper from the circuit's IJSRuntime only after the browser is interactive;
+    // direct CryptoService injection makes static endpoint rendering fail before hydration.
+    private CryptoService Crypto => new(JS);
+
     private bool _loading = true;
     private bool _hasKey;
 
