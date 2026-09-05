@@ -5,6 +5,7 @@ using System.Text.Json;
 using HappyGymStats.Api;
 using HappyGymStats.Api.Models;
 using HappyGymStats.Core.Models;
+using HappyGymStats.Core.War;
 using HappyGymStats.Data;
 using HappyGymStats.Data.Entities;
 using Microsoft.AspNetCore.Authentication;
@@ -77,7 +78,7 @@ public sealed class WarScoutEndpointTests : IClassFixture<SqliteApiEndpointTests
     }
 
     [Fact]
-    public async Task Scout_endpoint_returns_aggregated_profile_for_a_faction_with_captured_history()
+    public async Task Scout_endpoint_returns_aggregated_profile_and_sanitized_backfill_evidence()
     {
         await SeedWarAndReportAsync();
 
@@ -85,14 +86,25 @@ public sealed class WarScoutEndpointTests : IClassFixture<SqliteApiEndpointTests
 
         var response = await client.GetAsync($"/api/v1/war/scout/{ScoutedFactionId}");
         response.EnsureSuccessStatusCode();
+        var rawJson = await response.Content.ReadAsStringAsync();
+        var profile = JsonSerializer.Deserialize<FactionScoutDto>(rawJson, JsonOptions);
 
-        var profile = await response.Content.ReadFromJsonAsync<FactionScoutDto>(JsonOptions);
         Assert.NotNull(profile);
         Assert.Equal(ScoutedFactionId, profile.FactionId);
         Assert.Equal(1, profile.TotalWarsObserved);
         var member = Assert.Single(profile.Members);
         Assert.Equal(9001, member.MemberId);
         Assert.Equal(80, member.TotalScore);
+        Assert.Equal(RankedWarHistoryBackfillStatus.Running, profile.Evidence.BackfillStatus);
+        Assert.Equal(12, profile.Evidence.PagesProcessed);
+        Assert.Equal(34, profile.Evidence.ReportsProcessed);
+        Assert.False(profile.Evidence.IsComplete);
+
+        Assert.DoesNotContain("NextHistoryPageUrl", rawJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("LastErrorMessage", rawJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("LastFailureCategory", rawJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("RetryCount", rawJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("operator-only diagnostic", rawJson, StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task SeedWarAndReportAsync()
@@ -127,6 +139,21 @@ public sealed class WarScoutEndpointTests : IClassFixture<SqliteApiEndpointTests
             IngestedAtUtc = DateTimeOffset.UtcNow,
         });
 
+        db.RankedWarHistoryBackfillState.Add(new RankedWarHistoryBackfillStateEntity
+        {
+            ScopeKey = "public-war",
+            Status = RankedWarHistoryBackfillStatus.Running,
+            Phase = RankedWarHistoryBackfillPhase.FetchingReport,
+            NextHistoryPageUrl = "https://operator-only.invalid/retry",
+            PagesProcessed = 12,
+            ReportsProcessed = 34,
+            RetryCount = 2,
+            LastFailureCategory = "RateLimited",
+            LastErrorMessage = "operator-only diagnostic",
+            CreatedAtUtc = new DateTimeOffset(2026, 9, 4, 8, 0, 0, TimeSpan.Zero),
+            UpdatedAtUtc = new DateTimeOffset(2026, 9, 5, 8, 0, 0, TimeSpan.Zero),
+        });
+
         await db.SaveChangesAsync();
     }
 
@@ -136,6 +163,7 @@ public sealed class WarScoutEndpointTests : IClassFixture<SqliteApiEndpointTests
         var db = scope.ServiceProvider.GetRequiredService<HappyGymStatsDbContext>();
         db.RankedWarReportMembers.RemoveRange(db.RankedWarReportMembers);
         db.RankedWarHistory.RemoveRange(db.RankedWarHistory);
+        db.RankedWarHistoryBackfillState.RemoveRange(db.RankedWarHistoryBackfillState);
         db.SaveChanges();
     }
 

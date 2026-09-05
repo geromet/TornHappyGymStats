@@ -1,7 +1,23 @@
 # HappyGymStats — Claude Code entrypoint
 
 The shared repository rules live in [`docs/WORKING-AGREEMENT.md`](docs/WORKING-AGREEMENT.md).
-Read that first. Do not duplicate or override those rules here.
+Read that first. Do not override those rules here.
+
+Before any mutable GitHub/repository work, treat **issue #140** as canonical live
+coordination: read its body + recent comments, discover the actual current default
+branch, refresh the target and branch/PR heads, acquire an exact two-phase claim,
+reread #140 so the earlier-comment-ID winner is known, and refresh again before
+the first mutation. Use the observed head SHA as a CAS token; if it changes
+unexpectedly, reconcile rather than blindly pushing or force-pushing. Live repo
+state wins stale issue prose or historical handoff notes.
+
+Fleet/manual work never merges into `main` or another default branch. Final
+default review/merge belongs only to Gerome's explicitly invoked coding-agent or
+human workflow. A child PR merged into a non-default stable branch is not a
+terminal handoff unless its useful work remains represented by an open
+ultimately-default-destined review surface, is proven incorporated/superseded with
+that relationship recorded, or is explicitly abandoned after its unique commits
+are assessed. Do not infer missing work from `ahead` alone.
 
 Useful repository routes:
 

@@ -1,0 +1,47 @@
+@if (IsInitialLoading)
+{
+    <div class="war-board-banner">
+        <LoadingState Message="Loading current war state…" />
+    </div>
+}
+
+@if (HasFailure)
+{
+    <div class="war-board-banner">
+        <ErrorState Message="War board unavailable. Refresh to retry."
+                    OnRetry="OnRetry"
+                    Dense="true" />
+    </div>
+}
+
+@if (HasStaleData)
+{
+    <div class="war-board-banner">
+        <StaleDataBanner Message="Review heartbeat, warnings, and hub connection status before acting on roster gaps." />
+    </div>
+}
+
+@if (HasNoActiveWar)
+{
+    @* No active war is an ordinary state, never a degraded/error state. *@
+    <div class="war-board-banner">
+        <EmptyState Message="No war in progress. The board fills in automatically when the next ranked war starts. Nothing is wrong." />
+    </div>
+}
+
+@code {
+    [Parameter]
+    public bool IsInitialLoading { get; set; }
+
+    [Parameter]
+    public bool HasFailure { get; set; }
+
+    [Parameter]
+    public bool HasStaleData { get; set; }
+
+    [Parameter]
+    public bool HasNoActiveWar { get; set; }
+
+    [Parameter]
+    public EventCallback OnRetry { get; set; }
+}

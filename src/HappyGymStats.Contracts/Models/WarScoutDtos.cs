@@ -20,7 +20,31 @@ public sealed record FactionScoutDto(
     int TypicalRosterSize,
     decimal Top5ScoreShare,
     decimal Top10ScoreShare,
-    IReadOnlyList<OpponentMemberProfileDto> Members);
+    IReadOnlyList<OpponentMemberProfileDto> Members)
+{
+    public WarScoutEvidenceDto Evidence { get; init; } = WarScoutEvidenceDto.NotStarted;
+}
+
+/// <summary>
+/// Sanitized public backfill coverage. Raw retry cursors, worker errors and failure diagnostics are
+/// intentionally absent from this contract.
+/// </summary>
+public sealed record WarScoutEvidenceDto(
+    string BackfillStatus,
+    long PagesProcessed,
+    long ReportsProcessed,
+    DateTimeOffset? UpdatedAtUtc,
+    DateTimeOffset? LastSuccessAtUtc,
+    bool IsComplete)
+{
+    public static WarScoutEvidenceDto NotStarted { get; } = new(
+        BackfillStatus: "NotStarted",
+        PagesProcessed: 0,
+        ReportsProcessed: 0,
+        UpdatedAtUtc: null,
+        LastSuccessAtUtc: null,
+        IsComplete: false);
+}
 
 public sealed record OpponentMemberProfileDto(
     long MemberId,

@@ -11,9 +11,9 @@ public sealed class SharedStateAdoptionTests
         var home = ReadRepoFile(
             "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/Home.razor");
 
-        Assert.Contains("<LoadingState Message=\"Loading surfaces data…\" />", home, StringComparison.Ordinal);
+        Assert.Contains("<LoadingState Message=\"Loading training data…\" />", home, StringComparison.Ordinal);
         Assert.Contains("<ErrorState Message=\"@_loadError\" OnRetry=\"LoadSurfacesAsync\" />", home, StringComparison.Ordinal);
-        Assert.Contains("<EmptyState Message=\"No surfaces data found. Run an import first.\" />", home, StringComparison.Ordinal);
+        Assert.Contains("<EmptyState Message=\"No training data found yet. Run an import first.\" />", home, StringComparison.Ordinal);
 
         Assert.DoesNotContain("MudProgressCircular", home, StringComparison.Ordinal);
         Assert.DoesNotContain("<MudAlert Severity=\"Severity.Warning\" Class=\"mb-4\">@_loadError</MudAlert>", home, StringComparison.Ordinal);
@@ -31,7 +31,7 @@ public sealed class SharedStateAdoptionTests
             StringComparison.Ordinal);
         Assert.Contains("_surfaces = null;", home, StringComparison.Ordinal);
         Assert.DoesNotContain(
-            "_loadError = \"No surfaces data found. Run an import first.\";",
+            "_loadError = \"No training data found yet. Run an import first.\";",
             home,
             StringComparison.Ordinal);
     }
@@ -50,8 +50,7 @@ public sealed class SharedStateAdoptionTests
     [Fact]
     public void War_uses_shared_components_for_page_state_without_replacing_operational_alerts()
     {
-        var war = ReadRepoFile(
-            "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/War.razor");
+        var war = ReadWarPresentation();
 
         Assert.Contains("<LoadingState Message=\"Loading current war state…\"", war, StringComparison.Ordinal);
         Assert.Contains("<ErrorState Message=\"War board unavailable. Refresh to retry.\"", war, StringComparison.Ordinal);
@@ -68,11 +67,14 @@ public sealed class SharedStateAdoptionTests
     [Fact]
     public void War_failure_copy_does_not_render_service_failure_detail()
     {
-        var war = ReadRepoFile(
-            "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/War.razor");
+        var war = ReadWarPresentation();
+        var diagnostics = ReadRepoFile(
+            "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/War/WarDiagnosticsPanel.razor");
 
         Assert.DoesNotContain("WarBoard.CurrentFailure.SafeMessage", war, StringComparison.Ordinal);
-        Assert.DoesNotContain("@WarBoard.ConnectionError", war, StringComparison.Ordinal);
+        // Passing ConnectionError into the diagnostics component is allowed so it can decide
+        // whether a generic error state exists. The raw value itself must never be rendered.
+        Assert.DoesNotContain("@ConnectionError", diagnostics, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -82,8 +84,7 @@ public sealed class SharedStateAdoptionTests
             "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/Home.razor");
         var myStats = ReadRepoFile(
             "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/MyStats.razor");
-        var war = ReadRepoFile(
-            "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/War.razor");
+        var war = ReadWarPresentation();
 
         Assert.Contains("<LoadingState", home, StringComparison.Ordinal);
         Assert.Contains("<ErrorState", home, StringComparison.Ordinal);
@@ -94,6 +95,14 @@ public sealed class SharedStateAdoptionTests
         Assert.Contains("<EmptyState", war, StringComparison.Ordinal);
         Assert.Contains("<StaleDataBanner", war, StringComparison.Ordinal);
     }
+
+    private static string ReadWarPresentation() => string.Join(
+        '\n',
+        ReadRepoFile("src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/War.razor"),
+        ReadRepoFile("src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/War/WarBoardStateBanners.razor"),
+        ReadRepoFile("src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/War/WarChainCommandPanel.razor"),
+        ReadRepoFile("src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/War/WarHoleAlerts.razor"),
+        ReadRepoFile("src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/War/WarDiagnosticsPanel.razor"));
 
     private static string ReadRepoFile(string relativePath)
     {

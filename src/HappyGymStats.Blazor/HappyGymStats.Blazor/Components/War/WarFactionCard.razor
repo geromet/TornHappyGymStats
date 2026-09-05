@@ -1,0 +1,84 @@
+<MudCard Class="war-faction-card">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">@Faction.FactionName</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Faction ID @Faction.FactionId</MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        <MudGrid Class="mb-3">
+            <MudItem xs="6">
+                <Figure Label="Score" Value="@Faction.Score.ToString()"
+                        Kind="FigureKind.Measured" ValueTypo="Typo.h5" />
+            </MudItem>
+            <MudItem xs="6">
+                <Figure Label="Chain" Value="@Faction.Chain.ToString()"
+                        Kind="FigureKind.Measured" ValueTypo="Typo.h5" />
+            </MudItem>
+            <MudItem xs="6">
+                <Figure Label="ETA" Value="@FormatEta(Faction.Eta)"
+                        Kind="FigureKind.Projected"
+                        Diagnostic="@Faction.Eta.Diagnostic" />
+            </MudItem>
+            <MudItem xs="6">
+                <Figure Label="Attacks to finish" Value="@FormatAttacksToFinish(Faction.AttacksToFinish)"
+                        Kind="FigureKind.Projected"
+                        Diagnostic="@Faction.AttacksToFinish.Diagnostic" />
+            </MudItem>
+            <MudItem xs="6">
+                <Figure Label="Participation" Value="@FormatPercent(Faction.CoverageRatio)"
+                        Kind="FigureKind.Measured" />
+            </MudItem>
+            <MudItem xs="6">
+                <Figure Label="Coverage ratio"
+                        Value="@($"{Faction.OpenTargetCount} open")"
+                        Note="@($"{FormatPercent(Faction.TargetCoverageRatio)} of available attackers")"
+                        Kind="FigureKind.Measured" />
+            </MudItem>
+            <MudItem xs="6">
+                <Figure Label="Availability"
+                        Value="@($"{Faction.AvailableMemberCount} ready")"
+                        Note="@($"{Faction.HospitalizedMemberCount} hospital · {Faction.UnavailableMemberCount} unavailable")"
+                        Kind="FigureKind.Measured" />
+            </MudItem>
+        </MudGrid>
+
+        @if (Faction.ChainCommand is { } chain)
+        {
+            <WarChainCommandPanel Chain="chain" />
+        }
+
+        <WarRosterTable Members="Faction.Members" />
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public WarFactionDto Faction { get; set; } = default!;
+
+    private static string FormatPercent(decimal value) => $"{value:P1}";
+
+    private static string FormatEta(WarEtaDto eta)
+    {
+        if (!eta.IsAvailable)
+        {
+            return eta.Diagnostic ?? "Unavailable";
+        }
+
+        return eta.SecondsUntilWin is int seconds
+            ? $"ETA {TimeSpan.FromSeconds(seconds):hh\\:mm\\:ss}"
+            : "ETA pending";
+    }
+
+    private static string FormatAttacksToFinish(WarAttacksToFinishDto attacks)
+    {
+        if (!attacks.IsAvailable)
+        {
+            return attacks.Diagnostic ?? "Unavailable";
+        }
+
+        return attacks.RequiredAttacks is int count
+            ? count.ToString()
+            : "Pending";
+    }
+}

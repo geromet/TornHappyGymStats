@@ -6,11 +6,11 @@ namespace HappyGymStats.WarPoller;
 
 public sealed class WarPollerHostedService(
     IServiceScopeFactory scopeFactory,
-    IWarPollerClock clock,
+    TimeProvider timeProvider,
     ILogger<WarPollerHostedService> logger) : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
-    private readonly IWarPollerClock _clock = clock;
+    private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<WarPollerHostedService> _logger = logger;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -37,7 +37,7 @@ public sealed class WarPollerHostedService(
 
                 if (result.DelayBeforeNextTick > TimeSpan.Zero)
                 {
-                    await _clock.DelayAsync(result.DelayBeforeNextTick, stoppingToken);
+                    await Task.Delay(result.DelayBeforeNextTick, _timeProvider, stoppingToken);
                 }
             }
         }

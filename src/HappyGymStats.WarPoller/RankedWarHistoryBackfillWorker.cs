@@ -22,7 +22,7 @@ public sealed class RankedWarHistoryBackfillWorker(
     IRankedWarHistoryBackfillStateRepository stateRepository,
     IUnitOfWork unitOfWork,
     WarPollerOptions options,
-    IWarPollerClock clock,
+    TimeProvider timeProvider,
     ILogger<RankedWarHistoryBackfillWorker> logger)
 {
     private static readonly Regex AbsoluteUrlRegex = new(@"https?://\S+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -30,7 +30,7 @@ public sealed class RankedWarHistoryBackfillWorker(
 
     public async Task<RankedWarHistoryBackfillIterationResult> RunIterationAsync(CancellationToken cancellationToken)
     {
-        var now = clock.UtcNow;
+        var now = timeProvider.GetUtcNow();
         var state = await LoadOrCreateStateAsync(now);
 
         if (string.Equals(state.Status, RankedWarHistoryBackfillStatus.Completed, StringComparison.Ordinal))
@@ -64,7 +64,7 @@ public sealed class RankedWarHistoryBackfillWorker(
 
                 state.Status = RankedWarHistoryBackfillStatus.Running;
                 state.Phase = RankedWarHistoryBackfillPhase.FetchingHistoryPage;
-                await PersistStateAsync(state, clock.UtcNow);
+                await PersistStateAsync(state, timeProvider.GetUtcNow());
 
                 var page = state.NextHistoryPageUrl is null
                     ? await tornApiClient.GetRankedWarHistoryPageAsync(options.ApiKey, cancellationToken)
@@ -73,7 +73,7 @@ public sealed class RankedWarHistoryBackfillWorker(
                         new Uri(state.NextHistoryPageUrl, UriKind.RelativeOrAbsolute),
                         cancellationToken);
 
-                var pageCapturedAtUtc = clock.UtcNow;
+                var pageCapturedAtUtc = timeProvider.GetUtcNow();
                 await ingestWriter.WriteHistoryPageAsync(page, pageCapturedAtUtc, pageCapturedAtUtc, cancellationToken);
 
                 state.Phase = RankedWarHistoryBackfillPhase.FetchingReport;
@@ -95,13 +95,13 @@ public sealed class RankedWarHistoryBackfillWorker(
                     }
 
                     var report = await tornApiClient.GetRankedWarReportAsync(options.ApiKey, war.WarId, cancellationToken);
-                    var reportCapturedAtUtc = clock.UtcNow;
+                    var reportCapturedAtUtc = timeProvider.GetUtcNow();
                     await ingestWriter.WriteReportAsync(report, reportCapturedAtUtc, reportCapturedAtUtc, cancellationToken);
 
                     reportBudget--;
                     state.LastProcessedWarId = war.WarId;
                     state.ReportsProcessed++;
-                    await PersistStateAsync(state, clock.UtcNow);
+                    await PersistStateAsync(state, timeProvider.GetUtcNow());
                 }
 
                 if (!pageDrained)
@@ -120,7 +120,7 @@ public sealed class RankedWarHistoryBackfillWorker(
                 {
                     state.Status = RankedWarHistoryBackfillStatus.Completed;
                     state.Phase = RankedWarHistoryBackfillPhase.Idle;
-                    await PersistSuccessAsync(state, clock.UtcNow);
+                    await PersistSuccessAsync(state, timeProvider.GetUtcNow());
 
                     logger.LogInformation(
                         "Ranked-war history backfill for scope {ScopeKey} reached the last history page; backfill complete.",
@@ -135,7 +135,7 @@ public sealed class RankedWarHistoryBackfillWorker(
             }
 
             state.Phase = RankedWarHistoryBackfillPhase.Idle;
-            await PersistSuccessAsync(state, clock.UtcNow);
+            await PersistSuccessAsync(state, timeProvider.GetUtcNow());
 
             return new RankedWarHistoryBackfillIterationResult(
                 state.Status,
@@ -150,7 +150,7 @@ public sealed class RankedWarHistoryBackfillWorker(
         catch (Exception ex)
         {
             var category = ClassifyFailure(ex);
-            var failedAtUtc = clock.UtcNow;
+            var failedAtUtc = timeProvider.GetUtcNow();
             var retryCount = state.RetryCount + 1;
             var backoff = ComputeFailureBackoff(retryCount);
             var sanitizedMessage = SanitizeMessage(ex.Message);

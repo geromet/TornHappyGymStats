@@ -1,0 +1,105 @@
+.scout-header {
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.scout-summary .war-summary-card {
+    height: 100%;
+}
+
+.scout-conclusion-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.scout-conclusion {
+    min-width: 0;
+}
+
+.scout-roster-list {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.scout-member-card {
+    overflow: hidden;
+}
+
+.scout-member summary {
+    cursor: pointer;
+    list-style-position: inside;
+}
+
+.scout-member-summary {
+    display: grid;
+    grid-template-columns: minmax(12rem, 1.8fr) repeat(4, minmax(7rem, 1fr));
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.85rem 1rem;
+}
+
+.scout-member-summary > span {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.scout-member-summary small,
+.scout-member-name small {
+    opacity: 0.72;
+}
+
+.scout-member-details {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+    padding: 0 1rem 1rem;
+}
+
+@media (min-width: 768px) and (max-width: 1099px) {
+    .scout-member-summary {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .scout-member-name {
+        grid-column: span 3;
+    }
+
+    .scout-member-details {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 767px) {
+    .scout-header {
+        align-items: flex-start !important;
+    }
+
+    .scout-conclusion-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .scout-member-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.55rem;
+    }
+
+    .scout-member-name {
+        grid-column: span 2;
+    }
+
+    .scout-member-details {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 420px) {
+    .scout-member-summary {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .scout-member-name {
+        grid-column: auto;
+    }
+}

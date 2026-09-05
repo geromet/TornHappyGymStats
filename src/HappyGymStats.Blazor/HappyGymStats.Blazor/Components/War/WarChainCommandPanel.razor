@@ -1,0 +1,98 @@
+<MudPaper Elevation="0" Outlined="true" Class="pa-3 mb-3 war-chain-panel">
+    <MudText Typo="Typo.overline">Chain command</MudText>
+
+    @if (Chain.Alert == "TimerRunningLow")
+    {
+        <MudAlert Severity="Severity.Error" Dense="true" Class="my-2">
+            <strong>Chain about to lapse.</strong>
+            @if (Chain.TimerConfidence == "Exact")
+            {
+                <text>@FormatChainTimer(Chain) left, from Torn's own deadline.</text>
+            }
+            else
+            {
+                <text>Estimated from score polls — it may already be gone. Hit now if you can.</text>
+            }
+        </MudAlert>
+    }
+    else if (Chain.Alert == "ReservationWindow")
+    {
+        <MudAlert Severity="Severity.Warning" Dense="true" Class="my-2">
+            <strong>Reservation window.</strong> @Chain.Advice
+        </MudAlert>
+    }
+
+    <MudGrid>
+        <MudItem xs="6">
+            <Figure Label="Multiplier" Value="@($"{Chain.CurrentMultiplier:0.00}×")"
+                    Kind="FigureKind.Measured" />
+        </MudItem>
+        <MudItem xs="6">
+            <Figure Label="Next milestone" Value="@FormatNextMilestone(Chain)"
+                    Kind="FigureKind.Measured" />
+        </MudItem>
+        <MudItem xs="6">
+            <Figure Label="War targets attackable" Value="@Chain.AttackableWarTargetCount.ToString()"
+                    Kind="FigureKind.Measured" />
+        </MudItem>
+        <MudItem xs="6">
+            <Figure Label="@ChainTimerLabel(Chain)" Value="@FormatChainTimer(Chain)"
+                    Kind="@ChainTimerKind(Chain)"
+                    Diagnostic="@Chain.TimerDiagnostic" />
+        </MudItem>
+    </MudGrid>
+
+    @if (Chain.NextMilestone is int ms && Chain.ForfeitedValueIfCrossedOutside > 0)
+    {
+        <MudText Typo="Typo.caption" Class="d-block mt-2">
+            Landing chain @ms outside costs @Chain.ForfeitedValueIfCrossedOutside points.
+        </MudText>
+    }
+
+    @if (Chain.Mode == "WarTargetsOnly")
+    {
+        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="mt-2">Outside targets locked</MudChip>
+    }
+    else if (Chain.Mode == "HoldForWarTarget")
+    {
+        <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="mt-2">Wait or revive — do not filler</MudChip>
+    }
+    else if (Chain.Mode == "SustainWithFiller")
+    {
+        <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="mt-2">Filler OK — scores ~half (war = 1)</MudChip>
+    }
+
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">@Chain.Advice</MudText>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired]
+    public WarChainCommandDto Chain { get; set; } = default!;
+
+    private static string FormatNextMilestone(WarChainCommandDto chain) =>
+        chain.NextMilestone is int ms && chain.HitsToNextMilestone is int hits
+            ? $"{ms} · {hits} hit(s), worth {chain.NextMilestoneBonus}"
+            : "past the final milestone";
+
+    private static FigureKind ChainTimerKind(WarChainCommandDto chain) =>
+        chain.TimerConfidence == "Exact" ? FigureKind.Measured : FigureKind.Inferred;
+
+    private static string ChainTimerLabel(WarChainCommandDto chain) =>
+        chain.TimerConfidence == "Exact" ? "Chain lapses in" : "Last hit";
+
+    private static string FormatChainTimer(WarChainCommandDto chain)
+    {
+        if (chain.TimerConfidence == "Exact" && chain.SecondsUntilLapse is int exactLeft)
+        {
+            return $"{TimeSpan.FromSeconds(exactLeft):mm\\:ss}";
+        }
+
+        if (!chain.TimerIsInferred || chain.SecondsSinceLastHit is not int since)
+        {
+            return chain.TimerDiagnostic ?? "unknown";
+        }
+
+        var untilLapse = chain.SecondsUntilLapse ?? 0;
+        return $"~{TimeSpan.FromSeconds(since):mm\\:ss} ago (±{chain.TimerSpacingSeconds}s) · ~{TimeSpan.FromSeconds(untilLapse):mm\\:ss} to lapse";
+    }
+}
