@@ -1,24 +1,20 @@
 <Project>
 
   <!--
-    Shared compiler and analyzer policy. Deliberately conservative: every value
-    here is what the projects already had or what the SDK already defaults to,
-    so this centralises ownership without changing a single build outcome.
+    Shared compiler and analyzer policy.
 
-    Warnings are NOT errors yet. Issue #65 owns establishing a clean baseline
-    first; four analyzer warnings (CA1416, EF1002, CS0618, MUD0002) are known and
-    unresolved, and turning the switch before they are triaged would either block
-    the build or invite blanket suppressions.
+    The solution has an established zero-warning baseline in canonical CI. Keep
+    warnings mechanically blocking here so a newly introduced compiler or .NET
+    analyzer warning fails every project consistently instead of relying on a
+    project-by-project setting or log inspection.
   -->
   <PropertyGroup>
-    <!-- Previously repeated identically in all 11 project files. -->
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
 
-    <!-- Both are the SDK default for this target framework; stated so the policy
-         has an owner and a change is visible in a diff. -->
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest</AnalysisLevel>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
     <!-- Normalises embedded paths on a CI runner so builds are reproducible.
          Off locally, where absolute paths make debugging easier. -->
