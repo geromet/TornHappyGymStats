@@ -1,0 +1,46 @@
+name: Issue 69 tier split proof
+
+on:
+  push:
+    branches:
+      - agent/issue-69-test-tier-split
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      HAPPYGYMSTATS_REQUIRE_POSTGRES_INTEGRATION: "1"
+      HAPPYGYMSTATS_POSTGRES_START_TIMEOUT_SECONDS: "300"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Restore test projects
+        run: |
+          dotnet restore tests/HappyGymStats.Tests/HappyGymStats.Tests.csproj
+          dotnet restore tests/HappyGymStats.UnitTests/HappyGymStats.UnitTests.csproj
+          dotnet restore tests/HappyGymStats.IntegrationTests/HappyGymStats.IntegrationTests.csproj
+      - name: Build explicit tiers
+        run: |
+          dotnet build tests/HappyGymStats.UnitTests/HappyGymStats.UnitTests.csproj --no-restore
+          dotnet build tests/HappyGymStats.IntegrationTests/HappyGymStats.IntegrationTests.csproj --no-restore
+      - name: Prove discovery parity
+        run: bash scripts/verify/test-tier-parity.sh
+      - name: Run unit tier
+        run: dotnet test tests/HappyGymStats.UnitTests/HappyGymStats.UnitTests.csproj --nologo --no-restore
+      - name: Run non-Postgres integration tier
+        run: dotnet test tests/HappyGymStats.IntegrationTests/HappyGymStats.IntegrationTests.csproj --nologo --no-restore --filter "Category!=PostgresApiIntegration"
+      - name: Prove Docker is available
+        run: docker info
+      - name: Run non-skippable Postgres integration tier
+        run: bash scripts/verify/s07-postgres-integration.sh
+      - name: Shellcheck new verifier
+        run: shellcheck --severity=warning scripts/verify/test-tier-parity.sh scripts/verify/s07-postgres-integration.sh
+      - name: Diff whitespace
+        run: git diff --check 83dd04126258b73200e91ac98a8142e1dd9db229...HEAD
