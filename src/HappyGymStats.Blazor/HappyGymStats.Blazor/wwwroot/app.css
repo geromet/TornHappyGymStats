@@ -10,9 +10,8 @@ html, body {
    obvious. The outline and offset communicate focus by shape and position,
    rather than relying on a colour-only state. */
 :where(a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
-    outline: 3px solid var(--mud-palette-primary);
-    outline-offset: 3px;
-    box-shadow: 0 0 0 1px var(--mud-palette-surface);
+    outline: 3px solid var(--mud-palette-primary) !important;
+    outline-offset: 3px !important;
 }
 
 /* Motion is an enhancement, never a requirement for understanding state.
