@@ -12,8 +12,4 @@
     <PackageReference Include="MudBlazor" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\HappyGymStats.Encryption\HappyGymStats.Encryption.csproj" />
-  </ItemGroup>
-
 </Project>
