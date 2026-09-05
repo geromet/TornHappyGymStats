@@ -79,7 +79,7 @@ public sealed class SharedStateRenderedTests : BunitContext
     public void War_renders_no_active_war_as_successful_empty_state()
     {
         var board = CreateWarBoard();
-        SetProperty(board, nameof(WarBoardService.CurrentState), CreateWarState(WarStatus.NotReady, isReady: false, isStale: false));
+        SetProperty(board, nameof(WarBoardService.CurrentState), CreateWarState(WarStatus.NotReady, isReady: false));
         ConfigureWar(board);
 
         var cut = Render<War>();
@@ -90,10 +90,10 @@ public sealed class SharedStateRenderedTests : BunitContext
     }
 
     [Fact]
-    public void War_renders_stale_banner_for_active_stale_state()
+    public void War_renders_stale_banner_for_connection_degradation()
     {
         var board = CreateWarBoard();
-        SetProperty(board, nameof(WarBoardService.CurrentState), CreateWarState(WarStatus.Ok, isReady: true, isStale: true));
+        SetProperty(board, nameof(WarBoardService.ConnectionError), "connection dropped");
         ConfigureWar(board);
 
         var cut = Render<War>();
@@ -132,7 +132,7 @@ public sealed class SharedStateRenderedTests : BunitContext
         return board;
     }
 
-    private static WarStateDto CreateWarState(string status, bool isReady, bool isStale) => new(
+    private static WarStateDto CreateWarState(string status, bool isReady) => new(
         Status: status,
         IsReady: isReady,
         WarId: status == WarStatus.NotReady ? null : 1234,
@@ -149,7 +149,7 @@ public sealed class SharedStateRenderedTests : BunitContext
             PollStartedAtUtc: null,
             PollCompletedAtUtc: null,
             StaleAfterUtc: null,
-            IsStale: isStale,
+            IsStale: false,
             LastError: null),
         Warnings: Array.Empty<string>(),
         Errors: Array.Empty<string>(),
