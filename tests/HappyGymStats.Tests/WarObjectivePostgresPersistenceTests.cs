@@ -126,13 +126,13 @@ public sealed class WarObjectivePostgresPersistenceTests : IAsyncLifetime
         var firstFreeze = await repository.GetDurableEffectiveAsync(factionId, warId, CancellationToken.None);
         var secondFreeze = await repository.GetDurableEffectiveAsync(factionId, warId, CancellationToken.None);
 
-        Assert.Equal(firstFreeze, secondFreeze);
+        AssertSameObjective(firstFreeze, secondFreeze);
         Assert.Equal(1, firstFreeze.Objective.Version);
         Assert.False(firstFreeze.Objective.IsExplicit);
 
         var frozenHistory = await repository.GetHistoryAsync(factionId, warId, CancellationToken.None);
         var baseline = Assert.Single(frozenHistory);
-        Assert.Equal(firstFreeze, baseline);
+        AssertSameObjective(firstFreeze, baseline);
 
         var firstExplicit = await repository.AppendNextAsync(
             factionId,
@@ -194,7 +194,7 @@ public sealed class WarObjectivePostgresPersistenceTests : IAsyncLifetime
 
         var persistedFrozen = Assert.Single(
             history.Where(item => item.Objective.Version == frozen.Objective.Version));
-        Assert.Equal(frozen, persistedFrozen);
+        AssertSameObjective(frozen, persistedFrozen);
     }
 
     [Fact]
@@ -211,6 +211,21 @@ public sealed class WarObjectivePostgresPersistenceTests : IAsyncLifetime
             () => repository.GetDurableEffectiveAsync(0, 9876, CancellationToken.None));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
             () => repository.GetDurableEffectiveAsync(1234, 0, CancellationToken.None));
+    }
+
+    private static void AssertSameObjective(
+        FactionWarObjectiveVersion expected,
+        FactionWarObjectiveVersion actual)
+    {
+        Assert.Equal(expected.FactionId, actual.FactionId);
+        Assert.Equal(expected.Objective.WarId, actual.Objective.WarId);
+        Assert.Equal(expected.Objective.Version, actual.Objective.Version);
+        Assert.Equal(expected.Objective.Mode, actual.Objective.Mode);
+        Assert.Equal(expected.Objective.IsExplicit, actual.Objective.IsExplicit);
+        Assert.Equal(expected.Objective.StopAtFactionScore, actual.Objective.StopAtFactionScore);
+        Assert.Equal(expected.Objective.Notes, actual.Objective.Notes);
+        Assert.Equal(expected.Objective.ChangedBy, actual.Objective.ChangedBy);
+        Assert.Equal(expected.Objective.CreatedAtUtc, actual.Objective.CreatedAtUtc);
     }
 
     private HappyGymStatsDbContext CreateDbContext()
