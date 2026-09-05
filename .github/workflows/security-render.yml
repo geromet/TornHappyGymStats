@@ -39,6 +39,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
+          mkdir -p workspace/tmp
           bash scripts/screenshot-board.sh --route /security --out workspace/tmp/screenshots/security 2>&1 | tee workspace/tmp/security-render.log
           if grep -q '^  ! .*console/page error(s)' workspace/tmp/security-render.log; then
             echo 'FAIL: /security emitted browser console/page errors during render proof' >&2
