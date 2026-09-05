@@ -1,0 +1,13 @@
+<MudGrid>
+    @foreach (var faction in Factions)
+    {
+        <MudItem xs="12" xl="6">
+            <WarFactionCard Faction="faction" />
+        </MudItem>
+    }
+</MudGrid>
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<WarFactionDto> Factions { get; set; } = Array.Empty<WarFactionDto>();
+}

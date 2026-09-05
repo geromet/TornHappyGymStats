@@ -100,15 +100,14 @@ check() {
 # literal address on both sides removes the question.
 #
 # Readiness means "the server answered", not "the server answered 200".
-# curl -sf treats 401 and 404 as failure, so the first version of this waited
-# three minutes for an API that was already serving every request — the log
-# showed the handler running for each probe. Any HTTP status is proof of life;
-# only a connection failure (code 000) is not.
+# curl -f treats 401 and 404 as failure, so do not use it here. A completed curl
+# with any real HTTP status is proof of life; a transport failure is not.
 wait_for() {
   local url="$1" name="$2" deadline=$((SECONDS + 180)) code
   while (( SECONDS < deadline )); do
-    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "${url}" || echo 000)"
-    [[ "${code}" != "000" ]] && return 0
+    if code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "${url}")"; then
+      [[ "${code}" != "000" ]] && return 0
+    fi
     sleep 2
   done
   echo "FAIL: ${name} never answered at ${url} within 180s" >&2
