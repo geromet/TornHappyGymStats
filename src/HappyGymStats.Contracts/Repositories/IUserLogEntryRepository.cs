@@ -21,9 +21,7 @@ public interface IUserLogEntryRepository
 
     Task<IReadOnlyList<GymLogEntry>> GetGymLogEntriesAsync(Guid anonymousId, CancellationToken ct);
 
-    // Returns fully-formed CursorPage with encoded cursor string.
-    Task<CursorPage<GymTrainDto>> GetGymTrainsPageAsync(int take, PageCursor? cursor, CancellationToken ct);
-
+    // Returns fully-formed CursorPage with encoded cursor string for one owner.
     Task<CursorPage<GymTrainDto>> GetGymTrainsPageAsync(Guid anonymousId, int take, PageCursor? cursor, CancellationToken ct);
 
     // Returns per-user gym train summary (count + latest date) for a set of AnonymousIds.
