@@ -73,8 +73,8 @@ internal static class DevelopmentScoutSeed
         db.RankedWarHistoryBackfillState.Add(new RankedWarHistoryBackfillStateEntity
         {
             ScopeKey = ScopeKey,
-            Status = RankedWarHistoryBackfillStatus.Completed,
-            Phase = RankedWarHistoryBackfillPhase.Idle,
+            Status = "Completed",
+            Phase = "Idle",
             NextHistoryPageUrl = null,
             LastProcessedWarId = WarIds[^1],
             PagesProcessed = 9,
