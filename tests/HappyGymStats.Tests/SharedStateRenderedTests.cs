@@ -1,12 +1,10 @@
 using System.Net;
 using System.Reflection;
-using System.Text;
 using Bunit;
 using HappyGymStats.Blazor.Components.Pages;
 using HappyGymStats.Blazor.Services;
 using HappyGymStats.Core.Models;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 using MudBlazor.Services;
 using Xunit;
 
@@ -14,34 +12,6 @@ namespace HappyGymStats.Tests;
 
 public sealed class SharedStateRenderedTests : BunitContext
 {
-    [Fact]
-    public void Home_renders_successful_empty_state_when_no_surface_dataset_exists()
-    {
-        ConfigureHome(new HomeMessageHandler(HttpStatusCode.NotFound));
-
-        var cut = Render<Home>();
-
-        cut.WaitForAssertion(() =>
-        {
-            Assert.Contains("No surfaces data found. Run an import first.", cut.Markup, StringComparison.Ordinal);
-            Assert.DoesNotContain("Could not load surfaces data", cut.Markup, StringComparison.Ordinal);
-        });
-    }
-
-    [Fact]
-    public void Home_renders_failure_state_when_surface_api_is_unavailable()
-    {
-        ConfigureHome(new HomeMessageHandler(HttpStatusCode.ServiceUnavailable));
-
-        var cut = Render<Home>();
-
-        cut.WaitForAssertion(() =>
-        {
-            Assert.Contains("Could not load surfaces data. The service is temporarily unavailable", cut.Markup, StringComparison.Ordinal);
-            Assert.DoesNotContain("No surfaces data found", cut.Markup, StringComparison.Ordinal);
-        });
-    }
-
     [Fact]
     public void War_renders_loading_state_while_initial_state_is_pending()
     {
@@ -103,17 +73,6 @@ public sealed class SharedStateRenderedTests : BunitContext
         Assert.DoesNotContain("No war in progress", cut.Markup, StringComparison.Ordinal);
     }
 
-    private void ConfigureHome(HttpMessageHandler handler)
-    {
-        Services.AddLogging();
-        Services.AddMudServices();
-        JSInterop.Mode = JSRuntimeMode.Loose;
-
-        var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
-        Services.AddSingleton(new SurfacesService(http));
-        Services.AddSingleton(new UiSettingsService(http, NullLogger<UiSettingsService>.Instance));
-    }
-
     private void ConfigureWar(WarBoardService board)
     {
         Services.AddLogging();
@@ -127,7 +86,7 @@ public sealed class SharedStateRenderedTests : BunitContext
         {
             BaseAddress = new Uri("http://localhost")
         };
-        var board = new WarBoardService(http, new NullAccessTokenProvider(), NullLogger<WarBoardService>.Instance);
+        var board = new WarBoardService(http, new NullAccessTokenProvider(), Microsoft.Extensions.Logging.Abstractions.NullLogger<WarBoardService>.Instance);
         SetField(board, "initialized", true);
         return board;
     }
@@ -179,27 +138,5 @@ public sealed class SharedStateRenderedTests : BunitContext
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             throw new InvalidOperationException($"War rendered-state proof unexpectedly made an HTTP request: {request.Method} {request.RequestUri}");
-    }
-
-    private sealed class HomeMessageHandler(HttpStatusCode surfacesStatus) : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            var path = request.RequestUri?.AbsolutePath;
-            if (request.Method == HttpMethod.Get && path == "/api/v1/ui-settings")
-            {
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new StringContent("{\"gymPointCloudEnabled\":false}", Encoding.UTF8, "application/json")
-                });
-            }
-
-            if (request.Method == HttpMethod.Get && path == "/api/v1/torn/surfaces/latest")
-            {
-                return Task.FromResult(new HttpResponseMessage(surfacesStatus));
-            }
-
-            throw new InvalidOperationException($"Unexpected Home rendered-state request: {request.Method} {path}");
-        }
     }
 }

@@ -13,14 +13,8 @@
 {
     <LoadingState Message="Loading your training data…" />
 }
-else if (_loadError != null)
+else
 {
-    <ErrorState Message="@_loadError" />
-}
-else if (_surfaces != null)
-{
-    var points = FilteredPoints;
-
     <MudStack Spacing="3">
         <div>
             <MudText Typo="Typo.h4">My Training</MudText>
@@ -29,109 +23,122 @@ else if (_surfaces != null)
             </MudText>
         </div>
 
-        <MudGrid>
-            <MudItem xs="12" sm="6" md="3">
-                <MudCard Style="height:100%">
-                    <MudCardContent>
-                        <MudText Typo="Typo.overline">Visible sample</MudText>
-                        <MudText Typo="Typo.h5" data-testid="visible-sample-count">@points.Count</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">of @_surfaces.Meta.GymPointCount plotted observations</MudText>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="3">
-                <MudCard Style="height:100%">
-                    <MudCardContent>
-                        <MudText Typo="Typo.overline">Average gain / energy</MudText>
-                        <MudText Typo="Typo.h5">@AverageEfficiency(points)</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Observed stat gain per energy spent</MudText>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="3">
-                <MudCard Style="height:100%">
-                    <MudCardContent>
-                        <MudText Typo="Typo.overline">Average happiness</MudText>
-                        <MudText Typo="Typo.h5">@AverageHappiness(points)</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Before the recorded train</MudText>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="3">
-                <MudCard Style="height:100%">
-                    <MudCardContent>
-                        <MudText Typo="Typo.overline">Date span</MudText>
-                        <MudText Typo="Typo.subtitle1" data-testid="date-span">@DateRangeLabel(points)</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">UTC, for the visible sample</MudText>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-        </MudGrid>
+        @if (_loadError != null)
+        {
+            <ErrorState Message="@_loadError" OnRetry="LoadSurfacesAsync" />
+        }
+        else if (_surfaces == null)
+        {
+            <EmptyState Message="No personal gym stats found yet. Import data first." />
+        }
+        else
+        {
+            var points = FilteredPoints;
 
-        <MudCard>
-            <MudCardContent>
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="flex-wrap:wrap">
-                    <div style="min-width: 180px">
-                        <MudText Typo="Typo.overline">Filter</MudText>
-                        <select aria-label="Stat filter"
-                                value="@_statFilter"
-                                @onchange="OnStatFilterChangedAsync"
-                                style="display:block;width:100%;min-height:40px;padding:6px 10px;border-radius:4px">
-                            <option value="all">All stats</option>
-                            @foreach (var statType in AvailableStatTypes)
-                            {
-                                <option value="@statType">@FormatStatType(statType)</option>
-                            }
-                        </select>
-                    </div>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        Dataset @_surfaces.Version · @_surfaces.Meta.RecordCount records processed · @points.Count observations in this view
-                    </MudText>
-                </MudStack>
-            </MudCardContent>
-        </MudCard>
+            <MudGrid>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudCard Style="height:100%">
+                        <MudCardContent>
+                            <MudText Typo="Typo.overline">Visible sample</MudText>
+                            <MudText Typo="Typo.h5" data-testid="visible-sample-count">@points.Count</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">of @_surfaces.Meta.GymPointCount plotted observations</MudText>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudCard Style="height:100%">
+                        <MudCardContent>
+                            <MudText Typo="Typo.overline">Average gain / energy</MudText>
+                            <MudText Typo="Typo.h5">@AverageEfficiency(points)</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Observed stat gain per energy spent</MudText>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudCard Style="height:100%">
+                        <MudCardContent>
+                            <MudText Typo="Typo.overline">Average happiness</MudText>
+                            <MudText Typo="Typo.h5">@AverageHappiness(points)</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Before the recorded train</MudText>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudCard Style="height:100%">
+                        <MudCardContent>
+                            <MudText Typo="Typo.overline">Date span</MudText>
+                            <MudText Typo="Typo.subtitle1" data-testid="date-span">@DateRangeLabel(points)</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">UTC, for the visible sample</MudText>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            </MudGrid>
 
-        <MudGrid>
-            <MudItem xs="12" lg="6">
-                <MudCard Style="height:100%">
-                    <MudCardHeader>
-                        <CardHeaderContent>
-                            <MudText Typo="Typo.h6">Gain / energy over time</MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Each dot is one imported training observation.</MudText>
-                        </CardHeaderContent>
-                    </MudCardHeader>
-                    <MudCardContent Class="pa-0">
-                        <div id="training-efficiency-time-chart" style="width:100%;height:360px"></div>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-            <MudItem xs="12" lg="6">
-                <MudCard Style="height:100%">
-                    <MudCardHeader>
-                        <CardHeaderContent>
-                            <MudText Typo="Typo.h6">Gain / energy vs stat before</MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Compare observed efficiency across your stat-size range.</MudText>
-                        </CardHeaderContent>
-                    </MudCardHeader>
-                    <MudCardContent Class="pa-0">
-                        <div id="training-efficiency-stat-chart" style="width:100%;height:360px"></div>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-            <MudItem xs="12">
-                <MudCard>
-                    <MudCardHeader>
-                        <CardHeaderContent>
-                            <MudText Typo="Typo.h6">Gain / energy vs happiness</MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">See the relationship in the raw observations without turning correlation into advice.</MudText>
-                        </CardHeaderContent>
-                    </MudCardHeader>
-                    <MudCardContent Class="pa-0">
-                        <div id="training-efficiency-happy-chart" style="width:100%;height:360px"></div>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-        </MudGrid>
+            <MudCard>
+                <MudCardContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="flex-wrap:wrap">
+                        <div style="min-width: 180px">
+                            <MudText Typo="Typo.overline">Filter</MudText>
+                            <select aria-label="Stat filter"
+                                    value="@_statFilter"
+                                    @onchange="OnStatFilterChangedAsync"
+                                    style="display:block;width:100%;min-height:40px;padding:6px 10px;border-radius:4px">
+                                <option value="all">All stats</option>
+                                @foreach (var statType in AvailableStatTypes)
+                                {
+                                    <option value="@statType">@FormatStatType(statType)</option>
+                                }
+                            </select>
+                        </div>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            Dataset @_surfaces.Version · @_surfaces.Meta.RecordCount records processed · @points.Count observations in this view
+                        </MudText>
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+
+            <MudGrid>
+                <MudItem xs="12" lg="6">
+                    <MudCard Style="height:100%">
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <MudText Typo="Typo.h6">Gain / energy over time</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Each dot is one imported training observation.</MudText>
+                            </CardHeaderContent>
+                        </MudCardHeader>
+                        <MudCardContent Class="pa-0">
+                            <div id="training-efficiency-time-chart" style="width:100%;height:360px"></div>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+                <MudItem xs="12" lg="6">
+                    <MudCard Style="height:100%">
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <MudText Typo="Typo.h6">Gain / energy vs stat before</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Compare observed efficiency across your stat-size range.</MudText>
+                            </CardHeaderContent>
+                        </MudCardHeader>
+                        <MudCardContent Class="pa-0">
+                            <div id="training-efficiency-stat-chart" style="width:100%;height:360px"></div>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudCard>
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <MudText Typo="Typo.h6">Gain / energy vs happiness</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">See the relationship in the raw observations without turning correlation into advice.</MudText>
+                            </CardHeaderContent>
+                        </MudCardHeader>
+                        <MudCardContent Class="pa-0">
+                            <div id="training-efficiency-happy-chart" style="width:100%;height:360px"></div>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            </MudGrid>
+        }
 
         <MudCard>
             <MudCardHeader>
@@ -214,11 +221,14 @@ else if (_surfaces != null)
         try
         {
             _surfaces = await SurfacesApi.GetMyStatsAsync();
-            if (_surfaces == null)
-                _loadError = "No personal gym stats found yet. Import data first.";
+        }
+        catch (ApiFailure failure) when (failure.Category == ApiFailureCategory.NotFound)
+        {
+            _surfaces = null;
         }
         catch (ApiFailure failure)
         {
+            _surfaces = null;
             _loadError = BuildLoadFailureMessage(failure);
             Logger.LogError(failure,
                 "Failed to load personal stats data. Endpoint={Endpoint} Status={StatusCode} Category={Category}",
@@ -228,6 +238,7 @@ else if (_surfaces != null)
         }
         catch (Exception ex)
         {
+            _surfaces = null;
             _loadError = "Failed to load personal stats data due to an unexpected error.";
             Logger.LogError(ex, "Failed to load personal stats data");
         }
@@ -255,10 +266,8 @@ else if (_surfaces != null)
         {
             await SurfacesApi.StartMyStatsImportAsync(_apiKey.Trim(), fresh: true);
             _apiKey = null;
-
             _importStatusMessage = "Import queued — reloading personal stats...";
             _importStatusSeverity = Severity.Success;
-
             await LoadSurfacesAsync();
         }
         catch (ApiFailure failure)
