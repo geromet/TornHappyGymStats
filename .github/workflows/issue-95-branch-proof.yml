@@ -1,0 +1,21 @@
+name: Issue 95 branch proof
+
+on:
+  push:
+    branches:
+      - agent/issue-95-security-delete-confirmation
+
+jobs:
+  proof:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Restore
+        run: dotnet restore HappyGymStats.sln
+      - name: Run destructive-action rendered tests
+        run: dotnet test tests/HappyGymStats.Tests/HappyGymStats.Tests.csproj --no-restore --filter FullyQualifiedName~SecurityDestructiveActionRenderedTests
+      - name: Verify diff whitespace
+        run: git diff --check origin/main...HEAD
