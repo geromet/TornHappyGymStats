@@ -11,4 +11,12 @@ public sealed class BlazorRouteContractTests
 
         Assert.Null(blazorAssembly.GetType("HappyGymStats.Blazor.Components.Pages.Weather"));
     }
+
+    [Fact]
+    public void Gym_explorer_component_is_part_of_the_blazor_host()
+    {
+        var blazorAssembly = typeof(HappyGymStats.Blazor.Program).Assembly;
+
+        Assert.NotNull(blazorAssembly.GetType("HappyGymStats.Blazor.Components.Pages.GymExplorer"));
+    }
 }
