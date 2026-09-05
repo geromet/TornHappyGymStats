@@ -7,6 +7,8 @@ public sealed class WarReplayValidationTests
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 5, 11, 0, 0, TimeSpan.Zero);
 
+    // The public record constructor is intentionally exercised directly: evaluator entry points
+    // must fail closed even when callers bypass WarReplayObservation.Create's convenience checks.
     [Theory]
     [InlineData(0L, 1, 1, 1, 1, 100)]
     [InlineData(77L, -1, 1, 1, 1, 100)]
