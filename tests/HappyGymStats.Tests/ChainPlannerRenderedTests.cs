@@ -68,7 +68,7 @@ public sealed class ChainPlannerRenderedTests
         var context = new BunitContext();
         context.JSInterop.Mode = JSRuntimeMode.Loose;
         context.Services.AddLogging();
-        context.Services.AddMudServices();
+        context.Services.AddMudServices(options => options.PopoverOptions.CheckForPopoverProvider = false);
         return context;
     }
 }
