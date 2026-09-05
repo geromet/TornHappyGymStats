@@ -1,0 +1,77 @@
+{
+  "members": [
+    {
+      "id": 910001,
+      "name": "Example Active",
+      "position": "Member",
+      "level": 42,
+      "days_in_faction": 120,
+      "is_revivable": true,
+      "is_on_wall": false,
+      "is_in_oc": false,
+      "has_early_discharge": false,
+      "last_action": {
+        "status": "Online",
+        "timestamp": 1788599700,
+        "relative": "1 minute ago"
+      },
+      "status": {
+        "description": "Okay",
+        "details": null,
+        "state": "Okay",
+        "until": null,
+        "color": "green"
+      },
+      "revive_setting": "Unknown"
+    },
+    {
+      "id": 910002,
+      "name": "Example Traveling",
+      "position": "Member",
+      "level": 37,
+      "days_in_faction": 88,
+      "is_revivable": false,
+      "is_on_wall": false,
+      "is_in_oc": false,
+      "has_early_discharge": false,
+      "last_action": {
+        "status": "Idle",
+        "timestamp": 1788598800,
+        "relative": "16 minutes ago"
+      },
+      "status": {
+        "description": "Traveling to Argentina",
+        "details": "Traveling",
+        "state": "Traveling",
+        "until": 1788602400,
+        "color": "blue",
+        "plane_image_type": "private_jet"
+      },
+      "revive_setting": "Unknown"
+    },
+    {
+      "id": 910003,
+      "name": "Example Unknown Timing",
+      "position": "Member",
+      "level": 29,
+      "days_in_faction": 41,
+      "is_revivable": false,
+      "is_on_wall": false,
+      "is_in_oc": false,
+      "has_early_discharge": false,
+      "last_action": {
+        "status": "Offline",
+        "timestamp": 1788590000,
+        "relative": "2 hours ago"
+      },
+      "status": {
+        "description": "Abroad",
+        "details": null,
+        "state": "Abroad",
+        "until": null,
+        "color": "red"
+      },
+      "revive_setting": "Unknown"
+    }
+  ]
+}
