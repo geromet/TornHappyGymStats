@@ -18,6 +18,8 @@ jobs:
       HAPPYGYMSTATS_POSTGRES_START_TIMEOUT_SECONDS: "300"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
