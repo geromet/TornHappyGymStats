@@ -1,0 +1,59 @@
+name: War render proof
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/War.razor'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/War.razor.css'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/War/**'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Shared/**'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Services/WarBoardService.cs'
+      - 'src/HappyGymStats.Contracts/Models/WarDtos.cs'
+      - 'scripts/screenshot-board.sh'
+      - 'scripts/ux/shoot.py'
+      - '.github/workflows/war-render.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: war-render-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    name: 390 / 768 / desktop screenshots
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install .NET (version from global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install screenshot tooling
+        run: bash scripts/screenshot-board.sh --setup
+
+      - name: Capture seeded war at phone, tablet and desktop widths
+        run: bash scripts/screenshot-board.sh --out workspace/tmp/screenshots/seeded
+
+      - name: Capture no-war state at phone, tablet and desktop widths
+        env:
+          SHOT_NO_WAR: '1'
+          SHOT_API_PORT: '5057'
+          SHOT_WEB_PORT: '5147'
+        run: bash scripts/screenshot-board.sh --out workspace/tmp/screenshots/no-war
+
+      - name: Upload render proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: war-render-proof
+          path: workspace/tmp/screenshots
+          if-no-files-found: error
+          retention-days: 7

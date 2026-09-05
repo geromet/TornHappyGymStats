@@ -19,6 +19,7 @@ readonly TRACKER_TESTS="${ROOT_DIR}/tests/HappyGymStats.Tests/ChainTrackerTests.
 readonly LAPSE_TESTS="${ROOT_DIR}/tests/HappyGymStats.Tests/ChainLapseInferenceTests.cs"
 readonly ENGINE_TESTS="${ROOT_DIR}/tests/HappyGymStats.Tests/WarStateDerivationEngineTests.cs"
 readonly BOARD_PAGE="${ROOT_DIR}/src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/War.razor"
+readonly CHAIN_PANEL="${ROOT_DIR}/src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/War/WarChainCommandPanel.razor"
 
 readonly TEST_FILTER="ChainTrackerTests|ChainLapseInferenceTests|WarStateDerivationEngineTests"
 
@@ -33,6 +34,7 @@ required_files=(
   "$LAPSE_TESTS"
   "$ENGINE_TESTS"
   "$BOARD_PAGE"
+  "$CHAIN_PANEL"
 )
 
 # Acceptance criteria from workspace/V2/handoff/06, each pinned to a named test.
@@ -83,7 +85,7 @@ forbidden_patterns=(
   'Anonymized'
 )
 
-# Board literals the chain panel must keep (parallel to w04's board-literal pins).
+# Board literals the extracted chain panel must keep (parallel to w04's board-literal pins).
 board_literals=(
   'Chain command'
   'Landing chain'
@@ -119,8 +121,8 @@ done
 pass "all ${#required_tests[@]} pinned acceptance tests present"
 
 for literal in "${board_literals[@]}"; do
-  rg -n --fixed-strings "$literal" "$BOARD_PAGE" >/dev/null \
-    || fail "chain panel board literal '$literal' missing from War.razor"
+  rg -n --fixed-strings "$literal" "$BOARD_PAGE" "$CHAIN_PANEL" >/dev/null \
+    || fail "chain panel board literal '$literal' missing from war board presentation"
 done
 pass "chain panel board literals present"
 
