@@ -27,7 +27,7 @@ public sealed record WarPayoutPolicy(
         return this;
     }
 
-    internal static void ValidateAmount(decimal value, string name)
+    public static void ValidateAmount(decimal value, string name)
     {
         if (value < 0m || value > MaximumAmount)
             throw new ArgumentOutOfRangeException(name, value, $"Amount must be between 0 and {MaximumAmount}.");
