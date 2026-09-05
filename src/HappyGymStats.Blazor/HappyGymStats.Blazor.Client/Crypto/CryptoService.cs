@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-using HappyGymStats.Encryption;
 using Microsoft.JSInterop;
 
 namespace HappyGymStats.Blazor.Client.Crypto;
@@ -9,28 +6,40 @@ public sealed class CryptoService(IJSRuntime js)
 {
     private const string StorageKey = "happygymstats.wrapped_key";
     private const string PublicKeyStorageKey = "happygymstats.public_key";
+    private const string ModulePath = "./crypto.js";
 
     public async Task<bool> HasStoredKeyAsync()
         => await js.InvokeAsync<string?>("localStorage.getItem", StorageKey) is not null;
 
-    /// <summary>
-    /// Generates a new P-256 ECDH keypair. Returns the SPKI-encoded public key (for sending to
-    /// the server) and the PBKDF2+AES-GCM-wrapped private key blob (for localStorage).
-    /// </summary>
-    public static (byte[] PublicKeySpki, byte[] WrappedPrivateKey) GenerateKeyPair(string password)
+    public async Task<string> GenerateAndStoreKeyAsync(string password)
     {
-        using var ecdh = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
-        var publicKey = ecdh.ExportSubjectPublicKeyInfo();
-        var privateKey = ecdh.ExportPkcs8PrivateKey();
-        var wrapped = KeyWrapping.WrapKey(privateKey, password.AsSpan());
-        return (publicKey, wrapped);
+        await using var module = await ImportModuleAsync();
+        var generated = await module.InvokeAsync<GeneratedKeyPair>("generateWrappedKeyPair", password);
+
+        // Validate that browser interop returned well-formed base64 before persisting it.
+        _ = Convert.FromBase64String(generated.PublicKeySpki);
+        _ = Convert.FromBase64String(generated.WrappedPrivateKey);
+
+        await js.InvokeVoidAsync("localStorage.setItem", StorageKey, generated.WrappedPrivateKey);
+        await js.InvokeVoidAsync("localStorage.setItem", PublicKeyStorageKey, generated.PublicKeySpki);
+        return generated.PublicKeySpki;
     }
 
-    public async Task StoreWrappedKeyAsync(byte[] wrappedKey)
-        => await js.InvokeVoidAsync("localStorage.setItem", StorageKey, Convert.ToBase64String(wrappedKey));
+    public async Task<string?> VerifyStoredKeyAsync(string password)
+    {
+        var wrappedKey = await js.InvokeAsync<string?>("localStorage.getItem", StorageKey);
+        if (wrappedKey is null)
+            return null;
 
-    public async Task StorePublicKeyAsync(byte[] publicKeySpki)
-        => await js.InvokeVoidAsync("localStorage.setItem", PublicKeyStorageKey, Convert.ToBase64String(publicKeySpki));
+        await using var module = await ImportModuleAsync();
+        var publicKeySpki = await module.InvokeAsync<string?>("unwrapPublicKeySpki", wrappedKey, password);
+        if (publicKeySpki is null)
+            return null;
+
+        _ = Convert.FromBase64String(publicKeySpki);
+        await js.InvokeVoidAsync("localStorage.setItem", PublicKeyStorageKey, publicKeySpki);
+        return publicKeySpki;
+    }
 
     public async Task<string?> GetPublicKeyBase64Async()
         => await js.InvokeAsync<string?>("localStorage.getItem", PublicKeyStorageKey);
@@ -41,29 +50,12 @@ public sealed class CryptoService(IJSRuntime js)
         await js.InvokeVoidAsync("localStorage.removeItem", PublicKeyStorageKey);
     }
 
-    /// <summary>
-    /// Loads and unwraps the stored private key. Returns null if no key is stored or the
-    /// password is wrong.
-    /// </summary>
-    public async Task<ECDiffieHellman?> LoadKeyAsync(string password)
-    {
-        var base64 = await js.InvokeAsync<string?>("localStorage.getItem", StorageKey);
-        if (base64 is null) return null;
-        try
-        {
-            var wrapped = Convert.FromBase64String(base64);
-            return KeyWrapping.UnwrapKey(wrapped, password.AsSpan());
-        }
-        catch (CryptographicException)
-        {
-            return null;
-        }
-    }
+    private ValueTask<IJSObjectReference> ImportModuleAsync()
+        => js.InvokeAsync<IJSObjectReference>("import", ModulePath);
 
-    /// <summary>
-    /// Decrypts an ECIES ciphertext blob returned by the API, returning the plaintext as a
-    /// UTF-8 string (e.g. "123456" for a Torn player ID).
-    /// </summary>
-    public static string DecryptToString(ECDiffieHellman privateKey, byte[] encryptedBlob)
-        => Encoding.UTF8.GetString(Ecies.Decrypt(privateKey, encryptedBlob));
+    private sealed class GeneratedKeyPair
+    {
+        public required string PublicKeySpki { get; init; }
+        public required string WrappedPrivateKey { get; init; }
+    }
 }
