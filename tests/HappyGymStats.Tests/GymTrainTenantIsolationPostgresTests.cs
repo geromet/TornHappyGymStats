@@ -33,8 +33,7 @@ public sealed class GymTrainTenantIsolationPostgresTests : IAsyncLifetime
 
         try
         {
-            _postgres = new PostgreSqlBuilder()
-                .WithImage("postgres:16-alpine")
+            _postgres = new PostgreSqlBuilder("postgres:16-alpine")
                 .WithDatabase("happygymstats")
                 .WithUsername("postgres")
                 .WithPassword("postgres")
@@ -103,7 +102,7 @@ public sealed class GymTrainTenantIsolationPostgresTests : IAsyncLifetime
         Assert.Null(secondPage.NextCursor);
     }
 
-    private static UserLogEntryEntity Train(Guid owner, string id, DateTimeOffset occurredAtUtc, long happyBefore, long happyUsed)
+    private static UserLogEntryEntity Train(Guid owner, string id, DateTimeOffset occurredAtUtc, int happyBefore, int happyUsed)
         => new()
         {
             AnonymousId = owner,
