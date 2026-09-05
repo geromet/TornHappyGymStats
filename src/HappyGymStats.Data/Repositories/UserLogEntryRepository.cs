@@ -15,6 +15,21 @@ public sealed class UserLogEntryRepository(HappyGymStatsDbContext db) : IUserLog
             .Select(r => r.LogEntryId)
             .ToHashSetAsync(ct);
 
+    public async Task AddLogTypesIfMissingAsync(IEnumerable<LogTypeEntity> types, CancellationToken ct)
+    {
+        var existing = await db.LogTypes
+            .AsNoTracking()
+            .Select(lt => lt.LogTypeId)
+            .ToHashSetAsync(ct);
+
+        foreach (var type in types)
+        {
+            if (!existing.Contains(type.LogTypeId))
+                db.LogTypes.Add(type);
+        }
+        // No save — caller commits via IUnitOfWork
+    }
+
     public Task AddRangeAsync(IEnumerable<UserLogEntryEntity> entries, CancellationToken ct)
     {
         db.UserLogEntries.AddRange(entries);
