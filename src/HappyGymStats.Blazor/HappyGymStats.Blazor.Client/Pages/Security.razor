@@ -98,6 +98,23 @@ else
                     </MudButton>
                 }
             </MudStack>
+
+            @if (_deleteConfirmationRequested)
+            {
+                <div role="alert" aria-live="assertive" class="mt-4">
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true">
+                        <MudText Typo="Typo.subtitle2">Delete this browser key?</MudText>
+                        <MudText Typo="Typo.body2">
+                            This permanently removes the encrypted private key and cached public key from this browser.
+                            The private key cannot be recovered after deletion.
+                        </MudText>
+                    </MudAlert>
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_deleteError))
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mt-4">@_deleteError</MudAlert>
+            }
         </MudCardContent>
         <MudCardActions>
             <MudButton Variant="Variant.Filled"
@@ -107,12 +124,31 @@ else
                        Disabled="@(_verifying || string.IsNullOrWhiteSpace(_verifyPassword))">
                 @(_verifying ? "Unlocking…" : "Unlock & show public key")
             </MudButton>
-            <MudButton Variant="Variant.Text"
-                       Color="Color.Error"
-                       StartIcon="@Icons.Material.Filled.DeleteForever"
-                       OnClick="DeleteKeyAsync">
-                Delete key
-            </MudButton>
+            @if (!_deleteConfirmationRequested)
+            {
+                <MudButton Variant="Variant.Text"
+                           Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.DeleteForever"
+                           OnClick="RequestDeleteKeyDeletion"
+                           Disabled="@_deleting">
+                    Delete key
+                </MudButton>
+            }
+            else
+            {
+                <MudButton Variant="Variant.Text"
+                           OnClick="CancelDeleteKeyDeletion"
+                           Disabled="@_deleting">
+                    Cancel
+                </MudButton>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.DeleteForever"
+                           OnClick="DeleteKeyAsync"
+                           Disabled="@_deleting">
+                    @(_deleting ? "Deleting…" : "Delete key permanently")
+                </MudButton>
+            }
         </MudCardActions>
     </MudCard>
 
@@ -138,6 +174,10 @@ else
     private string _verifyError = "";
     private string _publicKeyBase64 = "";
     private string _cachedPublicKeyBase64 = "";
+
+    private bool _deleteConfirmationRequested;
+    private bool _deleting;
+    private string _deleteError = "";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -217,13 +257,43 @@ else
         await Task.CompletedTask;
     }
 
+    private void RequestDeleteKeyDeletion()
+    {
+        _deleteError = "";
+        _deleteConfirmationRequested = true;
+    }
+
+    private void CancelDeleteKeyDeletion()
+    {
+        if (_deleting) return;
+        _deleteConfirmationRequested = false;
+        _deleteError = "";
+    }
+
     private async Task DeleteKeyAsync()
     {
-        await Crypto.DeleteKeyAsync();
-        _hasKey = false;
-        _publicKeyBase64 = "";
-        _cachedPublicKeyBase64 = "";
-        _verifyPassword = "";
-        Snackbar.Add("Key deleted from this browser.", Severity.Warning);
+        if (!_deleteConfirmationRequested || _deleting) return;
+
+        _deleteError = "";
+        _deleting = true;
+        try
+        {
+            await Crypto.DeleteKeyAsync();
+            _hasKey = false;
+            _publicKeyBase64 = "";
+            _cachedPublicKeyBase64 = "";
+            _verifyPassword = "";
+            _deleteConfirmationRequested = false;
+            Snackbar.Add("Key deleted from this browser.", Severity.Warning);
+        }
+        catch (Exception)
+        {
+            _deleteError = "Key deletion did not complete. Retry before assuming this browser no longer holds key material.";
+            Snackbar.Add(_deleteError, Severity.Error);
+        }
+        finally
+        {
+            _deleting = false;
+        }
     }
 }

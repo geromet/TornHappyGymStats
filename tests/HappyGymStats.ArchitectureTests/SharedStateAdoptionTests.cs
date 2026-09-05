@@ -11,9 +11,9 @@ public sealed class SharedStateAdoptionTests
         var home = ReadRepoFile(
             "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/Home.razor");
 
-        Assert.Contains("<LoadingState Message=\"Loading surfaces data…\" />", home, StringComparison.Ordinal);
+        Assert.Contains("<LoadingState Message=\"Loading training data…\" />", home, StringComparison.Ordinal);
         Assert.Contains("<ErrorState Message=\"@_loadError\" OnRetry=\"LoadSurfacesAsync\" />", home, StringComparison.Ordinal);
-        Assert.Contains("<EmptyState Message=\"No surfaces data found. Run an import first.\" />", home, StringComparison.Ordinal);
+        Assert.Contains("<EmptyState Message=\"No training data found yet. Run an import first.\" />", home, StringComparison.Ordinal);
 
         Assert.DoesNotContain("MudProgressCircular", home, StringComparison.Ordinal);
         Assert.DoesNotContain("<MudAlert Severity=\"Severity.Warning\" Class=\"mb-4\">@_loadError</MudAlert>", home, StringComparison.Ordinal);
@@ -31,7 +31,7 @@ public sealed class SharedStateAdoptionTests
             StringComparison.Ordinal);
         Assert.Contains("_surfaces = null;", home, StringComparison.Ordinal);
         Assert.DoesNotContain(
-            "_loadError = \"No surfaces data found. Run an import first.\";",
+            "_loadError = \"No training data found yet. Run an import first.\";",
             home,
             StringComparison.Ordinal);
     }
