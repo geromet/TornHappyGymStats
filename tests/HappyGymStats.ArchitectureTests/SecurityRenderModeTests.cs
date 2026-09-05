@@ -6,20 +6,18 @@ namespace HappyGymStats.ArchitectureTests;
 public sealed class SecurityRenderModeTests
 {
     [Fact]
-    public void Security_disables_server_prerender_for_browser_only_crypto_service()
+    public void Security_uses_the_server_router_and_defers_browser_crypto_until_after_render()
     {
         var security = ReadRepoFile(
             "src/HappyGymStats.Blazor/HappyGymStats.Blazor.Client/Pages/Security.razor");
+        var routes = ReadRepoFile(
+            "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Routes.razor");
 
-        Assert.Contains(
-            "@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))",
-            security,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "@rendermode InteractiveWebAssembly\n",
-            security,
-            StringComparison.Ordinal);
-        Assert.Contains("@inject CryptoService Crypto", security, StringComparison.Ordinal);
+        Assert.Contains("@rendermode InteractiveServer", routes, StringComparison.Ordinal);
+        Assert.DoesNotContain("@rendermode", security, StringComparison.Ordinal);
+        Assert.DoesNotContain("@inject CryptoService", security, StringComparison.Ordinal);
+        Assert.Contains("@inject IJSRuntime JS", security, StringComparison.Ordinal);
+        Assert.Contains("private CryptoService Crypto => new(JS);", security, StringComparison.Ordinal);
         Assert.Contains("protected override async Task OnAfterRenderAsync(bool firstRender)", security, StringComparison.Ordinal);
     }
 
