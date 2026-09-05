@@ -13,7 +13,8 @@ The operating loop is:
 5. **External research** — current authoritative docs, standards, advisories, ecosystem/competitor tools, APIs, libraries and relevant research.
 6. **Product invention** — a small number of evidence-backed features/workflows with clear user value and implementation seams.
 7. **Harness/eval improvement** — deterministic tests, fixtures, browser/component proof, real-tool compatibility, CI/evidence tooling, reproducible research scaffolds.
-8. **Fleet self-improvement** — evaluate recent fleet traces/outcomes and make bounded evidence-backed prompt changes.
+8. **Documentation/instruction truth maintenance** — keep current docs, runbooks, trackers and agent instructions aligned with live code/contracts/issues while preserving historical provenance.
+9. **Fleet self-improvement** — evaluate recent fleet traces/outcomes and make bounded evidence-backed prompt changes.
 
 Agents may switch **internal operating persona** as they move through the ladder — Engineer, Investigator, Researcher, Product Strategist, Security Red-Team, Harness/Eval Engineer, Fleet Steward. They must not change Gerome's global ChatGPT Personality setting.
 
@@ -30,7 +31,37 @@ Prefer one deep durable report or canonical issue update over issue spam. Securi
 
 A research-only run is successful when it materially deepens a canonical package/report, creates one genuinely distinct evidence-backed package, improves a harness/eval, or establishes a meaningful bounded negative finding.
 
-## Three feedback loops
+## Continuous documentation and instruction truth loop
+
+Documentation and agent instructions are executable coordination surfaces: stale prose can misroute agents even when code and CI are correct. The fleet therefore treats **truthful current guidance** as an ongoing maintenance property, not a one-time cleanup.
+
+Whenever a lane relies on, reviews, or changes current documentation/instructions — including Markdown, `AGENTS.md`, `CLAUDE.md`, skills, runbooks, setup/deploy guides, PR templates, issue/LOCK prose, workflow guidance, or automation prompts — it should verify material claims against the strongest live authority available:
+
+1. current default-branch code and tracked files;
+2. executable contracts/tests/verifier manifests/workflows;
+3. current issue/PR state and exact heads where the claim is time-sensitive;
+4. the repository coordination LOCK for live ownership/topology/authority.
+
+Use these classifications instead of assuming old text is wrong merely because it is old:
+
+- **CURRENT / NO VERIFIED DRIFT** — current guidance remains supported;
+- **FINDING** — a concrete inaccurate, stale, contradictory, dead, or materially misleading current claim is proven;
+- **HISTORICAL / SNAPSHOT** — dated/archive/provenance material whose old state is intentional;
+- **RESEARCH / GUIDANCE SNAPSHOT** — scoped research/design material that explicitly yields to current repo/issues.
+
+Truth-maintenance rules:
+
+- Live state wins over undated/current-sounding prose.
+- Historical/archive material is preserved; do not rewrite provenance merely because the repository advanced.
+- Commands, paths, routes, branch names, verifier wiring, setup topology and authority pointers advertised as current must resolve against the current tree/contracts.
+- Time-sensitive status tables/queues should be removed, generated, or unmistakably snapshot-dated so they cannot masquerade as live state.
+- Contradictory agent/workflow authority is high priority because it can cause repeated fleet-wide mistakes.
+- If a drift item is small, unambiguous and safely inside the lane's claimed coherent scope, correct it with the work. Otherwise update the existing canonical documentation-truth tracker/inventory; create at most one materially distinct tracker when none exists. Do not create one issue per Markdown file.
+- A remediation tracker is complete only after a fresh enumeration/recheck confirms the relevant current guidance no longer contradicts live authority.
+
+The Fleet Steward owns periodic repo-wide truth audits. Do not rescan every repository every hour: rotate bounded audits across managed repositories and trigger an earlier pass after material documentation/agent-instruction changes or a concrete stale-guidance failure. Torn's current seed pattern is #223/#224: one exhaustive inventory, one canonical remediation tracker, preserved historical snapshots, and a re-enumeration Done-when.
+
+## Four feedback loops
 
 ### Minutes / hours — engineering loop
 
@@ -43,6 +74,12 @@ This loop optimizes delivery quality and drains active PR pressure.
 `inspect → research → synthesize → create/compact canonical work package → implement`
 
 This loop prevents the backlog from becoming stale and gives otherwise-idle agents useful work.
+
+### Continuous / rotating — documentation truth loop
+
+`rely on or change guidance → verify against live authority → classify current vs finding vs historical → correct or update one canonical drift tracker → re-enumerate after remediation`
+
+This loop prevents documentation, runbooks and agent instructions from quietly becoming an alternate stale control plane.
 
 ### Days / weeks — fleet improvement loop
 
@@ -63,6 +100,7 @@ Fleet self-improvement is bounded. Without explicit Gerome approval, no automati
 - fleet merges only into explicitly verified non-default stable/integration branches;
 - no unavailable secrets, sudo/admin, interactive SSH/passkey, production/operator-only or destructive external/game-state actions;
 - truthful evidence / no invented verification;
+- current documentation and agent instructions must not knowingly present stale state as current authority; historical/provenance material remains preserved and clearly scoped;
 - genuinely non-deterministic product choices stay human.
 
 ## Durable archive topology
@@ -129,6 +167,8 @@ The Fleet Steward should evaluate automation prompts at most once every four hou
 
 Prompt changes should be reversible and evaluated against subsequent runs. If throughput, safety, evidence quality, coordination or review burden regresses, record the evaluation and rollback/revise.
 
+Documentation/instruction truth audits are maintenance, not prompt tuning, so they may be performed independently of the four-hour prompt-change cadence. Prefer bounded rotation and material-change triggers over repeated full scans with no new evidence.
+
 ## Future PI / eval harness
 
 The Git + issue archive is intentionally simple enough to migrate later into a PI/eval/telemetry harness and database. Useful future metrics include:
@@ -142,6 +182,7 @@ The Git + issue archive is intentionally simple enough to migrate later into a P
 - child-PR→stable-rollup compression;
 - research→implementation conversion;
 - stable-branch integration latency;
+- documentation/instruction drift findings per audit and recurrence rate after remediation;
 - regressions after prompt changes;
 - human review burden per delivered work package.
 
