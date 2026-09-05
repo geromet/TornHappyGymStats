@@ -41,14 +41,25 @@ public sealed class WarObjectivePostgresPersistenceTests : IAsyncLifetime
 
     [Fact]
     [Trait("Category", "PostgresApiIntegration")]
-    public async Task Append_history_and_database_immutability_are_enforced()
+    public async Task Effective_default_is_version_one_and_explicit_changes_append_immutable_history()
     {
         if (!_available)
             return;
 
         await using var db = CreateDbContext();
         var repository = new WarObjectiveRepository(db);
-        var first = await repository.AppendNextAsync(
+
+        var effectiveDefault = await repository.GetEffectiveAsync(1234, 9876, CancellationToken.None);
+        Assert.Equal(1234, effectiveDefault.FactionId);
+        Assert.Equal(1, effectiveDefault.Objective.Version);
+        Assert.Equal(WarObjectiveMode.CompetitiveWin, effectiveDefault.Objective.Mode);
+        Assert.False(effectiveDefault.Objective.IsExplicit);
+        Assert.Null(effectiveDefault.Objective.StopAtFactionScore);
+        Assert.Equal("system", effectiveDefault.Objective.ChangedBy);
+        Assert.Equal(DateTimeOffset.UnixEpoch, effectiveDefault.Objective.CreatedAtUtc);
+        Assert.Empty(await repository.GetHistoryAsync(1234, 9876, CancellationToken.None));
+
+        var firstExplicit = await repository.AppendNextAsync(
             factionId: 1234,
             warId: 9876,
             WarObjectiveMode.TermedWin,
@@ -57,7 +68,7 @@ public sealed class WarObjectivePostgresPersistenceTests : IAsyncLifetime
             stopAtFactionScore: 2500,
             notes: "initial terms",
             CancellationToken.None);
-        var second = await repository.AppendNextAsync(
+        var secondExplicit = await repository.AppendNextAsync(
             factionId: 1234,
             warId: 9876,
             WarObjectiveMode.TermedLoss,
@@ -67,17 +78,29 @@ public sealed class WarObjectivePostgresPersistenceTests : IAsyncLifetime
             notes: "replacement terms",
             CancellationToken.None);
 
-        Assert.Equal(1, first.Objective.Version);
-        Assert.Equal(2, second.Objective.Version);
+        Assert.Equal(2, firstExplicit.Objective.Version);
+        Assert.Equal(3, secondExplicit.Objective.Version);
 
         var current = await repository.GetCurrentAsync(1234, 9876, CancellationToken.None);
         Assert.NotNull(current);
-        Assert.Equal(2, current.Objective.Version);
+        Assert.Equal(3, current.Objective.Version);
         Assert.Equal("leader-two", current.Objective.ChangedBy);
 
+        var effectiveCurrent = await repository.GetEffectiveAsync(1234, 9876, CancellationToken.None);
+        Assert.Equal(3, effectiveCurrent.Objective.Version);
+        Assert.True(effectiveCurrent.Objective.IsExplicit);
+
         var history = await repository.GetHistoryAsync(1234, 9876, CancellationToken.None);
-        Assert.Equal(new[] { 1, 2 }, history.Select(item => item.Objective.Version));
-        Assert.Equal(new[] { "initial terms", "replacement terms" }, history.Select(item => item.Objective.Notes));
+        Assert.Equal(new[] { 1, 2, 3 }, history.Select(item => item.Objective.Version));
+        Assert.Equal(
+            new[] { false, true, true },
+            history.Select(item => item.Objective.IsExplicit));
+        Assert.Equal(
+            new[] { WarObjectiveMode.CompetitiveWin, WarObjectiveMode.TermedWin, WarObjectiveMode.TermedLoss },
+            history.Select(item => item.Objective.Mode));
+        Assert.Equal(
+            new string?[] { null, "initial terms", "replacement terms" },
+            history.Select(item => item.Objective.Notes));
 
         await Assert.ThrowsAnyAsync<Exception>(() => db.Database.ExecuteSqlRawAsync(
             "UPDATE \"WarObjectiveVersions\" SET \"Notes\" = 'tampered' WHERE \"FactionId\" = 1234 AND \"WarId\" = 9876 AND \"Version\" = 1"));
