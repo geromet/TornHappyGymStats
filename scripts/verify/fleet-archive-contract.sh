@@ -44,39 +44,39 @@ if grep -Fq 'FLEET-SNAPSHOT |' "${CHANGES}"; then
   fail "instruction-change archive contains an activity snapshot marker"
 fi
 
-# Every activity heading must own exactly one snapshot marker and retain the minimum
-# fields needed to understand scope, delivered work, research, coordination, and next pressure.
+# Activity labels are intentionally allowed to evolve (for example proof/recovery,
+# stable/integration, or capacity/integration). Pin the durable envelope rather than
+# rewriting append-only history to fit one rigid vocabulary.
 awk '
 function finish_entry() {
   if (!in_entry) return
   if (snapshot != 1) {
     printf "FAIL: fleet archive contract: activity entry %s has %d FLEET-SNAPSHOT markers\n", heading, snapshot > "/dev/stderr"
-    exit 1
+    failed = 1
   }
-  if (!repos || !shipped || !research || !coordination || !next_pressure) {
-    printf "FAIL: fleet archive contract: activity entry %s is missing one of repos/shipped/research/coordination/next-pressure\n", heading > "/dev/stderr"
-    exit 1
+  if (!repos || !next_pressure || material_fields < 3) {
+    printf "FAIL: fleet archive contract: activity entry %s must include repos, next-pressure, and at least three labeled material fields\n", heading > "/dev/stderr"
+    failed = 1
   }
 }
 /^## / {
   finish_entry()
   in_entry = 1
   heading = substr($0, 4)
-  snapshot = repos = shipped = research = coordination = next_pressure = 0
+  snapshot = repos = next_pressure = material_fields = 0
   next
 }
 in_entry && /^FLEET-SNAPSHOT \| period=/ { snapshot++; next }
-in_entry && /^repos:/ { repos = 1; next }
-in_entry && /^shipped:/ { shipped = 1; next }
-in_entry && /^research:/ { research = 1; next }
-in_entry && /^coordination:/ { coordination = 1; next }
-in_entry && /^next-pressure:/ { next_pressure = 1; next }
+in_entry && /^repos:/ { repos = 1; material_fields++; next }
+in_entry && /^next-pressure:/ { next_pressure = 1; material_fields++; next }
+in_entry && /^[a-z][a-z0-9\/-]*:/ { material_fields++; next }
 END {
   finish_entry()
   if (!in_entry) {
     print "FAIL: fleet archive contract: activity archive has no dated entries" > "/dev/stderr"
-    exit 1
+    failed = 1
   }
+  exit failed
 }
 ' "${ACTIVITY}"
 
@@ -86,11 +86,11 @@ function finish_entry() {
   if (!in_entry) return
   if (marker != 1) {
     printf "FAIL: fleet archive contract: instruction entry %s has %d FLEET-PROMPT-CHANGE markers\n", heading, marker > "/dev/stderr"
-    exit 1
+    failed = 1
   }
   if (!automation || !evidence || !problem || !change || !invariants || !expected_effect || !rollback || !evaluation) {
     printf "FAIL: fleet archive contract: instruction entry %s is missing a required audit field\n", heading > "/dev/stderr"
-    exit 1
+    failed = 1
   }
 }
 /^## / {
@@ -113,8 +113,9 @@ END {
   finish_entry()
   if (!in_entry) {
     print "FAIL: fleet archive contract: instruction archive has no dated entries" > "/dev/stderr"
-    exit 1
+    failed = 1
   }
+  exit failed
 }
 ' "${CHANGES}"
 
