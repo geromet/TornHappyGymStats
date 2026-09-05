@@ -142,17 +142,8 @@ else if (_surfaces != null)
 
         try
         {
-            var status = await SurfacesApi.StartMyStatsImportAsync(_apiKey.Trim(), fresh: true);
+            await SurfacesApi.StartMyStatsImportAsync(_apiKey.Trim(), fresh: true);
             _apiKey = null;
-
-            if (status is { Outcome: "failed" })
-            {
-                _importStatusMessage = string.IsNullOrWhiteSpace(status.ErrorMessage)
-                    ? "Import failed due to backend validation or processing."
-                    : $"Import failed: {status.ErrorMessage}";
-                _importStatusSeverity = Severity.Error;
-                return;
-            }
 
             _importStatusMessage = "Import queued — reloading personal stats...";
             _importStatusSeverity = Severity.Success;
@@ -244,7 +235,7 @@ else if (_surfaces != null)
         ApiFailureCategory.BadGateway => "Import failed. The service is temporarily unavailable — try again shortly.",
         ApiFailureCategory.ApiUnavailable => "Import failed. The service is temporarily unavailable — try again shortly.",
         ApiFailureCategory.Deserialization => "Import failed: API response format was invalid.",
-        ApiFailureCategory.ImportFailure => "Import failed: backend rejected or could not process the import.",
+        ApiFailureCategory.ImportFailure => "Import failed. Please try again.",
         _ => $"Import failed: {failure.SafeMessage}"
     };
 }

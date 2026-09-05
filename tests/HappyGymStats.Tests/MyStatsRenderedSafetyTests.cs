@@ -1,0 +1,77 @@
+using System.Net;
+using System.Text;
+using Bunit;
+using HappyGymStats.Blazor.Components.Pages;
+using HappyGymStats.Blazor.Services;
+using Microsoft.Extensions.DependencyInjection;
+using MudBlazor.Services;
+using Xunit;
+
+namespace HappyGymStats.Tests;
+
+public sealed class MyStatsRenderedSafetyTests : BunitContext
+{
+    private const string BackendImportErrorDetail = "database-provider-detail-must-not-render";
+
+    [Fact]
+    public void Failed_import_renders_bounded_member_safe_copy()
+    {
+        Services.AddLogging();
+        Services.AddMudServices();
+
+        using var http = new HttpClient(new StubMessageHandler())
+        {
+            BaseAddress = new Uri("http://localhost")
+        };
+        Services.AddSingleton(new SurfacesService(http));
+
+        var cut = Render<MyStats>();
+
+        cut.Find("input[type=password]").Change("safe-key");
+        cut.Find("button").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Import failed. Please try again.", cut.Markup, StringComparison.Ordinal);
+            Assert.DoesNotContain(BackendImportErrorDetail, cut.Markup, StringComparison.Ordinal);
+        });
+    }
+
+    private sealed class StubMessageHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri?.AbsolutePath;
+
+            if (request.Method == HttpMethod.Get && path == "/api/v1/torn/surfaces/me")
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+            }
+
+            if (request.Method == HttpMethod.Post && path == "/api/v1/torn/import-jobs/me")
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(FailedImportStatusJson, Encoding.UTF8, "application/json")
+                });
+            }
+
+            throw new InvalidOperationException($"Unexpected My Stats request: {request.Method} {path}");
+        }
+    }
+
+    private const string FailedImportStatusJson = """
+        {
+          "id": "job-rendered-proof",
+          "outcome": "failed",
+          "startedAtUtc": "2026-09-05T00:00:00Z",
+          "completedAtUtc": "2026-09-05T00:00:01Z",
+          "pagesFetched": 1,
+          "logsFetched": 10,
+          "logsAppended": 0,
+          "errorMessage": "database-provider-detail-must-not-render"
+        }
+        """;
+}
