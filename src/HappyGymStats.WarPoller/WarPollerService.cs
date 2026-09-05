@@ -71,26 +71,24 @@ public sealed class WarPollerService
     private readonly IUnitOfWork _unitOfWork;
     private readonly WarPollerOptions _options;
     private readonly IWarPollerNotifier _warPollerNotifier;
-    private readonly IWarPollerClock _clock;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<WarPollerService> _logger;
 
     public WarPollerService(
         TornApiClient tornApiClient,
         IWarStateRepository warStateRepository,
-        IImportRunRepository importRunRepository,
         IUnitOfWork unitOfWork,
         WarPollerOptions options,
         IWarPollerNotifier warPollerNotifier,
-        IWarPollerClock clock,
+        TimeProvider timeProvider,
         ILogger<WarPollerService> logger)
     {
         _tornApiClient = tornApiClient ?? throw new ArgumentNullException(nameof(tornApiClient));
         _warStateRepository = warStateRepository ?? throw new ArgumentNullException(nameof(warStateRepository));
-        ArgumentNullException.ThrowIfNull(importRunRepository);
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _warPollerNotifier = warPollerNotifier ?? throw new ArgumentNullException(nameof(warPollerNotifier));
-        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+        _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         _options.Validate();
@@ -100,7 +98,7 @@ public sealed class WarPollerService
     {
         var heartbeat = await _warStateRepository.GetHeartbeatAsync(_options.ScopeKey, CancellationToken.None);
         var activeWarId = heartbeat?.ActiveWarId;
-        var now = _clock.UtcNow;
+        var now = _timeProvider.GetUtcNow();
 
         await PersistHeartbeatAsync(BuildHeartbeat(
             phase: "queued",
@@ -113,7 +111,7 @@ public sealed class WarPollerService
             staleAfterUtc: now.AddSeconds(_options.PollIntervalSeconds),
             failureBackoffSeconds: _options.FailureBackoffSeconds));
 
-        var pollStartedAtUtc = _clock.UtcNow;
+        var pollStartedAtUtc = _timeProvider.GetUtcNow();
         await PersistHeartbeatAsync(BuildHeartbeat(
             phase: "running",
             updatedAtUtc: pollStartedAtUtc,
@@ -133,7 +131,7 @@ public sealed class WarPollerService
             activeWarId = resolution?.WarId;
             if (resolution is null)
             {
-                var observedAtUtc = _clock.UtcNow;
+                var observedAtUtc = _timeProvider.GetUtcNow();
                 await _warStateRepository.UpsertCurrentAsync(
                     new WarCurrentEntity
                     {
@@ -153,7 +151,7 @@ public sealed class WarPollerService
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var noWarCompletedAtUtc = _clock.UtcNow;
+                var noWarCompletedAtUtc = _timeProvider.GetUtcNow();
                 await PersistHeartbeatAsync(BuildHeartbeat(
                     phase: "succeeded",
                     updatedAtUtc: noWarCompletedAtUtc,
@@ -173,7 +171,7 @@ public sealed class WarPollerService
 
             var report = await _tornApiClient.GetRankedWarReportAsync(_options.ApiKey, resolution.WarId, cancellationToken);
             var ourChainLapsesAtUtc = await TryGetOurChainDeadlineAsync(cancellationToken);
-            var capturedAtUtc = _clock.UtcNow;
+            var capturedAtUtc = _timeProvider.GetUtcNow();
             var persistedState = BuildPersistedState(resolution, report, capturedAtUtc, ourChainLapsesAtUtc);
 
             await _warStateRepository.UpsertCurrentAsync(persistedState.Current, cancellationToken);
@@ -183,7 +181,7 @@ public sealed class WarPollerService
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            var completedAtUtc = _clock.UtcNow;
+            var completedAtUtc = _timeProvider.GetUtcNow();
             await PersistHeartbeatAsync(BuildHeartbeat(
                 phase: "succeeded",
                 updatedAtUtc: completedAtUtc,
@@ -202,7 +200,7 @@ public sealed class WarPollerService
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            var cancelledAtUtc = _clock.UtcNow;
+            var cancelledAtUtc = _timeProvider.GetUtcNow();
             await PersistHeartbeatAsync(BuildHeartbeat(
                 phase: "cancelled",
                 updatedAtUtc: cancelledAtUtc,
@@ -221,7 +219,7 @@ public sealed class WarPollerService
         {
             var retryCount = (heartbeat?.RetryCount ?? 0) + 1;
             var backoff = ComputeFailureBackoff(retryCount);
-            var failedAtUtc = _clock.UtcNow;
+            var failedAtUtc = _timeProvider.GetUtcNow();
             var sanitizedMessage = BuildSanitizedErrorMessage(ex);
 
             await PersistHeartbeatAsync(BuildHeartbeat(
@@ -243,11 +241,11 @@ public sealed class WarPollerService
 
             try
             {
-                await _clock.DelayAsync(backoff, cancellationToken);
+                await Task.Delay(backoff, _timeProvider, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                var cancelledAtUtc = _clock.UtcNow;
+                var cancelledAtUtc = _timeProvider.GetUtcNow();
                 await PersistHeartbeatAsync(BuildHeartbeat(
                     phase: "cancelled",
                     updatedAtUtc: cancelledAtUtc,
@@ -266,7 +264,7 @@ public sealed class WarPollerService
         }
         catch (Exception ex)
         {
-            var failedAtUtc = _clock.UtcNow;
+            var failedAtUtc = _timeProvider.GetUtcNow();
             var sanitizedMessage = BuildSanitizedErrorMessage(ex);
 
             await PersistHeartbeatAsync(BuildHeartbeat(
