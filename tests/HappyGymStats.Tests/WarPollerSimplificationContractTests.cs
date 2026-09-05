@@ -43,10 +43,15 @@ public sealed class WarPollerSimplificationContractTests
         Assert.Contains("ResolveActiveWarAsync", runOnce, StringComparison.Ordinal);
         Assert.Contains("CompleteNoActiveWarAsync", runOnce, StringComparison.Ordinal);
         Assert.Contains("CompleteActiveWarAsync", runOnce, StringComparison.Ordinal);
+        Assert.Contains("CompleteCancellationAsync", runOnce, StringComparison.Ordinal);
+        Assert.Contains("CompleteRetryableFailureAsync", runOnce, StringComparison.Ordinal);
+        Assert.Contains("RecordFatalFailureAsync", runOnce, StringComparison.Ordinal);
         Assert.Contains("BuildHeartbeat", runOnce, StringComparison.Ordinal);
-        Assert.Contains("ComputeFailureBackoff", runOnce, StringComparison.Ordinal);
         Assert.DoesNotContain("GetRankedWarReportAsync", runOnce, StringComparison.Ordinal);
         Assert.DoesNotContain("ReplaceRosterSnapshotAsync", runOnce, StringComparison.Ordinal);
+        Assert.DoesNotContain("Task.Delay(", runOnce, StringComparison.Ordinal);
+        Assert.DoesNotContain("LogWarning(", runOnce, StringComparison.Ordinal);
+        Assert.DoesNotContain("LogError(", runOnce, StringComparison.Ordinal);
 
         var activeCompletion = ExtractMethodBody(service, "private async Task<WarPollerTickResult> CompleteActiveWarAsync(");
         Assert.Contains("GetRankedWarReportAsync", activeCompletion, StringComparison.Ordinal);
@@ -61,6 +66,22 @@ public sealed class WarPollerSimplificationContractTests
         Assert.Contains("BuildHeartbeat", noWarCompletion, StringComparison.Ordinal);
         Assert.Contains("TryNotifyHubAsync", noWarCompletion, StringComparison.Ordinal);
         Assert.DoesNotContain("_tornApiClient", noWarCompletion, StringComparison.Ordinal);
+
+        var cancellation = ExtractMethodBody(service, "private async Task<WarPollerTickResult> CompleteCancellationAsync(");
+        Assert.Contains("BuildHeartbeat", cancellation, StringComparison.Ordinal);
+        Assert.Contains("phase: \"cancelled\"", cancellation, StringComparison.Ordinal);
+
+        var retryableFailure = ExtractMethodBody(service, "private async Task<WarPollerTickResult> CompleteRetryableFailureAsync(");
+        Assert.Contains("ComputeFailureBackoff", retryableFailure, StringComparison.Ordinal);
+        Assert.Contains("BuildSanitizedErrorMessage", retryableFailure, StringComparison.Ordinal);
+        Assert.Contains("Task.Delay(backoff, _timeProvider, cancellationToken)", retryableFailure, StringComparison.Ordinal);
+        Assert.Contains("phase: \"retryable-failure\"", retryableFailure, StringComparison.Ordinal);
+        Assert.Contains("phase: \"cancelled\"", retryableFailure, StringComparison.Ordinal);
+
+        var fatalFailure = ExtractMethodBody(service, "private async Task RecordFatalFailureAsync(");
+        Assert.Contains("BuildSanitizedErrorMessage", fatalFailure, StringComparison.Ordinal);
+        Assert.Contains("phase: \"failed\"", fatalFailure, StringComparison.Ordinal);
+        Assert.Contains("LogError(", fatalFailure, StringComparison.Ordinal);
 
         var projection = ExtractMethodBody(service, "private PersistedWarState BuildPersistedState(");
         AssertEffectFree(projection);
