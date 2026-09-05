@@ -22,6 +22,14 @@ public sealed class WarObjectivesController(IWarObjectiveRepository objectives) 
         [FromQuery] int factionScore,
         CancellationToken ct)
     {
+        if (factionScore < 0)
+        {
+            return ApiError(
+                StatusCodes.Status400BadRequest,
+                "invalid_faction_score",
+                "Faction score cannot be negative.");
+        }
+
         var current = await objectives.GetEffectiveAsync(factionId, warId, ct);
         var evaluation = WarObjectiveEvaluator.Evaluate(current.Objective, factionScore);
         return Ok(new WarObjectiveEvaluationDto(
