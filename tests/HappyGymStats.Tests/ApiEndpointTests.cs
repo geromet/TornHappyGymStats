@@ -74,12 +74,34 @@ public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTest
     }
 
     [Fact]
-    public async Task Gym_trains_endpoint_uses_cursor_pagination()
+    public async Task Gym_trains_global_collection_route_is_not_exposed()
     {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/api/v1/torn/gym-trains?limit=2");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Gym_trains_endpoint_uses_owner_scoped_cursor_pagination()
+    {
+        var callerAnonymousId = Guid.NewGuid();
+        var otherAnonymousId = Guid.NewGuid();
+
         await _factory.SeedUserLogEntriesAsync(
             new UserLogEntryEntity
             {
-                AnonymousId = Guid.Empty,
+                AnonymousId = otherAnonymousId,
+                LogEntryId = "other-newest",
+                OccurredAtUtc = new DateTimeOffset(2026, 04, 30, 13, 00, 00, TimeSpan.Zero),
+                LogTypeId = 1,
+                HappyBeforeTrain = 900,
+                HappyUsed = 100,
+            },
+            new UserLogEntryEntity
+            {
+                AnonymousId = callerAnonymousId,
                 LogEntryId = "train-c",
                 OccurredAtUtc = new DateTimeOffset(2026, 04, 30, 12, 00, 00, TimeSpan.Zero),
                 LogTypeId = 1,
@@ -88,7 +110,7 @@ public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTest
             },
             new UserLogEntryEntity
             {
-                AnonymousId = Guid.Empty,
+                AnonymousId = callerAnonymousId,
                 LogEntryId = "train-b",
                 OccurredAtUtc = new DateTimeOffset(2026, 04, 30, 12, 00, 00, TimeSpan.Zero),
                 LogTypeId = 1,
@@ -97,7 +119,7 @@ public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTest
             },
             new UserLogEntryEntity
             {
-                AnonymousId = Guid.Empty,
+                AnonymousId = callerAnonymousId,
                 LogEntryId = "train-a",
                 OccurredAtUtc = new DateTimeOffset(2026, 04, 30, 11, 45, 00, TimeSpan.Zero),
                 LogTypeId = 1,
@@ -105,27 +127,43 @@ public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTest
                 HappyUsed = 40,
             });
 
-        using var client = _factory.CreateClient();
+        using var client = _factory.CreateAuthenticatedClient(callerAnonymousId.ToString());
+        var route = $"/api/v1/torn/gym-trains/{callerAnonymousId}";
 
-        var firstPage = await client.GetFromJsonAsync<CursorPage<GymTrainDto>>("/api/v1/torn/gym-trains?limit=2", JsonOptions);
+        var firstPage = await client.GetFromJsonAsync<CursorPage<GymTrainDto>>($"{route}?limit=2", JsonOptions);
 
         Assert.NotNull(firstPage);
         Assert.Equal(new[] { "train-c", "train-b" }, firstPage.Items.Select(x => x.LogId).ToArray());
+        Assert.DoesNotContain(firstPage.Items, x => x.LogId == "other-newest");
         Assert.False(string.IsNullOrWhiteSpace(firstPage.NextCursor));
 
-        var secondPage = await client.GetFromJsonAsync<CursorPage<GymTrainDto>>($"/api/v1/torn/gym-trains?limit=2&cursor={Uri.EscapeDataString(firstPage.NextCursor!)}", JsonOptions);
+        var secondPage = await client.GetFromJsonAsync<CursorPage<GymTrainDto>>($"{route}?limit=2&cursor={Uri.EscapeDataString(firstPage.NextCursor!)}", JsonOptions);
 
         Assert.NotNull(secondPage);
         Assert.Equal(new[] { "train-a" }, secondPage.Items.Select(x => x.LogId).ToArray());
+        Assert.DoesNotContain(secondPage.Items, x => x.LogId == "other-newest");
         Assert.Null(secondPage.NextCursor);
+    }
+
+    [Fact]
+    public async Task Gym_trains_endpoint_forbids_cross_owner_path_manipulation()
+    {
+        var callerAnonymousId = Guid.NewGuid();
+        var otherAnonymousId = Guid.NewGuid();
+        using var client = _factory.CreateAuthenticatedClient(callerAnonymousId.ToString());
+
+        var response = await client.GetAsync($"/api/v1/torn/gym-trains/{otherAnonymousId}?limit=2");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     [Fact]
     public async Task Invalid_limit_returns_standard_validation_error()
     {
-        using var client = _factory.CreateClient();
+        var callerAnonymousId = Guid.NewGuid();
+        using var client = _factory.CreateAuthenticatedClient(callerAnonymousId.ToString());
 
-        var response = await client.GetAsync("/api/v1/torn/gym-trains?limit=999");
+        var response = await client.GetAsync($"/api/v1/torn/gym-trains/{callerAnonymousId}?limit=999");
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         var payload = await response.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
@@ -140,9 +178,10 @@ public sealed class SqliteApiEndpointTests : IClassFixture<SqliteApiEndpointTest
     [Fact]
     public async Task Invalid_cursor_returns_standard_validation_error()
     {
-        using var client = _factory.CreateClient();
+        var callerAnonymousId = Guid.NewGuid();
+        using var client = _factory.CreateAuthenticatedClient(callerAnonymousId.ToString());
 
-        var response = await client.GetAsync("/api/v1/torn/gym-trains?cursor=not-base64");
+        var response = await client.GetAsync($"/api/v1/torn/gym-trains/{callerAnonymousId}?cursor=not-base64");
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         var payload = await response.Content.ReadFromJsonAsync<ErrorEnvelope>(JsonOptions);
