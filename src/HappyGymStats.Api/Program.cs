@@ -166,6 +166,8 @@ using (var scope = app.Services.CreateScope())
         {
             await DevelopmentWarSeed.SeedAsync(db, app.Logger);
         }
+
+        await DevelopmentScoutSeed.SeedAsync(db, app.Logger);
     }
 }
 
