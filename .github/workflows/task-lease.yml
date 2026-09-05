@@ -77,8 +77,10 @@ jobs:
       - name: Fetch current target/base commit
         run: git fetch --quiet origin "${PR_BASE_SHA}"
 
-      - name: Regression-test lease validator
-        run: bash .github/agent/task-lease-regression.sh
+      - name: Regression-test lease validator and trust boundary
+        run: |
+          bash .github/agent/task-lease-regression.sh
+          bash .github/agent/task-lease-trust-regression.sh
 
       - name: Validate declared agent task lease against live GitHub state
         shell: bash
