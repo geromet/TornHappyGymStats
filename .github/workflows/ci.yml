@@ -3,7 +3,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, fleet/stable/tooling-hygiene]
   pull_request:
     branches: [main]
 
@@ -23,6 +23,8 @@ jobs:
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       # ripgrep is not guaranteed on the runner and several required verifiers
       # depend on it. Missing verifier tooling must be unavailable/red, not a
@@ -168,6 +170,28 @@ jobs:
 
       - name: Run non-skippable Postgres integration tier
         run: bash scripts/verify/s07-postgres-integration.sh
+
+  browser-crypto:
+    name: browser crypto regression
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install .NET (version from global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # Reuse the repository-native, user-local Playwright bootstrap. It installs
+      # Python Playwright into .venv and Chromium into the Playwright user cache.
+      - name: Bootstrap browser verifier
+        run: bash scripts/screenshot-board.sh --setup
+
+      - name: Execute Web Crypto in Chromium
+        run: .venv/bin/python scripts/verify/browser-crypto-regression.py
 
   format:
     name: dotnet format
