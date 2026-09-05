@@ -257,8 +257,16 @@ public static class WarReplay
         for (var i = 0; i < observations.Count; i++)
         {
             var current = observations[i];
+            if (current.WarId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(observations), "Replay war ids must be positive.");
             if (current.WarId != warId)
                 throw new ArgumentException("A replay timeline may contain observations from only one war.", nameof(observations));
+            if (current.FactionScore < 0 || current.OpponentScore < 0)
+                throw new ArgumentOutOfRangeException(nameof(observations), "Replay scores cannot be negative.");
+            if (current.FactionChain < 0 || current.OpponentChain < 0)
+                throw new ArgumentOutOfRangeException(nameof(observations), "Replay chain values cannot be negative.");
+            if (current.TargetScore <= 0)
+                throw new ArgumentOutOfRangeException(nameof(observations), "Replay target score must be positive.");
             if (current.KnownAtUtc < current.SampledAtUtc)
                 throw new ArgumentException("An observation cannot be known before it was sampled.", nameof(observations));
             RequireUtc(current.SampledAtUtc, nameof(observations));
