@@ -16,7 +16,7 @@
     </MudCardHeader>
     <MudCardContent>
         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-            Your personal gym train point cloud sourced from authenticated claim-bound stats.
+            Your personal gym train point cloud for the account you're signed in with.
         </MudText>
 
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
@@ -117,7 +117,7 @@ else if (_surfaces != null)
         }
         catch (Exception ex)
         {
-            _loadError = "Failed to load personal stats data due to an unexpected error.";
+            _loadError = "Could not load your stats. Please try again.";
             Logger.LogError(ex, "Failed to load personal stats data");
         }
         finally
@@ -162,7 +162,7 @@ else if (_surfaces != null)
         }
         catch (Exception ex)
         {
-            _importStatusMessage = "Import failed due to an unexpected error.";
+            _importStatusMessage = "Import failed. Please try again.";
             _importStatusSeverity = Severity.Error;
             Logger.LogError(ex, "Personal stats import failed");
         }
@@ -220,22 +220,19 @@ else if (_surfaces != null)
     {
         ApiFailureCategory.ApiUnavailable => "Could not load your stats. The service is temporarily unavailable — try again shortly.",
         ApiFailureCategory.BadGateway => "Could not load your stats. The service is temporarily unavailable — try again shortly.",
-        ApiFailureCategory.Validation => "Could not load your stats: request was rejected. Sign in again and verify account claims.",
+        ApiFailureCategory.Validation => "Could not load your stats. Sign in again and try again.",
         ApiFailureCategory.NotFound => "No personal gym stats found yet. Import data first.",
-        ApiFailureCategory.Deserialization => "Could not load your stats: API response format was invalid.",
-        _ => $"Could not load your stats: {failure.SafeMessage}"
+        _ => "Could not load your stats. Please try again."
     };
 
     private static string BuildImportFailureMessage(ApiFailure failure) => failure.Category switch
     {
-        ApiFailureCategory.Unauthorized => "Import rejected: your session is not authenticated. Sign in again.",
-        ApiFailureCategory.Forbidden => "Import rejected: your authenticated account does not match the requested owner.",
-        ApiFailureCategory.IdentitySetupRequired => "Import blocked: connect your account identity map before importing personal stats.",
-        ApiFailureCategory.Validation => "Import rejected: request validation failed.",
+        ApiFailureCategory.Unauthorized => "Import rejected. Sign in again and try again.",
+        ApiFailureCategory.Forbidden => "Import rejected. Sign in with the account you want to import.",
+        ApiFailureCategory.IdentitySetupRequired => "Import blocked. Connect your Torn account before importing personal stats.",
+        ApiFailureCategory.Validation => "Import rejected. Check your Torn API key and try again.",
         ApiFailureCategory.BadGateway => "Import failed. The service is temporarily unavailable — try again shortly.",
         ApiFailureCategory.ApiUnavailable => "Import failed. The service is temporarily unavailable — try again shortly.",
-        ApiFailureCategory.Deserialization => "Import failed: API response format was invalid.",
-        ApiFailureCategory.ImportFailure => "Import failed. Please try again.",
-        _ => $"Import failed: {failure.SafeMessage}"
+        _ => "Import failed. Please try again."
     };
 }
