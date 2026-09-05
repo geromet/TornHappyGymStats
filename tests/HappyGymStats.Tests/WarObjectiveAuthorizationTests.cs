@@ -10,8 +10,10 @@ namespace HappyGymStats.Tests;
 
 public sealed class WarObjectiveAuthorizationTests
 {
-    [Fact]
-    public async Task Standard_member_cannot_append_objective_even_with_crafted_faction()
+    [Theory]
+    [InlineData(null)]
+    [InlineData(Roles.FactionOwner)]
+    public async Task Non_admin_cannot_append_objective_even_with_crafted_faction(string? elevatedRole)
     {
         var sqlitePath = Path.Combine(Path.GetTempPath(), $"hgs-war-objective-auth-{Guid.NewGuid():N}.sqlite");
         try
@@ -25,7 +27,13 @@ public sealed class WarObjectiveAuthorizationTests
                     builder.UseSetting("HAPPYGYMSTATS_DEV_SKIP_WAR_SEED", "1");
                 });
             using var client = factory.CreateClient();
-            client.DefaultRequestHeaders.Add(DevelopmentAuthenticationExtensions.UserHeaderName, "ordinary-member");
+            client.DefaultRequestHeaders.Add(DevelopmentAuthenticationExtensions.UserHeaderName, "objective-caller");
+            if (elevatedRole is not null)
+            {
+                client.DefaultRequestHeaders.Add(
+                    DevelopmentAuthenticationExtensions.RoleHeaderName,
+                    elevatedRole);
+            }
 
             var response = await client.PostAsJsonAsync(
                 "/api/v1/war/objectives",
