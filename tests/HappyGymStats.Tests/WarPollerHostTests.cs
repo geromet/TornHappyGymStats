@@ -32,6 +32,7 @@ public sealed class WarPollerHostTests
 
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<TornApiClient>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<WarPollerService>());
+        Assert.Same(TimeProvider.System, scope.ServiceProvider.GetRequiredService<TimeProvider>());
         Assert.IsType<HappyGymStatsDbContext>(scope.ServiceProvider.GetRequiredService<IUnitOfWork>());
         Assert.Single(host.Services.GetServices<IHostedService>().OfType<WarPollerHostedService>());
     }
@@ -48,6 +49,8 @@ public sealed class WarPollerHostTests
         Assert.Contains("Host.CreateApplicationBuilder", programSource, StringComparison.Ordinal);
         Assert.Contains("AddHttpClient<TornApiClient>", programSource, StringComparison.Ordinal);
         Assert.Contains("AddHttpClient<IWarPollerNotifier, WarPollerNotifier>", programSource, StringComparison.Ordinal);
+        Assert.Contains("AddSingleton(TimeProvider.System)", programSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("IWarPollerClock", programSource, StringComparison.Ordinal);
         Assert.DoesNotContain("new TornApiClient(", programSource, StringComparison.Ordinal);
         Assert.DoesNotContain("WebApplication", programSource, StringComparison.Ordinal);
         Assert.DoesNotContain("Kestrel", programSource, StringComparison.Ordinal);
@@ -103,7 +106,6 @@ public sealed class WarPollerHostTests
                 BaseAddress = new Uri("https://api.torn.com/")
             }),
             new WarStateRepository(scopedDb),
-            new ImportRunRepository(scopedDb),
             scopedDb,
             new WarPollerOptions
             {
@@ -207,29 +209,22 @@ public sealed class WarPollerHostTests
         public Task NotifyWarStateUpdatedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
-    private sealed class BlockingWarPollerClock(DateTimeOffset now) : IWarPollerClock
+    private sealed class BlockingWarPollerClock(DateTimeOffset now) : TimeProvider
     {
         private readonly TaskCompletionSource _delayEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public DateTimeOffset UtcNow => now;
+        public override DateTimeOffset GetUtcNow() => now;
 
         public int DelayCalls { get; private set; }
         public bool CancellationObserved { get; private set; }
 
-        public async Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken)
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
         {
             DelayCalls++;
             _delayEntered.TrySetResult();
-
-            try
-            {
-                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                CancellationObserved = true;
-                throw;
-            }
+            return new ObservedTimer(
+                TimeProvider.System.CreateTimer(callback, state, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan),
+                () => CancellationObserved = true);
         }
 
         public async Task<bool> WaitForDelayAsync(TimeSpan timeout)
@@ -243,6 +238,38 @@ public sealed class WarPollerHostTests
             catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
             {
                 return false;
+            }
+        }
+
+        private sealed class ObservedTimer(ITimer inner, Action onDispose) : ITimer
+        {
+            private readonly ITimer _inner = inner;
+            private readonly Action _onDispose = onDispose;
+            private int _disposed;
+
+            public bool Change(TimeSpan dueTime, TimeSpan period)
+                => _inner.Change(dueTime, period);
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                {
+                    return;
+                }
+
+                _onDispose();
+                _inner.Dispose();
+            }
+
+            public async ValueTask DisposeAsync()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                {
+                    return;
+                }
+
+                _onDispose();
+                await _inner.DisposeAsync();
             }
         }
     }
