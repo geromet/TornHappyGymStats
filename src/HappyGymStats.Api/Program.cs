@@ -99,6 +99,7 @@ builder.Services.AddScoped<IFactionIdMapRepository, FactionIdMapRepository>();
 builder.Services.AddScoped<IFactionMembershipRepository, FactionMembershipRepository>();
 builder.Services.AddScoped<IWarStateRepository, WarStateRepository>();
 builder.Services.AddScoped<IWarHistoryRepository, WarHistoryRepository>();
+builder.Services.AddScoped<IRankedWarHistoryBackfillStateRepository, RankedWarHistoryBackfillStateRepository>();
 builder.Services.AddScoped<ICombatIntelRepository, CombatIntelRepository>();
 builder.Services.AddScoped<IWarObjectiveRepository, WarObjectiveRepository>();
 builder.Services.AddScoped<IWarAccountingRunRepository, WarAccountingRunRepository>();
@@ -177,3 +178,5 @@ app.MapControllers();
 app.MapHub<WarHub>("/api/hub/war");
 
 app.Run();
+
+public partial class Program;
