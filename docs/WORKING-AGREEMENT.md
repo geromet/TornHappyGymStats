@@ -5,13 +5,54 @@ A clean clone must contain everything needed to work safely. Gitignored
 `workspace/` material may explain history or hold local evidence, but it is never
 an authority for correctness, acceptance criteria, or implementation decisions.
 
-## 1. Planning state lives in GitHub
+## 1. Planning and live coordination state live in GitHub
 
-GitHub issues are the authoritative backlog. Before changing code:
+GitHub issues are the authoritative backlog. **Issue #140 is the canonical live
+Agent work coordination LOCK for this repository.** Current repository, PR, CI,
+and branch state wins over stale issue prose, old PR descriptions, audit notes,
+plans, or historical handoff comments.
+
+Before selecting mutable work, read #140's current body and recent comments. Before
+any materially conflicting mutation, refresh:
+
+1. #140 body + recent comments;
+2. the target issue/PR and relevant dependencies;
+3. the repository's actual current default branch and head (discover it; do not
+   rely on an old assumption that it is still `main`);
+4. every branch/PR head involved in the mutation.
+
+Obey all live coordination restrictions recorded in #140: active claims, WIP and
+throughput gates, queue/drain ordering, branch ownership, dependency restrictions,
+and outside-contributor boundaries. A free-looking issue is not available when a
+live gate or overlapping ownership rule says otherwise.
+
+Read-only inspection does not require a claim. Before editing/pushing code or a
+fleet branch, changing a PR body/base/state, posting a substantive PR review or
+comment, updating an overlapping implementation issue, or consolidating/closing
+fleet work, acquire ownership with the two-phase claim protocol:
+
+1. **Pre-claim:** immediately refresh #140, the target, default, and relevant
+   heads; reject the candidate if a materially overlapping active claim exists.
+2. **Claim:** record the exact issue/PR/branch/work-package/seam, a unique
+   `run=<token>`, and the observed head SHA where practical.
+3. **Post-claim win check:** reread recent #140 comments immediately. If claims
+   overlap, the earlier GitHub comment ID wins. The later claimant must edit its
+   own claim to canonical `🔓 RELEASED` and choose independent work.
+4. **Before first mutation:** refresh #140 and the relevant heads once more.
+
+After two failed acquisitions for overlapping work, back off to lower-priority
+independent work rather than repeatedly competing for the same scope.
+
+Treat an observed branch head SHA as a compare-and-swap token. Before every remote
+branch mutation, verify the current head still matches the expected head. If it
+moved unexpectedly, stop and reconcile before writing. Never force-push through a
+race or commandeer/rewrite an outside-contributor or human-owned branch.
+
+For ordinary task flow:
 
 1. read the issue and its current comments;
 2. check open and recently merged PRs for overlapping work;
-3. refresh from current `main` before starting a new independent task;
+3. refresh from the actual current default before starting a new independent task;
 4. keep one active task on one branch and name stacked/dependent PRs explicitly;
 5. after a PR merges or closes, follow-on work gets a fresh branch unless the
    original task is explicitly reopened.
@@ -19,6 +60,20 @@ GitHub issues are the authoritative backlog. Before changing code:
 Coordination epics are not implementation tasks. Respect dependency and stop-gate
 ordering recorded in the child issues. `docs/MILESTONES.md` and
 `docs/UX-PLAN.md` are pointers, not parallel planning databases.
+
+### Default-branch authority boundary
+
+Fleet/manual agents **must never merge a branch or PR into the repository default
+branch** or weaken protections to permit such a merge. Final default-branch review
+and merge belong exclusively to Gerome's separately invoked coding-agent/human
+workflow. Fleet/manual agents may build, repair, test, review, and consolidate
+compatible fleet-owned work only through non-default branches and PRs.
+
+A final coding-agent session that Gerome explicitly authorizes to review/merge
+must still refresh #140, the current default head, the candidate PR exact head,
+checks, reviews, dependencies, and any live ownership before each merge decision.
+After a default merge, refresh the default branch and re-evaluate remaining PRs;
+do not inherit readiness from their pre-merge base state.
 
 ## 2. Torn is read-only from HappyGymStats
 
@@ -136,11 +191,37 @@ exists; tracked enforcement is what makes the rule current.
 Before handing a PR back, state:
 
 - which issue/scope it implements and what it deliberately does not;
-- dependencies/stacking and the base it was built from;
+- dependencies/stacking and the exact base/head state it was proved against;
 - required evidence tier(s);
-- commands/evidence actually observed;
+- commands/evidence actually observed on the exact final head;
 - regression/negative control;
 - anything still unverified or requiring human/operator action.
 
 Use `Closes #N` only when the PR satisfies the issue's full current acceptance
 criteria. Partial work uses `Refs #N` and leaves the issue open.
+
+### Terminal handoff invariant
+
+A branch being pushed, or a child PR being merged into a non-default
+stable/integration branch, is **not** enough to declare useful work finished.
+Before releasing ownership, every useful branch touched or created by the run must
+be in exactly one recorded terminal state:
+
+1. directly or transitively represented by an **open PR ultimately targeting the
+   repository default branch**;
+2. proven incorporated or superseded by a current default-destined review surface,
+   with that relationship recorded; or
+3. explicitly abandoned after its unique commits were assessed and the reason was
+   recorded.
+
+When tracing branch history, do not use `ahead` alone as evidence of missing work.
+Account for squash merges, stable rollups, replacement PRs, and explicit
+supersession. If a non-default stable branch becomes a coherent review unit and
+still contains useful work absent from default, open or update a live
+stable-to-default review surface for Gerome/coding-agent review. Do not close the
+only default-destined visibility surface merely to reduce PR count.
+
+Immediately before releasing a claim, refresh #140 and the relevant branch/PR
+heads one final time. Edit the **same claim comment** to canonical `🔓 RELEASED`
+and record the durable terminal disposition, exact final head/evidence where
+relevant, and any truthful remaining gap.
