@@ -2,51 +2,16 @@
 @attribute [Authorize]
 @rendermode InteractiveServer
 @using Microsoft.AspNetCore.Authorization
+@using System.Globalization
 @inject SurfacesService SurfacesApi
 @inject IJSRuntime JS
 @inject ILogger<MyStats> Logger
 
-<PageTitle>My stats · Happy Gym Stats</PageTitle>
-
-<MudCard Class="mb-4">
-    <MudCardHeader>
-        <CardHeaderContent>
-            <MudText Typo="Typo.h5">My stats</MudText>
-        </CardHeaderContent>
-    </MudCardHeader>
-    <MudCardContent>
-        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-            Your personal gym train point cloud sourced from authenticated claim-bound stats.
-        </MudText>
-
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
-            <MudTextField @bind-Value="_apiKey"
-                          Label="Torn API Key"
-                          InputType="InputType.Password"
-                          Variant="Variant.Outlined"
-                          Adornment="Adornment.Start"
-                          AdornmentIcon="@Icons.Material.Filled.Key"
-                          Style="flex: 1;"
-                          Disabled="@_importing" />
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       StartIcon="@Icons.Material.Filled.Refresh"
-                       OnClick="RunImportAsync"
-                       Disabled="@(_importing || string.IsNullOrWhiteSpace(_apiKey))">
-                @(_importing ? "Importing..." : "Import + Refresh")
-            </MudButton>
-        </MudStack>
-
-        @if (!string.IsNullOrEmpty(_importStatusMessage))
-        {
-            <MudAlert Severity="@_importStatusSeverity" Dense="true">@_importStatusMessage</MudAlert>
-        }
-    </MudCardContent>
-</MudCard>
+<PageTitle>My Training · Happy Gym Stats</PageTitle>
 
 @if (_loading)
 {
-    <LoadingState Message="Loading your stats…" />
+    <LoadingState Message="Loading your training data…" />
 }
 else if (_loadError != null)
 {
@@ -54,23 +19,155 @@ else if (_loadError != null)
 }
 else if (_surfaces != null)
 {
-    <MudCard Class="mb-4">
-        <MudCardHeader>
-            <CardHeaderContent>
-                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Style="width:100%">
-                    <div>
-                        <MudText Typo="Typo.h6">My gym trains point cloud</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">
-                            @_surfaces.Meta.GymPointCount points
-                        </MudText>
+    var points = FilteredPoints;
+
+    <MudStack Spacing="3">
+        <div>
+            <MudText Typo="Typo.h4">My Training</MudText>
+            <MudText Typo="Typo.body1" Color="Color.Secondary">
+                Review your observed training efficiency and its relationship with happiness and stat size. These charts describe your imported history; they do not prescribe a training strategy.
+            </MudText>
+        </div>
+
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Style="height:100%">
+                    <MudCardContent>
+                        <MudText Typo="Typo.overline">Visible sample</MudText>
+                        <MudText Typo="Typo.h5" data-testid="visible-sample-count">@points.Count</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">of @_surfaces.Meta.GymPointCount plotted observations</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Style="height:100%">
+                    <MudCardContent>
+                        <MudText Typo="Typo.overline">Average gain / energy</MudText>
+                        <MudText Typo="Typo.h5">@AverageEfficiency(points)</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Observed stat gain per energy spent</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Style="height:100%">
+                    <MudCardContent>
+                        <MudText Typo="Typo.overline">Average happiness</MudText>
+                        <MudText Typo="Typo.h5">@AverageHappiness(points)</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Before the recorded train</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Style="height:100%">
+                    <MudCardContent>
+                        <MudText Typo="Typo.overline">Date span</MudText>
+                        <MudText Typo="Typo.subtitle1" data-testid="date-span">@DateRangeLabel(points)</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">UTC, for the visible sample</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+
+        <MudCard>
+            <MudCardContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="flex-wrap:wrap">
+                    <div style="min-width: 180px">
+                        <MudText Typo="Typo.overline">Filter</MudText>
+                        <select aria-label="Stat filter"
+                                value="@_statFilter"
+                                @onchange="OnStatFilterChangedAsync"
+                                style="display:block;width:100%;min-height:40px;padding:6px 10px;border-radius:4px">
+                            <option value="all">All stats</option>
+                            @foreach (var statType in AvailableStatTypes)
+                            {
+                                <option value="@statType">@FormatStatType(statType)</option>
+                            }
+                        </select>
                     </div>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Dataset @_surfaces.Version · @_surfaces.Meta.RecordCount records processed · @points.Count observations in this view
+                    </MudText>
                 </MudStack>
-            </CardHeaderContent>
-        </MudCardHeader>
-        <MudCardContent Class="pa-0">
-            <div id="my-gym-cloud-chart" style="width: 100%; height: 760px;"></div>
-        </MudCardContent>
-    </MudCard>
+            </MudCardContent>
+        </MudCard>
+
+        <MudGrid>
+            <MudItem xs="12" lg="6">
+                <MudCard Style="height:100%">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">Gain / energy over time</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Each dot is one imported training observation.</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent Class="pa-0">
+                        <div id="training-efficiency-time-chart" style="width:100%;height:360px"></div>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" lg="6">
+                <MudCard Style="height:100%">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">Gain / energy vs stat before</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Compare observed efficiency across your stat-size range.</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent Class="pa-0">
+                        <div id="training-efficiency-stat-chart" style="width:100%;height:360px"></div>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12">
+                <MudCard>
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">Gain / energy vs happiness</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">See the relationship in the raw observations without turning correlation into advice.</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent Class="pa-0">
+                        <div id="training-efficiency-happy-chart" style="width:100%;height:360px"></div>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+
+        <MudCard>
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Refresh training data</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                    Import your authenticated Torn gym history, then refresh these observations.
+                </MudText>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                    <MudTextField @bind-Value="_apiKey"
+                                  Label="Torn API Key"
+                                  InputType="InputType.Password"
+                                  Variant="Variant.Outlined"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Key"
+                                  Style="flex: 1;"
+                                  Disabled="@_importing" />
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Refresh"
+                               OnClick="RunImportAsync"
+                               Disabled="@(_importing || string.IsNullOrWhiteSpace(_apiKey))">
+                        @(_importing ? "Importing..." : "Import + Refresh")
+                    </MudButton>
+                </MudStack>
+
+                @if (!string.IsNullOrEmpty(_importStatusMessage))
+                {
+                    <MudAlert Severity="@_importStatusSeverity" Dense="true">@_importStatusMessage</MudAlert>
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudStack>
 }
 
 @code {
@@ -82,6 +179,20 @@ else if (_surfaces != null)
     private string? _loadError;
     private MyStatsDatasetDto? _surfaces;
     private bool _chartsDrawn;
+    private string _statFilter = "all";
+
+    private IReadOnlyList<TrainingPoint> AllPoints => BuildTrainingPoints();
+
+    private IReadOnlyList<TrainingPoint> FilteredPoints => _statFilter == "all"
+        ? AllPoints
+        : AllPoints.Where(point => string.Equals(point.StatType, _statFilter, StringComparison.OrdinalIgnoreCase)).ToArray();
+
+    private IReadOnlyList<string> AvailableStatTypes => AllPoints
+        .Select(point => point.StatType)
+        .Where(statType => !string.Equals(statType, "unknown", StringComparison.OrdinalIgnoreCase))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(statType => statType, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
 
     protected override async Task OnInitializedAsync() => await LoadSurfacesAsync();
 
@@ -172,48 +283,156 @@ else if (_surfaces != null)
         }
     }
 
+    private async Task OnStatFilterChangedAsync(ChangeEventArgs args)
+    {
+        _statFilter = args.Value?.ToString() ?? "all";
+        await DrawChartsAsync();
+    }
+
     private async Task DrawChartsAsync()
     {
         if (_surfaces == null) return;
+
+        var points = FilteredPoints;
+        var timedPoints = points
+            .Where(point => point.OccurredAtUtc.HasValue)
+            .OrderBy(point => point.OccurredAtUtc)
+            .ToArray();
+
         try
         {
             await JS.InvokeVoidAsync("plotlyInterop.render",
-                "my-gym-cloud-chart",
-                new[] { BuildGymTrace(_surfaces.Series.GymCloud) },
-                BuildLayout("Stat before train", "Happy before train", "Stat gained / energy"));
+                "training-efficiency-time-chart",
+                new[] { BuildTimeTrace(timedPoints) },
+                BuildLayout("Date (UTC)", "Stat gain / energy"));
+
+            await JS.InvokeVoidAsync("plotlyInterop.render",
+                "training-efficiency-stat-chart",
+                new[] { BuildStatTrace(points) },
+                BuildLayout("Stat before train", "Stat gain / energy"));
+
+            await JS.InvokeVoidAsync("plotlyInterop.render",
+                "training-efficiency-happy-chart",
+                new[] { BuildHappyTrace(points) },
+                BuildLayout("Happiness before train", "Stat gain / energy"));
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to draw personal stats chart");
+            Logger.LogError(ex, "Failed to draw personal training charts");
         }
     }
 
-    private static object BuildGymTrace(GymCloudSeriesDto cloud) => new
+    private IReadOnlyList<TrainingPoint> BuildTrainingPoints()
     {
-        type = "scatter3d",
+        if (_surfaces == null)
+            return Array.Empty<TrainingPoint>();
+
+        var cloud = _surfaces.Series.GymCloud;
+        var count = Math.Min(cloud.X.Length, Math.Min(cloud.Y.Length, cloud.Z.Length));
+        var text = cloud.Text ?? Array.Empty<string>();
+        var result = new TrainingPoint[count];
+
+        for (var i = 0; i < count; i++)
+        {
+            var metadata = i < text.Length ? ParsePointMetadata(text[i]) : ("unknown", (DateTimeOffset?)null);
+            result[i] = new TrainingPoint(cloud.X[i], cloud.Y[i], cloud.Z[i], metadata.Item1, metadata.Item2);
+        }
+
+        return result;
+    }
+
+    private static (string StatType, DateTimeOffset? OccurredAtUtc) ParsePointMetadata(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return ("unknown", null);
+
+        var separator = text.IndexOf(' ');
+        if (separator <= 0 || separator == text.Length - 1)
+            return (text.Trim(), null);
+
+        var statType = text[..separator].Trim();
+        var timestampText = text[(separator + 1)..].Trim();
+        var parsed = DateTimeOffset.TryParse(
+            timestampText,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+            out var occurredAtUtc);
+
+        return (string.IsNullOrWhiteSpace(statType) ? "unknown" : statType, parsed ? occurredAtUtc : null);
+    }
+
+    private static string DateRangeLabel(IReadOnlyList<TrainingPoint> points)
+    {
+        var timestamps = points
+            .Where(point => point.OccurredAtUtc.HasValue)
+            .Select(point => point.OccurredAtUtc!.Value)
+            .OrderBy(value => value)
+            .ToArray();
+
+        if (timestamps.Length == 0)
+            return "Timestamp metadata unavailable";
+
+        var start = timestamps[0].UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var end = timestamps[^1].UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        return start == end ? start : $"{start} → {end}";
+    }
+
+    private static string AverageEfficiency(IReadOnlyList<TrainingPoint> points)
+        => points.Count == 0
+            ? "—"
+            : points.Average(point => point.Efficiency).ToString("0.####", CultureInfo.InvariantCulture);
+
+    private static string AverageHappiness(IReadOnlyList<TrainingPoint> points)
+        => points.Count == 0
+            ? "—"
+            : points.Average(point => point.HappinessBefore).ToString("0", CultureInfo.InvariantCulture);
+
+    private static string FormatStatType(string statType)
+        => string.IsNullOrWhiteSpace(statType)
+            ? "Unknown"
+            : char.ToUpperInvariant(statType[0]) + statType[1..];
+
+    private static object BuildTimeTrace(IReadOnlyList<TrainingPoint> points) => new
+    {
+        type = "scatter",
         mode = "markers",
-        x = cloud.X,
-        y = cloud.Y,
-        z = cloud.Z,
-        hovertemplate = "Stat before: %{x}<br>Happy before: %{y}<br>Gain / energy: %{z}<extra></extra>",
-        marker = new { size = 6, opacity = 0.88, color = "#58a6ff" }
+        x = points.Select(point => point.OccurredAtUtc!.Value.ToString("O", CultureInfo.InvariantCulture)).ToArray(),
+        y = points.Select(point => point.Efficiency).ToArray(),
+        text = points.Select(point => FormatStatType(point.StatType)).ToArray(),
+        hovertemplate = "%{text}<br>%{x}<br>Gain / energy: %{y}<extra></extra>",
+        marker = new { size = 7, opacity = 0.82 }
     };
 
-    private static object BuildLayout(string xTitle, string yTitle, string zTitle) => new
+    private static object BuildStatTrace(IReadOnlyList<TrainingPoint> points) => new
+    {
+        type = "scatter",
+        mode = "markers",
+        x = points.Select(point => point.StatBefore).ToArray(),
+        y = points.Select(point => point.Efficiency).ToArray(),
+        text = points.Select(point => FormatStatType(point.StatType)).ToArray(),
+        hovertemplate = "%{text}<br>Stat before: %{x}<br>Gain / energy: %{y}<extra></extra>",
+        marker = new { size = 7, opacity = 0.82 }
+    };
+
+    private static object BuildHappyTrace(IReadOnlyList<TrainingPoint> points) => new
+    {
+        type = "scatter",
+        mode = "markers",
+        x = points.Select(point => point.HappinessBefore).ToArray(),
+        y = points.Select(point => point.Efficiency).ToArray(),
+        text = points.Select(point => FormatStatType(point.StatType)).ToArray(),
+        hovertemplate = "%{text}<br>Happiness before: %{x}<br>Gain / energy: %{y}<extra></extra>",
+        marker = new { size = 7, opacity = 0.82 }
+    };
+
+    private static object BuildLayout(string xTitle, string yTitle) => new
     {
         paper_bgcolor = "rgba(0,0,0,0)",
         plot_bgcolor = "rgba(0,0,0,0)",
         font = new { color = "#e8f1ff", family = "Roboto, sans-serif" },
-        scene = new
-        {
-            aspectmode = "manual",
-            aspectratio = new { x = 1.35, y = 1.35, z = 1.2 },
-            xaxis = new { title = xTitle, gridcolor = "#243457", zerolinecolor = "#243457" },
-            yaxis = new { title = yTitle, gridcolor = "#243457", zerolinecolor = "#243457" },
-            zaxis = new { title = zTitle, gridcolor = "#243457", zerolinecolor = "#243457" },
-            bgcolor = "rgba(0,0,0,0)"
-        },
-        margin = new { l = 0, r = 0, t = 0, b = 0 }
+        xaxis = new { title = xTitle, gridcolor = "#243457", zerolinecolor = "#243457" },
+        yaxis = new { title = yTitle, gridcolor = "#243457", zerolinecolor = "#243457" },
+        margin = new { l = 56, r = 18, t = 12, b = 52 }
     };
 
     private static string BuildLoadFailureMessage(ApiFailure failure) => failure.Category switch
@@ -238,4 +457,11 @@ else if (_surfaces != null)
         ApiFailureCategory.ImportFailure => "Import failed. Please try again.",
         _ => $"Import failed: {failure.SafeMessage}"
     };
+
+    private sealed record TrainingPoint(
+        double StatBefore,
+        double HappinessBefore,
+        double Efficiency,
+        string StatType,
+        DateTimeOffset? OccurredAtUtc);
 }
