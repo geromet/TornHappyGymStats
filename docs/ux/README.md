@@ -1,11 +1,11 @@
 # Frontend & UX North Star — 2026-09-05
 
-This directory contains the complete frontend/UX deep-research report commissioned for Happy Gym Stats.
+This directory contains the complete machine-readable frontend/UX deep-research report commissioned for Happy Gym Stats.
 
 ## How to use this material
 
-- **Fleet/coding agents:** read the Markdown sections selectively; they are the full machine-readable report split into contiguous topical parts so GitHub tooling can fetch only the needed section.
-- **Human review:** open `HappyGymStats_Frontend_UX_North_Star_Report_2026-09-05.docx` for the polished 22-page report.
+- **Fleet/coding agents:** read the Markdown sections selectively; they are the full report split into contiguous topical parts so GitHub tooling can fetch only the needed section.
+- **Human review:** the same research was also delivered as a polished 22-page DOCX in the originating ChatGPT research conversation. The Git repository intentionally keeps the text-native Markdown edition because it is diffable, searchable, and directly readable by coding agents.
 - **Implementation ownership:** GitHub issues remain canonical. This report is research/design guidance, not a parallel backlog and not a coordination lease. Follow issue #140 before any mutation.
 
 ## Report parts
