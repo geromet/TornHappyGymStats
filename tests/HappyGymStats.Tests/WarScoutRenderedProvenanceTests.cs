@@ -24,8 +24,8 @@ public sealed class WarScoutRenderedProvenanceTests : BunitContext
             BaseAddress = new Uri("http://localhost")
         };
 
-        var logger = Services.GetRequiredService<ILogger<WarScoutService>>();
-        Services.AddSingleton(new WarScoutService(http, logger));
+        Services.AddSingleton<WarScoutService>(provider =>
+            new WarScoutService(http, provider.GetRequiredService<ILogger<WarScoutService>>()));
 
         var cut = Render<WarScout>(parameters => parameters
             .Add(component => component.FactionId, ScoutProfileHandler.FactionId));
