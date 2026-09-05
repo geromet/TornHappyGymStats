@@ -1,0 +1,149 @@
+.chain-planner-page {
+    max-width: 1440px;
+    margin: 0 auto;
+}
+
+.planner-inputs {
+    position: sticky;
+    top: 1rem;
+}
+
+.budget-presets,
+.comparison-actions,
+.table-compare-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.recommendation-card {
+    border: 1px solid rgba(64, 137, 255, 0.28);
+}
+
+.plan-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.plan-stat {
+    min-width: 0;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    background: rgba(127, 127, 127, 0.08);
+}
+
+.plan-stat-label {
+    display: block;
+    margin-bottom: 0.2rem;
+    font-size: 0.75rem;
+    opacity: 0.72;
+}
+
+.plan-stat strong {
+    display: block;
+    font-size: 1.05rem;
+    overflow-wrap: anywhere;
+}
+
+.tie-note {
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    background: rgba(127, 127, 127, 0.08);
+}
+
+.alternative-list {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.alternative-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+.alternative-copy {
+    min-width: 0;
+}
+
+.compact-actions {
+    flex: 0 0 auto;
+    justify-content: flex-end;
+}
+
+.all-combinations {
+    overflow-x: auto;
+}
+
+.planner-secondary {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.planner-details {
+    border: 1px solid rgba(127, 127, 127, 0.24);
+    border-radius: 0.5rem;
+    overflow: clip;
+}
+
+.planner-details > summary {
+    cursor: pointer;
+    padding: 0.9rem 1rem;
+    font-weight: 600;
+    list-style-position: inside;
+}
+
+.planner-details > summary:hover {
+    background: rgba(127, 127, 127, 0.06);
+}
+
+.planner-details-body {
+    padding: 0 1rem 1rem;
+}
+
+.comparison-plan {
+    height: 100%;
+}
+
+.chain-chart {
+    width: 100%;
+    height: 420px;
+}
+
+@media (max-width: 959.98px) {
+    .planner-inputs {
+        position: static;
+    }
+}
+
+@media (max-width: 599.98px) {
+    .chain-planner-page {
+        margin-inline: -0.25rem;
+    }
+
+    .plan-stat-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .alternative-card {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .compact-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .comparison-actions > ::deep .mud-button-root,
+    .compact-actions > ::deep .mud-button-root {
+        flex: 1 1 11rem;
+    }
+
+    .chain-chart {
+        height: 340px;
+    }
+}
