@@ -13,11 +13,22 @@ public sealed class WarObjectivesController(IWarObjectiveRepository objectives) 
 {
     [HttpGet("{factionId:long}/{warId:long}/current")]
     public async Task<IActionResult> GetCurrent(long factionId, long warId, CancellationToken ct)
+        => Ok(ToDto(await objectives.GetEffectiveAsync(factionId, warId, ct)));
+
+    [HttpGet("{factionId:long}/{warId:long}/evaluation")]
+    public async Task<IActionResult> GetEvaluation(
+        long factionId,
+        long warId,
+        [FromQuery] int factionScore,
+        CancellationToken ct)
     {
-        var current = await objectives.GetCurrentAsync(factionId, warId, ct);
-        return current is null
-            ? ApiError(StatusCodes.Status404NotFound, "war_objective_not_found", "No objective exists for this war.")
-            : Ok(ToDto(current));
+        var current = await objectives.GetEffectiveAsync(factionId, warId, ct);
+        var evaluation = WarObjectiveEvaluator.Evaluate(current.Objective, factionScore);
+        return Ok(new WarObjectiveEvaluationDto(
+            ToDto(current),
+            factionScore,
+            evaluation.RecommendationsAllowed,
+            evaluation.StopReason));
     }
 
     [HttpGet("{factionId:long}/{warId:long}/history")]
@@ -84,3 +95,9 @@ public sealed record WarObjectiveVersionDto(
     string? Notes,
     string ChangedBy,
     DateTimeOffset CreatedAtUtc);
+
+public sealed record WarObjectiveEvaluationDto(
+    WarObjectiveVersionDto Objective,
+    int FactionScore,
+    bool RecommendationsAllowed,
+    string? StopReason);
