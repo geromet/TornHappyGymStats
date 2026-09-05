@@ -23,6 +23,8 @@ jobs:
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       # ripgrep is not guaranteed on the runner and several required verifiers
       # depend on it. Missing verifier tooling must be unavailable/red, not a
