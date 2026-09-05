@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using HappyGymStats.Api.Infrastructure;
 using HappyGymStats.Core.War;
 using HappyGymStats.Identity.Authentication;
 using Microsoft.AspNetCore.Authorization;
