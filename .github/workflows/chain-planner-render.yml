@@ -1,0 +1,48 @@
+name: Chain planner render proof
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/ChainCalculator.razor'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/ChainCalculator.razor.css'
+      - 'scripts/screenshot-board.sh'
+      - 'scripts/ux/shoot.py'
+      - '.github/workflows/chain-planner-render.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chain-planner-render-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    name: 390 / 768 / 1440 screenshots
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install .NET (version from global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install screenshot tooling
+        run: bash scripts/screenshot-board.sh --setup
+
+      - name: Capture Chain Planner at phone, tablet and desktop widths
+        run: bash scripts/screenshot-board.sh --route /chain-calculator --out workspace/tmp/screenshots/chain-planner
+
+      - name: Upload render proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chain-planner-render-proof
+          path: workspace/tmp/screenshots/chain-planner
+          if-no-files-found: error
+          retention-days: 7
