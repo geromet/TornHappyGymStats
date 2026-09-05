@@ -94,7 +94,6 @@ builder.Services.AddScoped<IUserLogEntryRepository, UserLogEntryRepository>();
 builder.Services.AddScoped<IImportRunRepository, ImportRunRepository>();
 builder.Services.AddScoped<IModifierProvenanceRepository, ModifierProvenanceRepository>();
 builder.Services.AddScoped<IAffiliationEventRepository, AffiliationEventRepository>();
-builder.Services.AddScoped<ILogTypeRepository, LogTypeRepository>();
 builder.Services.AddScoped<IFactionIdMapRepository, FactionIdMapRepository>();
 builder.Services.AddScoped<IFactionMembershipRepository, FactionMembershipRepository>();
 builder.Services.AddScoped<IWarStateRepository, WarStateRepository>();
