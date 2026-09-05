@@ -35,3 +35,9 @@ indent_style = tab
 # `dotnet ef migrations add` — churn caused entirely by the rule, so the rule
 # bends to the generator instead.
 charset = utf-8-bom
+
+[tests/HappyGymStats.Tests/DbPipelineIntegrationTests.cs]
+# This fixture intentionally inserts malformed rows through raw SQL to prove
+# the reader rejects them. Parameterizing the interpolation changes the SQL
+# shape under test; keep the exception scoped to this one fixture file.
+dotnet_diagnostic.EF1002.severity = none
