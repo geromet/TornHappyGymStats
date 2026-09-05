@@ -111,8 +111,8 @@ public sealed class WarPayoutPostgresPersistenceTests : IAsyncLifetime
 
         Assert.Equal(run.SourceSnapshotId, frozen.SourceSnapshotId);
         Assert.Equal(1, frozen.PolicyVersion);
-        Assert.Equal(3_103m, frozen.AllocatedAmount);
-        Assert.Equal(6_897m, frozen.UnattributedResidual);
+        Assert.Equal(3_123m, frozen.AllocatedAmount);
+        Assert.Equal(6_877m, frozen.UnattributedResidual);
         Assert.Equal(frozen.PoolAmount, frozen.AllocatedAmount + frozen.UnattributedResidual);
         Assert.Equal(new long[] { 8101, 8102 }, frozen.Lines.Select(line => line.MemberId));
         Assert.Equal(2, policy2.Policy.Version);
@@ -141,6 +141,7 @@ public sealed class WarPayoutPostgresPersistenceTests : IAsyncLifetime
         const long foreignFactionId = 13004;
         const long warId = 23003;
         var sourceRunId = Guid.Parse("d2168ad4-dc57-49ed-8ed1-f70c7f12cb82");
+        var spareSourceRunId = Guid.Parse("3ccb1afd-cb05-4b45-8f8d-492c3ec784da");
         var foreignRunId = Guid.Parse("883e0eb6-0a43-4134-bb61-4295f9e7a4d2");
         var capturedAt = DateTimeOffset.Parse("2026-09-05T09:50:00Z");
 
@@ -150,6 +151,8 @@ public sealed class WarPayoutPostgresPersistenceTests : IAsyncLifetime
         var runRepository = new WarAccountingRunRepository(db);
         var sourceRun = await runRepository.FreezeAsync(
             sourceRunId, factionId, warId, "source", capturedAt.AddMinutes(1), CancellationToken.None);
+        await runRepository.FreezeAsync(
+            spareSourceRunId, factionId, warId, "source-spare", capturedAt.AddMinutes(1), CancellationToken.None);
         var foreignRun = await runRepository.FreezeAsync(
             foreignRunId, foreignFactionId, warId, "foreign", capturedAt.AddMinutes(1), CancellationToken.None);
 
@@ -171,13 +174,12 @@ public sealed class WarPayoutPostgresPersistenceTests : IAsyncLifetime
             WHERE "RunId" = {{sourceRunId}}
             """));
 
-        var injectedRunId = Guid.Parse("3ccb1afd-cb05-4b45-8f8d-492c3ec784da");
         await Assert.ThrowsAnyAsync<Exception>(() => db.Database.ExecuteSqlInterpolatedAsync($$"""
             INSERT INTO "WarPayoutReconciliations" (
                 "RunId", "FactionId", "WarId", "SourceSnapshotId", "PolicyVersion", "PoolAmount",
                 "AllocatedAmount", "UnattributedResidual", "CalculatedBy", "CalculatedAtUtc")
             VALUES (
-                {{injectedRunId}}, {{foreignFactionId}}, {{warId}}, {{foreignRun.SourceSnapshotId}}, {{1}}, {{100m}},
+                {{spareSourceRunId}}, {{foreignFactionId}}, {{warId}}, {{foreignRun.SourceSnapshotId}}, {{1}}, {{100m}},
                 {{0m}}, {{100m}}, {{"attacker"}}, {{capturedAt.UtcDateTime}})
             """));
 
@@ -189,6 +191,12 @@ public sealed class WarPayoutPostgresPersistenceTests : IAsyncLifetime
                 {{sourceRunId}}, {{foreignRun.SourceSnapshotId}}, {{foreignFactionId}}, {{warId}}, {{9201L}}, {{"Kilo"}},
                 {{100}}, {{1}}, {{1}}, {{1m}}, {{0m}}, {{0m}}, {{0m}}, {{1m}})
             """));
+
+        var persisted = await payoutRepository.GetFrozenAsync(sourceRunId, CancellationToken.None);
+        Assert.NotNull(persisted);
+        Assert.Single(persisted.Lines);
+        Assert.Equal(sourceRun.SourceSnapshotId, persisted.SourceSnapshotId);
+        Assert.Equal(8201, persisted.Lines[0].MemberId);
     }
 
     private static Task<int> InsertReportMemberAsync(
