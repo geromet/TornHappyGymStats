@@ -31,6 +31,35 @@ public sealed class AppShellContractTests
     }
 
     [Fact]
+    public void Public_gym_explorer_stays_outside_the_private_training_gate()
+    {
+        var layout = ReadRepoFile(LayoutPath);
+        var trainingStart = layout.IndexOf(">Training<", StringComparison.Ordinal);
+        var trainingEnd = layout.IndexOf("</div>", trainingStart, StringComparison.Ordinal);
+        var trainingNavigation = layout[trainingStart..trainingEnd];
+        var privateTraining = trainingNavigation.IndexOf("Href=\"/my-stats\"", StringComparison.Ordinal);
+        var authClose = trainingNavigation.IndexOf("</AuthorizeView>", privateTraining, StringComparison.Ordinal);
+        var publicExplorer = trainingNavigation.IndexOf("Href=\"/gym-explorer\"", StringComparison.Ordinal);
+
+        Assert.True(trainingStart >= 0);
+        Assert.True(trainingEnd > trainingStart);
+        Assert.True(privateTraining >= 0);
+        Assert.True(authClose > privateTraining);
+        Assert.True(publicExplorer > authClose);
+
+        var mobileStart = layout.IndexOf("class=\"mobile-navigation\"", StringComparison.Ordinal);
+        var mobileEnd = layout.IndexOf("</nav>", mobileStart, StringComparison.Ordinal);
+        var mobileNavigation = layout[mobileStart..mobileEnd];
+        var mobilePrivateTraining = mobileNavigation.IndexOf("Href=\"/my-stats\"", StringComparison.Ordinal);
+        var mobileAuthClose = mobileNavigation.IndexOf("</AuthorizeView>", mobilePrivateTraining, StringComparison.Ordinal);
+        var mobilePublicExplorer = mobileNavigation.IndexOf("Href=\"/gym-explorer\"", StringComparison.Ordinal);
+
+        Assert.True(mobilePrivateTraining >= 0);
+        Assert.True(mobileAuthClose > mobilePrivateTraining);
+        Assert.True(mobilePublicExplorer > mobileAuthClose);
+    }
+
+    [Fact]
     public void Account_and_legal_routes_are_secondary_not_primary_debug_navigation()
     {
         var layout = ReadRepoFile(LayoutPath);
