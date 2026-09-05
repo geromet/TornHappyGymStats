@@ -153,6 +153,29 @@ public partial class AddWarPayoutAccounting : Migration
             BEFORE INSERT ON "WarPayoutReconciliations"
             FOR EACH ROW EXECUTE FUNCTION validate_war_payout_reconciliation_scope();
 
+            CREATE FUNCTION validate_war_payout_line_scope()
+            RETURNS trigger AS $$
+            DECLARE
+                result_source uuid;
+                result_faction bigint;
+                result_war bigint;
+            BEGIN
+                SELECT "SourceSnapshotId", "FactionId", "WarId"
+                INTO STRICT result_source, result_faction, result_war
+                FROM "WarPayoutReconciliations"
+                WHERE "RunId" = NEW."RunId";
+
+                IF NEW."SourceSnapshotId" <> result_source OR NEW."FactionId" <> result_faction OR NEW."WarId" <> result_war THEN
+                    RAISE EXCEPTION 'Payout line must match its frozen reconciliation scope and source';
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+
+            CREATE TRIGGER "TR_WarPayoutLines_ValidateScope"
+            BEFORE INSERT ON "WarPayoutLines"
+            FOR EACH ROW EXECUTE FUNCTION validate_war_payout_line_scope();
+
             CREATE FUNCTION prevent_war_payout_mutation()
             RETURNS trigger AS $$
             BEGIN
@@ -177,6 +200,7 @@ public partial class AddWarPayoutAccounting : Migration
         migrationBuilder.DropTable(name: "WarPayoutLines");
         migrationBuilder.DropTable(name: "WarPayoutReconciliations");
         migrationBuilder.DropTable(name: "WarPayoutPolicyVersions");
+        migrationBuilder.Sql("DROP FUNCTION IF EXISTS validate_war_payout_line_scope();");
         migrationBuilder.Sql("DROP FUNCTION IF EXISTS validate_war_payout_reconciliation_scope();");
         migrationBuilder.Sql("DROP FUNCTION IF EXISTS prevent_war_payout_mutation();");
     }
