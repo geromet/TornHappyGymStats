@@ -6,7 +6,7 @@ This document is the coding-agent handoff for the remote branch audit and strand
 
 - Repository: `geromet/TornHappyGymStats`
 - Default branch: `main`
-- Default head throughout this recovery: `270666a030e0473c2891fef9e0fd696a6c0df443`
+- Default head throughout the initial recovery: `270666a030e0473c2891fef9e0fd696a6c0df443`
 - Original remote inventory: **62 branches total** (`main` + 61 non-default branches).
 - Current inventory after this recovery: **65 branches total**, because three non-default consolidation branches were added.
 - The audit compared remote branch history with current `main` and cross-referenced the complete PR history, including PRs whose base was another non-default stable branch.
@@ -21,7 +21,7 @@ This document is the coding-agent handoff for the remote branch audit and strand
 - **LANDED-MAIN** — useful patch already merged to `main` through its direct PR. Do not re-merge the old branch even if GitHub reports it ahead.
 - **LANDED-VIA-STABLE** — useful patch was merged through a non-default stable/rollup path that ultimately reached `main`. Do not re-merge the old child branch.
 - **RECOVERED** — useful work was not in `main` and lacked a live default-destined review surface; it is now represented by one of the three consolidation branches below.
-- **SUPERSEDED** — branch/PR was explicitly replaced, contaminated, or closed in favor of a later canonical implementation. Do not merge it.
+- **SUPERSEDED** — branch/PR was explicitly replaced, contaminated, incomplete against current code, or closed in favor of a later canonical implementation. Do not merge it as-is.
 - **CONSOLIDATION** — new non-default recovery branch intended to become a single coding-agent review surface. Fleet/manual agents must not merge it into `main`.
 
 ## Consolidation branches
@@ -35,11 +35,12 @@ Recovered platform/security/data work:
 3. `fleet/stable/member-data-privacy` — #195 owner-scoped gym-train privacy/security repair.
 4. `agent/issue-98-account-connections` — Account & Connections lifecycle/API/persistence package.
 5. `agent/issue-110-import-persistence-boundary` — persistence-boundary simplification.
-6. `refactor/remove-unused-unit-of-work` — closed-unmerged #135 cleanup; exhaustive audit confirmed `IUnitOfWork` still existed on `main`, so it was not superseded.
 
-Temporary non-default integration PRs: #203, #204, #205, #206, #207, #208.
+Temporary non-default integration PRs for retained packages: #203, #204, #205, #206, #207.
 
-#64 conflicted only on shared CI/verifier-routing files. The recovery preserved the tooling-hygiene CI/test-tier expansion, added #64's required checkout history and manifest rows, copied the PTY/transport files, and recorded source head `3b96fa001f5608eac1e6e36b45cc5ea46b068f3e` as the second parent of reconciliation merge `ae6ea4f99109d94c21bbd634de5614987b94ce1c`. No package was dropped to resolve the conflict.
+The exhaustive audit also tried `refactor/remove-unused-unit-of-work` through temporary #208. Exact-head CI proved #135 incomplete against the current tree: `LogFetcher`, `PerkLogFetcher`, `ReconstructionRunner`, and `WarHistoryIngestWriter` still require `IUnitOfWork`. That temporary recovery was reversed from the consolidation and #135 is classified **SUPERSEDED / DO NOT MERGE AS-IS** below.
+
+#64 conflicted only on shared CI/verifier-routing files. The recovery preserved the tooling-hygiene CI/test-tier expansion, added #64's required checkout history and manifest rows, copied the PTY/transport files, and recorded source head `3b96fa001f5608eac1e6e36b45cc5ea46b068f3e` as the second parent of reconciliation merge `ae6ea4f99109d94c21bbd634de5614987b94ce1c`. No retained package was dropped to resolve the conflict.
 
 ### `fleet/consolidated/ux-member-safety-20260905`
 
@@ -112,9 +113,9 @@ Temporary non-default integration PRs: #201, #202.
 | `fleet/b-86-opponent-pressure` | **LANDED-VIA-STABLE** | #181 → war-readiness stable; #185 merged to `main` | Historical child; do not re-merge |
 | `fleet/b-86-readiness-core` | **LANDED-VIA-STABLE** | #184 → war-readiness stable; #185 merged to `main` | Historical child; do not re-merge |
 | `fleet/b-86-travel-availability` | **LANDED-VIA-STABLE** | #183 → war-readiness stable; #185 merged to `main` | Historical child; do not re-merge |
-| `fleet/consolidated/platform-security-data-20260905` | **CONSOLIDATION** | Created from exact current `main`; 0 behind after package integration | Coding-agent review surface for platform/security/data recovery; never fleet-merge to default |
-| `fleet/consolidated/ux-member-safety-20260905` | **CONSOLIDATION** | Created from exact current `main`; 0 behind after package integration | Coding-agent review surface for UX/member-safety recovery; never fleet-merge to default |
-| `fleet/consolidated/war-core-eval-20260905` | **CONSOLIDATION** | Created from exact current `main`; 0 behind after package integration | Coding-agent review surface for War core/evaluation recovery; never fleet-merge to default |
+| `fleet/consolidated/platform-security-data-20260905` | **CONSOLIDATION** | Created from exact current `main`; retained package union exposed by #215 | Coding-agent review surface for platform/security/data recovery; never fleet-merge to default |
+| `fleet/consolidated/ux-member-safety-20260905` | **CONSOLIDATION** | Created from exact current `main`; exposed by #214 | Coding-agent review surface for UX/member-safety recovery; never fleet-merge to default |
+| `fleet/consolidated/war-core-eval-20260905` | **CONSOLIDATION** | Created from exact current `main`; exposed by #213 | Coding-agent review surface for War core/evaluation recovery; never fleet-merge to default |
 | `fleet/docs-self-improvement-archive` | **SUPERSEDED / CONTENT LANDED** | #173 merged initial archive; later #186 closed because ancestry made review noisy; intended appended content was transplanted onto fresh stable archive and merged via #187/#198 | Do not merge this old noisy branch |
 | `fleet/i-91-replay-core` | **RECOVERED** via hidden stable | #190 and repair #192 merged into `fleet/stable/war-replay-eval` | `fleet/stable/war-replay-eval` → #202 → WAR consolidation |
 | `fleet/stable/member-data-privacy` | **RECOVERED** | Contained #197/#195 security work not yet in `main` | #205 → platform consolidation |
@@ -125,10 +126,10 @@ Temporary non-default integration PRs: #201, #202.
 | `fleet/stable/war-derivation-core` | **RECOVERED** | #196 had merged into this stable, but no stable→default review surface existed | #201 → WAR consolidation |
 | `fleet/stable/war-objectives` | **LANDED-MAIN** | Stable rollup #180 merged to `main` | Historical stable; do not re-merge despite commit-identity divergence |
 | `fleet/stable/war-replay-eval` | **RECOVERED** | #190/#192 lived here with no stable→default review surface | #202 → WAR consolidation |
-| `main` | **DEFAULT** | `270666a030e0473c2891fef9e0fd696a6c0df443` throughout recovery | Untouched; final review/merge remains coding-agent/human only |
+| `main` | **DEFAULT** | `270666a030e0473c2891fef9e0fd696a6c0df443` throughout initial recovery | Untouched by the recovery; final review/merge remains coding-agent/human only |
 | `proof/shared-state-rendered-t2` | **LANDED-VIA-STABLE** | #169 → `fleet/stable/ux-proof-provenance`; #176 merged rollup to `main` | Historical proof branch; do not re-merge |
 | `refactor/gym-trains-pass-through` | **LANDED-MAIN** | #134 merged | Historical branch; do not re-merge |
-| `refactor/remove-unused-unit-of-work` | **RECOVERED** | #135 closed unmerged; audit confirmed current `main` still contained `IUnitOfWork` | #208 → platform consolidation |
+| `refactor/remove-unused-unit-of-work` | **SUPERSEDED** | #135 closed unmerged; temporary recovery #208 failed exact-head compile because current Core consumers still require `IUnitOfWork` | Recovery reversed from PLATFORM; do not merge as-is; any future cleanup must migrate all remaining consumers coherently |
 | `test/verifier-dependency-regression` | **SUPERSEDED** | #123 closed unmerged; superseded by #125 canonical verifier package | Do not merge |
 
 ## Coding-agent review order
