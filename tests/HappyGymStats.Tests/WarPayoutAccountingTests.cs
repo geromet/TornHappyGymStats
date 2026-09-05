@@ -96,7 +96,12 @@ public sealed class WarPayoutAccountingTests
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
             var en = WarPayoutCalculator.Calculate(source, policy, 10_000m);
 
-            Assert.Equal(nl, en);
+            Assert.Equal(nl.SourceSnapshotId, en.SourceSnapshotId);
+            Assert.Equal(nl.PolicyVersion, en.PolicyVersion);
+            Assert.Equal(nl.PoolAmount, en.PoolAmount);
+            Assert.Equal(nl.AllocatedAmount, en.AllocatedAmount);
+            Assert.Equal(nl.UnattributedResidual, en.UnattributedResidual);
+            Assert.True(nl.Lines.SequenceEqual(en.Lines));
             Assert.False(nl.Lines is WarPayoutLine[]);
             Assert.Throws<NotSupportedException>(() => ((IList<WarPayoutLine>)nl.Lines).Add(nl.Lines[0]));
         }
