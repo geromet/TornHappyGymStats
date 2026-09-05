@@ -21,6 +21,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+      - name: Install verifier dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
       - name: Restore
         run: dotnet restore
       - name: Build and run hermetic test gate
