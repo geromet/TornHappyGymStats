@@ -99,6 +99,7 @@ builder.Services.AddScoped<IFactionIdMapRepository, FactionIdMapRepository>();
 builder.Services.AddScoped<IFactionMembershipRepository, FactionMembershipRepository>();
 builder.Services.AddScoped<IWarStateRepository, WarStateRepository>();
 builder.Services.AddScoped<IWarHistoryRepository, WarHistoryRepository>();
+builder.Services.AddScoped<IRankedWarHistoryBackfillStateRepository, RankedWarHistoryBackfillStateRepository>();
 builder.Services.AddScoped<ICombatIntelRepository, CombatIntelRepository>();
 builder.Services.AddScoped<IWarObjectiveRepository, WarObjectiveRepository>();
 builder.Services.AddScoped<IWarAccountingRunRepository, WarAccountingRunRepository>();
@@ -165,6 +166,8 @@ using (var scope = app.Services.CreateScope())
         {
             await DevelopmentWarSeed.SeedAsync(db, app.Logger);
         }
+
+        await DevelopmentScoutSeed.SeedAsync(db, app.Logger);
     }
 }
 

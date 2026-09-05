@@ -8,6 +8,27 @@ public static class OpponentThreatTier
 }
 
 /// <summary>
+/// Public, read-only evidence about the global ranked-war history backfill. Operator-only retry
+/// cursors, errors and failure diagnostics deliberately do not cross this boundary.
+/// </summary>
+public sealed record WarScoutEvidenceMetadata(
+    string BackfillStatus,
+    long PagesProcessed,
+    long ReportsProcessed,
+    DateTimeOffset? UpdatedAtUtc,
+    DateTimeOffset? LastSuccessAtUtc,
+    bool IsComplete)
+{
+    public static WarScoutEvidenceMetadata NotStarted { get; } = new(
+        RankedWarHistoryBackfillStatus.NotStarted,
+        PagesProcessed: 0,
+        ReportsProcessed: 0,
+        UpdatedAtUtc: null,
+        LastSuccessAtUtc: null,
+        IsComplete: false);
+}
+
+/// <summary>
 /// Faction-level scouting summary aggregated from stored ranked-war history and report rows
 /// (<c>data/V2/handoff/05</c>, "Faction-level profile"). Every rate degrades to <c>0</c> / <c>null</c>
 /// when the underlying history rows don't carry the inputs (winner, final scores, end time), which a
@@ -15,14 +36,12 @@ public static class OpponentThreatTier
 /// </summary>
 /// <param name="WinRate">Wars won over <see cref="WarsWithKnownOutcome"/>.</param>
 /// <param name="WarsWithKnownOutcome">Wars whose history row has a recorded winner.</param>
-/// <param name="TypicalTargetScore">This faction's own median final score - what an opponent must
-/// outscore to beat them.</param>
+/// <param name="TypicalTargetScore">This faction's own median final score.</param>
 /// <param name="PointsPerHour">Median of this faction's own final score divided by war duration;
 /// <c>null</c> when no war has both a positive score and a positive duration.</param>
 /// <param name="TypicalRosterSize">Median distinct members fielded per war.</param>
 /// <param name="Top5ScoreShare">Median across wars of the share of a war's points produced by that
-/// war's five highest-scoring members - concentration; a high value makes lockdown viable (DEATH
-/// WATCH's top 5 were ~60% in war 48377).</param>
+/// war's five highest-scoring members.</param>
 /// <param name="Top10ScoreShare">As <see cref="Top5ScoreShare"/> for the top ten.</param>
 public sealed record FactionScoutProfile(
     long FactionId,
@@ -40,7 +59,10 @@ public sealed record FactionScoutProfile(
     int TypicalRosterSize,
     decimal Top5ScoreShare,
     decimal Top10ScoreShare,
-    IReadOnlyList<OpponentMemberProfile> Members);
+    IReadOnlyList<OpponentMemberProfile> Members)
+{
+    public WarScoutEvidenceMetadata Evidence { get; init; } = WarScoutEvidenceMetadata.NotStarted;
+}
 
 /// <summary>
 /// A per-member scouting profile aggregated from real ranked-war report outcomes.

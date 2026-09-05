@@ -3,7 +3,9 @@ using HappyGymStats.Data.Entities;
 
 namespace HappyGymStats.Core.War;
 
-public sealed class WarScoutService(IWarHistoryRepository repository)
+public sealed class WarScoutService(
+    IWarHistoryRepository repository,
+    IRankedWarHistoryBackfillStateRepository backfillStateRepository)
 {
     public async Task<FactionScoutProfile?> GetProfileAsync(long factionId, CancellationToken ct)
     {
@@ -20,8 +22,30 @@ public sealed class WarScoutService(IWarHistoryRepository repository)
 
         var members = await repository.GetReportMembersByFactionAsync(factionId, ct);
         var factionName = ResolveFactionName(factionId, wars, members);
+        var profile = OpponentProfileEngine.BuildProfile(factionId, factionName, wars, members);
+        var backfillState = await backfillStateRepository.GetLatestAsync(ct);
 
-        return OpponentProfileEngine.BuildProfile(factionId, factionName, wars, members);
+        return profile with { Evidence = ToEvidenceMetadata(backfillState) };
+    }
+
+    private static WarScoutEvidenceMetadata ToEvidenceMetadata(RankedWarHistoryBackfillStateEntity? state)
+    {
+        if (state is null)
+        {
+            return WarScoutEvidenceMetadata.NotStarted;
+        }
+
+        var status = string.IsNullOrWhiteSpace(state.Status)
+            ? RankedWarHistoryBackfillStatus.NotStarted
+            : state.Status;
+
+        return new WarScoutEvidenceMetadata(
+            BackfillStatus: status,
+            PagesProcessed: state.PagesProcessed,
+            ReportsProcessed: state.ReportsProcessed,
+            UpdatedAtUtc: state.UpdatedAtUtc,
+            LastSuccessAtUtc: state.LastSuccessAtUtc,
+            IsComplete: string.Equals(status, RankedWarHistoryBackfillStatus.Completed, StringComparison.Ordinal));
     }
 
     private static string ResolveFactionName(

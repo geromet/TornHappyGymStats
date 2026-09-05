@@ -14,6 +14,20 @@ public sealed class RankedWarHistoryBackfillStateRepository(HappyGymStatsDbConte
             .SingleOrDefaultAsync(e => e.ScopeKey == scopeKey, ct);
     }
 
+    public async Task<RankedWarHistoryBackfillStateEntity?> GetLatestAsync(CancellationToken ct)
+    {
+        // SQLite cannot order DateTimeOffset directly. Backfill scope count is intentionally tiny,
+        // so materialize the read-only rows and choose the newest state deterministically in memory.
+        var states = await db.RankedWarHistoryBackfillState
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        return states
+            .OrderByDescending(state => state.UpdatedAtUtc)
+            .ThenBy(state => state.ScopeKey, StringComparer.Ordinal)
+            .FirstOrDefault();
+    }
+
     public async Task UpsertAsync(RankedWarHistoryBackfillStateEntity state, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(state);

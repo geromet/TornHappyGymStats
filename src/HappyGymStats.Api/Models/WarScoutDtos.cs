@@ -27,7 +27,16 @@ public static class WarScoutDtoMapper
             TypicalRosterSize: profile.TypicalRosterSize,
             Top5ScoreShare: profile.Top5ScoreShare,
             Top10ScoreShare: profile.Top10ScoreShare,
-            Members: profile.Members.Select(ToMemberDto).ToArray());
+            Members: profile.Members.Select(ToMemberDto).ToArray())
+        {
+            Evidence = new WarScoutEvidenceDto(
+                BackfillStatus: profile.Evidence.BackfillStatus,
+                PagesProcessed: profile.Evidence.PagesProcessed,
+                ReportsProcessed: profile.Evidence.ReportsProcessed,
+                UpdatedAtUtc: profile.Evidence.UpdatedAtUtc,
+                LastSuccessAtUtc: profile.Evidence.LastSuccessAtUtc,
+                IsComplete: profile.Evidence.IsComplete)
+        };
 
     private static OpponentMemberProfileDto ToMemberDto(OpponentMemberProfile member)
         => new(
