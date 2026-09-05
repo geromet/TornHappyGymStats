@@ -59,9 +59,7 @@ public sealed class SurfacesService(HttpClient http)
             throw new ApiFailure(
                 endpoint,
                 ApiFailureCategory.ImportFailure,
-                string.IsNullOrWhiteSpace(status.ErrorMessage)
-                    ? "Import failed due to a backend validation or processing error."
-                    : $"Import failed: {status.ErrorMessage}",
+                "Import failed due to a backend validation or processing error.",
                 response.StatusCode);
         }
 
