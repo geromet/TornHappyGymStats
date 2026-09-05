@@ -1,29 +1,30 @@
-using System.Security.Cryptography;
-using System.Text;
-using HappyGymStats.Encryption;
 using Microsoft.JSInterop;
 
 namespace HappyGymStats.Blazor.Client.Crypto;
 
-public sealed class CryptoService(IJSRuntime js)
+public sealed class CryptoService(IJSRuntime js) : IAsyncDisposable
 {
     private const string StorageKey = "happygymstats.wrapped_key";
     private const string PublicKeyStorageKey = "happygymstats.public_key";
+    private IJSObjectReference? _module;
 
     public async Task<bool> HasStoredKeyAsync()
         => await js.InvokeAsync<string?>("localStorage.getItem", StorageKey) is not null;
 
     /// <summary>
-    /// Generates a new P-256 ECDH keypair. Returns the SPKI-encoded public key (for sending to
-    /// the server) and the PBKDF2+AES-GCM-wrapped private key blob (for localStorage).
+    /// Generates a browser-native P-256 ECDH keypair and wraps the PKCS#8 private
+    /// key with PBKDF2-SHA256 + AES-256-GCM. The returned wire formats are the
+    /// same SPKI and KeyWrapping formats consumed by the server-side encryption
+    /// code, but the operation runs through Web Crypto because .NET ECDH is not
+    /// supported under browser/WASM.
     /// </summary>
-    public static (byte[] PublicKeySpki, byte[] WrappedPrivateKey) GenerateKeyPair(string password)
+    public async Task<(byte[] PublicKeySpki, byte[] WrappedPrivateKey)> GenerateKeyPairAsync(string password)
     {
-        using var ecdh = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
-        var publicKey = ecdh.ExportSubjectPublicKeyInfo();
-        var privateKey = ecdh.ExportPkcs8PrivateKey();
-        var wrapped = KeyWrapping.WrapKey(privateKey, password.AsSpan());
-        return (publicKey, wrapped);
+        var module = await GetModuleAsync();
+        var result = await module.InvokeAsync<BrowserKeyPair>("generateAndWrapKey", password);
+        return (
+            Convert.FromBase64String(result.PublicKeySpkiBase64),
+            Convert.FromBase64String(result.WrappedPrivateKeyBase64));
     }
 
     public async Task StoreWrappedKeyAsync(byte[] wrappedKey)
@@ -42,28 +43,40 @@ public sealed class CryptoService(IJSRuntime js)
     }
 
     /// <summary>
-    /// Loads and unwraps the stored private key. Returns null if no key is stored or the
-    /// password is wrong.
+    /// Unwraps the locally stored private key with Web Crypto and returns its
+    /// corresponding SPKI public key. A wrong password or corrupt blob returns
+    /// null without exposing the wrapped private key outside the browser.
     /// </summary>
-    public async Task<ECDiffieHellman?> LoadKeyAsync(string password)
+    public async Task<byte[]?> LoadPublicKeyAsync(string password)
     {
-        var base64 = await js.InvokeAsync<string?>("localStorage.getItem", StorageKey);
-        if (base64 is null) return null;
+        var wrappedBase64 = await js.InvokeAsync<string?>("localStorage.getItem", StorageKey);
+        if (wrappedBase64 is null)
+            return null;
+
         try
         {
-            var wrapped = Convert.FromBase64String(base64);
-            return KeyWrapping.UnwrapKey(wrapped, password.AsSpan());
+            var module = await GetModuleAsync();
+            var publicKeyBase64 = await module.InvokeAsync<string>("unwrapPublicKey", password, wrappedBase64);
+            return Convert.FromBase64String(publicKeyBase64);
         }
-        catch (CryptographicException)
+        catch (JSException)
+        {
+            return null;
+        }
+        catch (FormatException)
         {
             return null;
         }
     }
 
-    /// <summary>
-    /// Decrypts an ECIES ciphertext blob returned by the API, returning the plaintext as a
-    /// UTF-8 string (e.g. "123456" for a Torn player ID).
-    /// </summary>
-    public static string DecryptToString(ECDiffieHellman privateKey, byte[] encryptedBlob)
-        => Encoding.UTF8.GetString(Ecies.Decrypt(privateKey, encryptedBlob));
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+            await _module.DisposeAsync();
+    }
+
+    private async Task<IJSObjectReference> GetModuleAsync()
+        => _module ??= await js.InvokeAsync<IJSObjectReference>("import", "./crypto.js");
+
+    private sealed record BrowserKeyPair(string PublicKeySpkiBase64, string WrappedPrivateKeyBase64);
 }
