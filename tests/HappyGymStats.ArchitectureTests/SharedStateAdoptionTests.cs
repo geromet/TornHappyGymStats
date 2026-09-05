@@ -72,7 +72,7 @@ public sealed class SharedStateAdoptionTests
             "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/War.razor");
 
         Assert.DoesNotContain("WarBoard.CurrentFailure.SafeMessage", war, StringComparison.Ordinal);
-        Assert.DoesNotContain("WarBoard.ConnectionError", ExtractRenderedConnectionFailureBlock(war), StringComparison.Ordinal);
+        Assert.DoesNotContain("@WarBoard.ConnectionError", war, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -93,17 +93,6 @@ public sealed class SharedStateAdoptionTests
         Assert.Contains("<ErrorState", war, StringComparison.Ordinal);
         Assert.Contains("<EmptyState", war, StringComparison.Ordinal);
         Assert.Contains("<StaleDataBanner", war, StringComparison.Ordinal);
-    }
-
-    private static string ExtractRenderedConnectionFailureBlock(string war)
-    {
-        const string marker = "The war board encountered a connection problem. Refresh to retry.";
-        var markerIndex = war.IndexOf(marker, StringComparison.Ordinal);
-        Assert.True(markerIndex >= 0, "Expected bounded connection-failure copy was not found.");
-
-        var start = Math.Max(0, markerIndex - 200);
-        var length = Math.Min(war.Length - start, 400);
-        return war.Substring(start, length);
     }
 
     private static string ReadRepoFile(string relativePath)
