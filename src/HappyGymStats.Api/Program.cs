@@ -178,5 +178,3 @@ app.MapControllers();
 app.MapHub<WarHub>("/api/hub/war");
 
 app.Run();
-
-public partial class Program;

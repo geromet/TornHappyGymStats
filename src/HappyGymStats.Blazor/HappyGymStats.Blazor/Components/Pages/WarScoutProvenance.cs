@@ -6,6 +6,10 @@ public enum WarScoutMetric
 {
     TotalWarsObserved,
     ObservedDateRange,
+    SampleSufficiency,
+    BackfillStatus,
+    BackfillProgress,
+    BackfillUpdated,
     ActiveMemberCount,
     IdleProneMemberCount,
     TypicalRosterSize,
@@ -36,12 +40,16 @@ public static class WarScoutProvenance
     {
         WarScoutMetric.TotalWarsObserved => FigureKind.Measured,
         WarScoutMetric.ObservedDateRange => FigureKind.Measured,
+        WarScoutMetric.BackfillStatus => FigureKind.Measured,
+        WarScoutMetric.BackfillProgress => FigureKind.Measured,
+        WarScoutMetric.BackfillUpdated => FigureKind.Measured,
         WarScoutMetric.MembersSeen => FigureKind.Measured,
         WarScoutMetric.OutcomeSample => FigureKind.Measured,
         WarScoutMetric.WarsParticipated => FigureKind.Measured,
         WarScoutMetric.ScoreRange => FigureKind.Measured,
         WarScoutMetric.LastSeen => FigureKind.Measured,
 
+        WarScoutMetric.SampleSufficiency => FigureKind.Inferred,
         WarScoutMetric.ActiveMemberCount => FigureKind.Inferred,
         WarScoutMetric.IdleProneMemberCount => FigureKind.Inferred,
         WarScoutMetric.TypicalRosterSize => FigureKind.Inferred,
