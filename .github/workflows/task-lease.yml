@@ -12,16 +12,15 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: read
-  issues: read
-  pull-requests: read
-  actions: write
-
 jobs:
   fanout:
     if: github.event_name == 'issues' || (github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'reopened' || github.event.action == 'closed'))
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: write
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -47,6 +46,10 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.action != 'closed')
     name: task lease
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
     env:
       GH_TOKEN: ${{ github.token }}
       EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -74,8 +77,10 @@ jobs:
       - name: Fetch current target/base commit
         run: git fetch --quiet origin "${PR_BASE_SHA}"
 
-      - name: Regression-test lease validator
-        run: bash .github/agent/task-lease-regression.sh
+      - name: Regression-test lease validator and trust boundary
+        run: |
+          bash .github/agent/task-lease-regression.sh
+          bash .github/agent/task-lease-trust-regression.sh
 
       - name: Validate declared agent task lease against live GitHub state
         shell: bash
