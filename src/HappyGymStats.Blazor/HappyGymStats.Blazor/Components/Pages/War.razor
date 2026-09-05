@@ -22,21 +22,21 @@
 
     @if (WarBoard.IsLoading && WarBoard.CurrentState is null && WarBoard.CurrentFailure is null)
     {
-        <MudAlert Severity="Severity.Info" Dense="true">Loading current war state...</MudAlert>
+        <LoadingState Message="Loading current war state…" Class="war-board-banner" />
     }
 
     @if (WarBoard.CurrentFailure is not null)
     {
-        <MudAlert Severity="Severity.Error" Dense="true" Variant="Variant.Filled">
-            <strong>War board unavailable.</strong> @WarBoard.CurrentFailure.SafeMessage
-        </MudAlert>
+        <ErrorState Message="War board unavailable. Refresh to retry."
+                    OnRetry="RefreshAsync"
+                    Dense="true"
+                    Class="war-board-banner" />
     }
 
     @if (WarBoard.HasStaleData)
     {
-        <MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Filled" Class="war-board-banner">
-            <strong>Stale data.</strong> Review heartbeat, warnings, and hub connection status before acting on roster gaps.
-        </MudAlert>
+        <StaleDataBanner Message="Review heartbeat, warnings, and hub connection status before acting on roster gaps."
+                         Class="war-board-banner" />
     }
 
     @if (WarBoard.HasNoActiveWar)
@@ -44,10 +44,8 @@
         @* Not an error, and must not look like one. Every panel below reads zero
            when no war is running, which is indistinguishable from a war where
            nobody has hit anything — so the grid is replaced, not annotated. *@
-        <MudAlert Severity="Severity.Info" Dense="true" Class="war-board-banner">
-            <strong>No war in progress.</strong> The board fills in automatically
-            when the next ranked war starts. Nothing is wrong.
-        </MudAlert>
+        <EmptyState Message="No war in progress. The board fills in automatically when the next ranked war starts. Nothing is wrong."
+                    Class="war-board-banner" />
     }
     else if (WarBoard.CurrentState is { } state)
     {
@@ -284,7 +282,7 @@
                     <MudCardContent>
                         @if (state.Holes.Count == 0)
                         {
-                            <MudAlert Severity="Severity.Success" Dense="true">No current hole alerts.</MudAlert>
+                            <EmptyState Message="No current hole alerts." Class="mb-0" />
                         }
                         else
                         {
@@ -321,9 +319,10 @@
 
                 @if (state.Errors.Count > 0 || !string.IsNullOrWhiteSpace(WarBoard.ConnectionError))
                 {
-                    <MudAlert Severity="Severity.Warning" Class="mt-3" Dense="true">
-                        The war board encountered a connection problem. Refresh to retry.
-                    </MudAlert>
+                    <ErrorState Message="The war board encountered a connection problem. Refresh to retry."
+                                OnRetry="RefreshAsync"
+                                Dense="true"
+                                Class="mt-3" />
                 }
             </MudItem>
         </MudGrid>

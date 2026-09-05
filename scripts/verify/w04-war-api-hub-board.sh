@@ -17,7 +17,7 @@ readonly WAR_DTOS="${ROOT_DIR}/src/HappyGymStats.Contracts/Models/WarDtos.cs"
 readonly BOARD_SERVICE="${ROOT_DIR}/src/HappyGymStats.Blazor/HappyGymStats.Blazor/Services/WarBoardService.cs"
 readonly BOARD_PAGE="${ROOT_DIR}/src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/War.razor"
 readonly LAYOUT_FILE="${ROOT_DIR}/src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Layout/MainLayout.razor"
-readonly NGINX_CONF="${ROOT_DIR}/infra/nginx-torn.conf"
+readonly NGINX_CONF="${ROOT_DIR}/infra/torn.conf"
 readonly ENV_EXAMPLE="${ROOT_DIR}/infra/.env.example"
 readonly FINAL_GUARDRAIL_TESTS="${ROOT_DIR}/tests/HappyGymStats.Tests/WarFinalAssemblyGuardrailTests.cs"
 

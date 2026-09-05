@@ -63,18 +63,17 @@
 
 @if (_loading)
 {
-    <MudCard Class="mb-4">
-        <MudCardContent Class="d-flex justify-center align-center pa-10">
-            <MudProgressCircular Indeterminate="true" Color="Color.Primary" Class="mr-4" />
-            <MudText Color="Color.Secondary">Loading surfaces data…</MudText>
-        </MudCardContent>
-    </MudCard>
+    <LoadingState Message="Loading surfaces data…" />
 }
 else if (_loadError != null)
 {
-    <MudAlert Severity="Severity.Warning" Class="mb-4">@_loadError</MudAlert>
+    <ErrorState Message="@_loadError" OnRetry="LoadSurfacesAsync" />
 }
-else if (_surfaces != null)
+else if (_surfaces is null)
+{
+    <EmptyState Message="No surfaces data found. Run an import first." />
+}
+else
 {
     <AuthorizeView Roles="@Roles.Admin">
         <Authorized>
@@ -217,8 +216,11 @@ else if (!_loading && _loadError == null && _surfaces != null && !_gymPointCloud
         try
         {
             _surfaces = await SurfacesApi.GetLatestAsync();
-            if (_surfaces == null)
-                _loadError = "No surfaces data found. Run an import first.";
+        }
+        catch (ApiFailure failure) when (failure.Category == ApiFailureCategory.NotFound)
+        {
+            // A missing current dataset is a successful empty state, not a failed load.
+            _surfaces = null;
         }
         catch (ApiFailure failure)
         {
@@ -377,7 +379,6 @@ else if (!_loading && _loadError == null && _surfaces != null && !_gymPointCloud
     {
         ApiFailureCategory.ApiUnavailable => "Could not load surfaces data. The service is temporarily unavailable — try again shortly.",
         ApiFailureCategory.BadGateway => "Could not load surfaces data. The service is temporarily unavailable — try again shortly.",
-        ApiFailureCategory.NotFound => "No surfaces data found. Run an import first.",
         ApiFailureCategory.Deserialization => "Could not load surfaces data: API response format was invalid.",
         _ => $"Could not load surfaces data: {failure.SafeMessage}"
     };
