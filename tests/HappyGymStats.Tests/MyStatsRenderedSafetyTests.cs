@@ -12,46 +12,29 @@ namespace HappyGymStats.Tests;
 
 public sealed class MyStatsRenderedSafetyTests : BunitContext
 {
-    private const string BackendImportErrorDetail = "database-provider-detail-must-not-render";
-
     [Fact]
-    public void Failed_import_renders_bounded_member_safe_copy()
+    public void No_data_state_routes_connection_setup_without_collecting_raw_key()
     {
-        ConfigureServices(new StubMessageHandler(ResponseMode.FailedImport));
+        ConfigureServices(new TrainingMessageHandler(ResponseMode.Empty));
+        JSInterop.Mode = JSRuntimeMode.Loose;
 
         var cut = Render<MyStats>();
 
-        cut.Find("input[type=password]").Change("safe-key");
-        cut.Find("button").Click();
-
         cut.WaitForAssertion(() =>
         {
-            Assert.Contains("Import failed. Please try again.", cut.Markup, StringComparison.Ordinal);
-            Assert.DoesNotContain(BackendImportErrorDetail, cut.Markup, StringComparison.Ordinal);
-        });
-    }
-
-    [Fact]
-    public void Forbidden_import_renders_account_action_without_owner_diagnostics()
-    {
-        ConfigureServices(new StubMessageHandler(ResponseMode.ForbiddenImport));
-
-        var cut = Render<MyStats>();
-
-        cut.Find("input[type=password]").Change("safe-key");
-        cut.Find("button").Click();
-
-        cut.WaitForAssertion(() =>
-        {
-            Assert.Contains("Import rejected. Sign in with the account you want to import.", cut.Markup, StringComparison.Ordinal);
-            Assert.DoesNotContain("requested owner", cut.Markup, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("No personal gym stats found yet.", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Account &amp; Connections", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("/player-account", cut.Markup, StringComparison.Ordinal);
+            Assert.DoesNotContain("Torn API Key", cut.Markup, StringComparison.Ordinal);
+            Assert.Empty(cut.FindAll("input[type=password]"));
         });
     }
 
     [Fact]
     public void Malformed_load_response_renders_bounded_member_safe_copy()
     {
-        ConfigureServices(new StubMessageHandler(ResponseMode.MalformedLoad));
+        ConfigureServices(new TrainingMessageHandler(ResponseMode.Malformed));
+        JSInterop.Mode = JSRuntimeMode.Loose;
 
         var cut = Render<MyStats>();
 
@@ -63,12 +46,44 @@ public sealed class MyStatsRenderedSafetyTests : BunitContext
     }
 
     [Fact]
+    public void Training_summary_renders_sample_date_filter_and_practical_2d_views_without_advice_claims()
+    {
+        ConfigureServices(new TrainingMessageHandler(ResponseMode.Dataset));
+        JSInterop.Mode = JSRuntimeMode.Loose;
+
+        var cut = Render<MyStats>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("My Training", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Gain / energy over time", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Gain / energy vs stat before", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Gain / energy vs happiness", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("2026-08-01 → 2026-09-01", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("3 observations in this view", cut.Markup, StringComparison.Ordinal);
+            Assert.DoesNotContain("best", cut.Markup, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("optimal", cut.Markup, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("scatter3d", cut.Markup, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Torn API Key", cut.Markup, StringComparison.Ordinal);
+        });
+
+        cut.Find("select[aria-label='Stat filter']").Change("strength");
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("2 observations in this view", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("2026-08-01 → 2026-08-15", cut.Markup, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public void Source_contract_has_no_member_facing_identity_or_failure_internals()
     {
         var content = ReadRepoFile(
             "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/MyStats.razor");
 
         Assert.Contains("account you're signed in with", content, StringComparison.Ordinal);
+        Assert.Contains("Account &amp; Connections", content, StringComparison.Ordinal);
         Assert.DoesNotContain("claim-bound", content, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("account claims", content, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("identity map", content, StringComparison.OrdinalIgnoreCase);
@@ -76,6 +91,8 @@ public sealed class MyStatsRenderedSafetyTests : BunitContext
         Assert.DoesNotContain("request validation failed", content, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("API response format", content, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("failure.SafeMessage", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("Torn API Key", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("_apiKey", content, StringComparison.Ordinal);
     }
 
     private void ConfigureServices(HttpMessageHandler handler)
@@ -90,41 +107,31 @@ public sealed class MyStatsRenderedSafetyTests : BunitContext
         Services.AddSingleton(new SurfacesService(http));
     }
 
-    private sealed class StubMessageHandler(ResponseMode mode) : HttpMessageHandler
+    private sealed class TrainingMessageHandler(ResponseMode mode) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             var path = request.RequestUri?.AbsolutePath;
-
-            if (request.Method == HttpMethod.Get && path == "/api/v1/torn/surfaces/me")
+            if (request.Method != HttpMethod.Get || path != "/api/v1/torn/surfaces/me")
             {
-                if (mode == ResponseMode.MalformedLoad)
-                {
-                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-                    {
-                        Content = new StringContent("{ not-valid-json", Encoding.UTF8, "application/json")
-                    });
-                }
-
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+                throw new InvalidOperationException($"Unexpected My Training request: {request.Method} {path}");
             }
 
-            if (request.Method == HttpMethod.Post && path == "/api/v1/torn/import-jobs/me")
+            return mode switch
             {
-                if (mode == ResponseMode.ForbiddenImport)
+                ResponseMode.Empty => Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)),
+                ResponseMode.Malformed => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
-                }
-
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                    Content = new StringContent("{ not-valid-json", Encoding.UTF8, "application/json")
+                }),
+                ResponseMode.Dataset => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = new StringContent(FailedImportStatusJson, Encoding.UTF8, "application/json")
-                });
-            }
-
-            throw new InvalidOperationException($"Unexpected My Stats request: {request.Method} {path}");
+                    Content = new StringContent(MyStatsDatasetJson, Encoding.UTF8, "application/json")
+                }),
+                _ => throw new InvalidOperationException($"Unexpected response mode: {mode}")
+            };
         }
     }
 
@@ -146,21 +153,31 @@ public sealed class MyStatsRenderedSafetyTests : BunitContext
 
     private enum ResponseMode
     {
-        FailedImport,
-        ForbiddenImport,
-        MalformedLoad
+        Empty,
+        Malformed,
+        Dataset
     }
 
-    private const string FailedImportStatusJson = """
+    private const string MyStatsDatasetJson = """
         {
-          "id": "job-rendered-proof",
-          "outcome": "failed",
-          "startedAtUtc": "2026-09-05T00:00:00Z",
-          "completedAtUtc": "2026-09-05T00:00:01Z",
-          "pagesFetched": 1,
-          "logsFetched": 10,
-          "logsAppended": 0,
-          "errorMessage": "database-provider-detail-must-not-render"
+          "dataset": "my-stats",
+          "version": "sample-v1",
+          "series": {
+            "gymCloud": {
+              "x": [1000000, 1500000, 2000000],
+              "y": [1000, 1500, 2000],
+              "z": [1.1, 1.3, 1.6],
+              "text": [
+                "strength 2026-08-01T12:00:00.0000000+00:00",
+                "strength 2026-08-15T12:00:00.0000000+00:00",
+                "speed 2026-09-01T12:00:00.0000000+00:00"
+              ]
+            }
+          },
+          "meta": {
+            "gymPointCount": 3,
+            "recordCount": 3
+          }
         }
         """;
 }

@@ -57,6 +57,7 @@ public sealed class SurfacesController : ApiControllerBase
                     x = surfaces.GymX,
                     y = surfaces.GymY,
                     z = surfaces.GymZ,
+                    text = surfaces.GymText,
                 },
                 eventsCloud = new
                 {

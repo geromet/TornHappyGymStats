@@ -1,6 +1,5 @@
 using System.Net;
 using System.Reflection;
-using System.Text;
 using Bunit;
 using HappyGymStats.Blazor.Components.Pages;
 using HappyGymStats.Blazor.Components.Shared;
@@ -28,34 +27,6 @@ public sealed class SharedStateRenderedTests : BunitContext
         Assert.Equal("true", status.GetAttribute("aria-atomic"));
         Assert.Contains("Loading scouting report...", status.TextContent, StringComparison.Ordinal);
         Assert.NotNull(cut.Find("[aria-hidden='true']"));
-    }
-
-    [Fact]
-    public void Home_renders_successful_empty_state_when_no_surface_dataset_exists()
-    {
-        ConfigureHome(new HomeMessageHandler(HttpStatusCode.NotFound));
-
-        var cut = Render<Home>();
-
-        cut.WaitForAssertion(() =>
-        {
-            Assert.Contains("No training data found yet. Run an import first.", cut.Markup, StringComparison.Ordinal);
-            Assert.DoesNotContain("Could not load training data", cut.Markup, StringComparison.Ordinal);
-        });
-    }
-
-    [Fact]
-    public void Home_renders_failure_state_when_surface_api_is_unavailable()
-    {
-        ConfigureHome(new HomeMessageHandler(HttpStatusCode.ServiceUnavailable));
-
-        var cut = Render<Home>();
-
-        cut.WaitForAssertion(() =>
-        {
-            Assert.Contains("Could not load training data. The service is temporarily unavailable", cut.Markup, StringComparison.Ordinal);
-            Assert.DoesNotContain("No training data found", cut.Markup, StringComparison.Ordinal);
-        });
     }
 
     [Fact]
@@ -117,17 +88,6 @@ public sealed class SharedStateRenderedTests : BunitContext
         Assert.Contains("Stale data", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Review heartbeat, warnings, and hub connection status before acting on roster gaps.", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("No war in progress", cut.Markup, StringComparison.Ordinal);
-    }
-
-    private void ConfigureHome(HttpMessageHandler handler)
-    {
-        Services.AddLogging();
-        Services.AddMudServices();
-        JSInterop.Mode = JSRuntimeMode.Loose;
-
-        var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
-        Services.AddSingleton(new SurfacesService(http));
-        Services.AddSingleton(new UiSettingsService(http, NullLogger<UiSettingsService>.Instance));
     }
 
     private void ConfigureWar(WarBoardService board)
@@ -195,27 +155,5 @@ public sealed class SharedStateRenderedTests : BunitContext
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             throw new InvalidOperationException($"War rendered-state proof unexpectedly made an HTTP request: {request.Method} {request.RequestUri}");
-    }
-
-    private sealed class HomeMessageHandler(HttpStatusCode surfacesStatus) : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            var path = request.RequestUri?.AbsolutePath;
-            if (request.Method == HttpMethod.Get && path == "/api/v1/ui-settings")
-            {
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new StringContent("{\"gymPointCloudEnabled\":false}", Encoding.UTF8, "application/json")
-                });
-            }
-
-            if (request.Method == HttpMethod.Get && path == "/api/v1/torn/surfaces/latest")
-            {
-                return Task.FromResult(new HttpResponseMessage(surfacesStatus));
-            }
-
-            throw new InvalidOperationException($"Unexpected Home rendered-state request: {request.Method} {path}");
-        }
     }
 }

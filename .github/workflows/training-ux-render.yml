@@ -1,0 +1,73 @@
+name: Training UX render proof
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/App.razor'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/Home.razor'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/MyStats.razor'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/GymExplorer.razor'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/wwwroot/plotly-interop.js'
+      - 'src/HappyGymStats.Api/Controllers/SurfacesController.cs'
+      - 'src/HappyGymStats.Contracts/Models/SurfacesDtos.cs'
+      - 'tests/HappyGymStats.Tests/**'
+      - 'tests/HappyGymStats.ArchitectureTests/**'
+      - 'scripts/screenshot-board.sh'
+      - '.github/workflows/training-ux-render.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: training-ux-render-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  render:
+    name: 390 / 768 / 1440 browser proof
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install .NET (version from global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Prove or set up screenshot harness
+        run: |
+          if ! bash scripts/screenshot-board.sh --check; then
+            bash scripts/screenshot-board.sh --setup
+          fi
+          bash scripts/screenshot-board.sh --check
+
+      - name: Render Home at all supported widths
+        run: bash scripts/screenshot-board.sh --route / --out docs/evidence/training-ux/home
+
+      - name: Render My Training first-time state at all supported widths
+        run: bash scripts/screenshot-board.sh --route /my-stats --out docs/evidence/training-ux/my-stats
+
+      - name: Render Gym Explorer at all supported widths
+        run: bash scripts/screenshot-board.sh --route /gym-explorer --out docs/evidence/training-ux/gym-explorer
+
+      - name: Verify complete light/dark render matrix
+        run: |
+          set -euo pipefail
+          mapfile -t shots < <(find docs/evidence/training-ux -type f -name '*.png' -print | sort)
+          printf '%s\n' "${shots[@]}"
+          test "${#shots[@]}" -eq 18
+          for shot in "${shots[@]}"; do
+            test -s "$shot"
+          done
+
+      - name: Upload render proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: training-ux-render-proof
+          path: docs/evidence/training-ux/**/*.png
+          if-no-files-found: error
+          retention-days: 14

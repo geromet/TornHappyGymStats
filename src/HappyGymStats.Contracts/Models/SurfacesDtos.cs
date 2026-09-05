@@ -18,7 +18,8 @@ public sealed record SurfacesSeriesDto(
 public sealed record GymCloudSeriesDto(
     double[] X,
     double[] Y,
-    double[] Z);
+    double[] Z,
+    string[]? Text = null);
 
 public sealed record EventsCloudSeriesDto(
     double[] X,

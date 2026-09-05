@@ -1,80 +1,53 @@
 using System;
 using System.IO;
-using System.Net;
-using System.Text;
-using Bunit;
-using HappyGymStats.Blazor.Components.Pages;
-using HappyGymStats.Blazor.Services;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using MudBlazor.Services;
 
 namespace HappyGymStats.Tests;
 
-public sealed class HomeMemberSafetyTests : BunitContext
+public sealed class HomeMemberSafetyTests
 {
     [Fact]
-    public void Home_does_not_render_implementation_or_raw_error_detail_to_members()
+    public void Home_is_product_navigation_without_raw_credentials_or_point_cloud()
     {
-        var content = ReadRepoFile(
+        var home = ReadRepoFile(
             "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/Home.razor");
 
-        Assert.Contains("Could not load training data. Please try again.", content, StringComparison.Ordinal);
-        Assert.Contains("Import failed. Please try again.", content, StringComparison.Ordinal);
-        Assert.DoesNotContain("status.ErrorMessage", content, StringComparison.Ordinal);
-        Assert.DoesNotContain("backend rejected", content, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("API response format", content, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("failure.SafeMessage", content, StringComparison.Ordinal);
+        Assert.Contains("Train smarter. Scout faster.", home, StringComparison.Ordinal);
+        Assert.Contains("Live War", home, StringComparison.Ordinal);
+        Assert.Contains("Href=\"/my-stats\"", home, StringComparison.Ordinal);
+        Assert.Contains("Href=\"/gym-explorer\"", home, StringComparison.Ordinal);
+        Assert.Contains("Account &amp; connections", home, StringComparison.Ordinal);
+        Assert.DoesNotContain("War board", home, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Torn API Key", home, StringComparison.Ordinal);
+        Assert.DoesNotContain("_apiKey", home, StringComparison.Ordinal);
+        Assert.DoesNotContain("StartImportAsync", home, StringComparison.Ordinal);
+        Assert.DoesNotContain("gym-cloud-chart", home, StringComparison.Ordinal);
+        Assert.DoesNotContain("plotlyInterop", home, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Malformed_load_response_renders_bounded_member_safe_copy()
+    public void Gym_explorer_owns_public_research_surface_without_collecting_credentials()
     {
-        Services.AddLogging();
-        Services.AddMudServices();
-        JSInterop.Mode = JSRuntimeMode.Loose;
+        var explorer = ReadRepoFile(
+            "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/GymExplorer.razor");
 
-        var http = new HttpClient(new MalformedLoadHandler())
-        {
-            BaseAddress = new Uri("http://localhost")
-        };
-        Services.AddSingleton(new SurfacesService(http));
-        Services.AddSingleton(sp => new UiSettingsService(
-            http,
-            sp.GetRequiredService<ILogger<UiSettingsService>>()));
-
-        var cut = Render<Home>();
-
-        cut.WaitForAssertion(() =>
-        {
-            Assert.Contains("Could not load training data. Please try again.", cut.Markup, StringComparison.Ordinal);
-            Assert.DoesNotContain("API response format", cut.Markup, StringComparison.OrdinalIgnoreCase);
-        });
+        Assert.Contains("@page \"/gym-explorer\"", explorer, StringComparison.Ordinal);
+        Assert.Contains("gym-cloud-chart", explorer, StringComparison.Ordinal);
+        Assert.Contains("plotlyInterop.render", explorer, StringComparison.Ordinal);
+        Assert.Contains("does not claim an optimal training window", explorer, StringComparison.Ordinal);
+        Assert.DoesNotContain("Torn API Key", explorer, StringComparison.Ordinal);
     }
 
-    private sealed class MalformedLoadHandler : HttpMessageHandler
+    [Fact]
+    public void Plotly_is_loaded_on_demand_instead_of_from_app_shell()
     {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
-        {
-            var path = request.RequestUri?.AbsolutePath;
+        var app = ReadRepoFile(
+            "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/App.razor");
+        var interop = ReadRepoFile(
+            "src/HappyGymStats.Blazor/HappyGymStats.Blazor/wwwroot/plotly-interop.js");
 
-            if (request.Method == HttpMethod.Get && path == "/api/v1/ui-settings")
-            {
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
-            }
-
-            if (request.Method == HttpMethod.Get && path == "/api/v1/torn/surfaces/latest")
-            {
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new StringContent("{ not-valid-json", Encoding.UTF8, "application/json")
-                });
-            }
-
-            throw new InvalidOperationException($"Unexpected Home request: {request.Method} {path}");
-        }
+        Assert.DoesNotContain("cdn.plot.ly", app, StringComparison.Ordinal);
+        Assert.Contains("ensureLoaded", interop, StringComparison.Ordinal);
+        Assert.Contains("cdn.plot.ly/plotly-2.27.1.min.js", interop, StringComparison.Ordinal);
     }
 
     private static string ReadRepoFile(string relativePath)

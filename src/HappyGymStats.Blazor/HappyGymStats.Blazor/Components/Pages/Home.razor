@@ -1,393 +1,142 @@
 @page "/"
 @rendermode InteractiveServer
-@inject SurfacesService SurfacesApi
-@inject UiSettingsService UiSettings
-@inject IJSRuntime JS
-@inject ILogger<Home> Logger
-@implements IAsyncDisposable
 
 <PageTitle>Happy Gym Stats</PageTitle>
 
-<MudCard Class="mb-4">
-    <MudCardHeader>
-        <CardHeaderContent>
-            <MudText Typo="Typo.h5">Happy Gym Stats</MudText>
-        </CardHeaderContent>
-    </MudCardHeader>
-    <MudCardContent>
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
-            <MudTextField @bind-Value="_apiKey"
-                          Label="Torn API Key"
-                          InputType="InputType.Password"
-                          Variant="Variant.Outlined"
-                          Adornment="Adornment.Start"
-                          AdornmentIcon="@Icons.Material.Filled.Key"
-                          Style="flex: 1;"
-                          Disabled="@_importing" />
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       StartIcon="@Icons.Material.Filled.Refresh"
-                       OnClick="RunImportAsync"
-                       Disabled="@(_importing || string.IsNullOrWhiteSpace(_apiKey))">
-                Import + Refresh
-            </MudButton>
-        </MudStack>
+<MudPaper Class="pa-6 pa-md-10 mb-6" Outlined="true">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.overline" Color="Color.Primary">Torn training + war intelligence</MudText>
+        <MudText Typo="Typo.h3">Train smarter. Scout faster. Make war decisions with better context.</MudText>
+        <MudText Typo="Typo.h6" Color="Color.Secondary">
+            Happy Gym Stats keeps training history, scouting context, and war tools in one focused workspace without making raw data plumbing the product.
+        </MudText>
 
-        @if (!string.IsNullOrEmpty(_statusMessage))
-        {
-            <MudAlert Severity="@_statusSeverity" Dense="true" Class="mb-3">@_statusMessage</MudAlert>
-        }
-
-        <MudSimpleTable Dense="true" Hover="true" Bordered="true" Style="font-size: 0.82rem;">
-            <thead>
-                <tr>
-                    <th>Data Storage</th>
-                    <th>Data Sharing</th>
-                    <th>Purpose of Use</th>
-                    <th>Key Storage &amp; Sharing</th>
-                    <th>Key Access Level</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>Persistent-forever</td>
-                    <td>General public</td>
-                    <td>Non-malicious statistical analysis</td>
-                    <td>Not stored / Not shared. HTTPS only, kept in memory</td>
-                    <td>Full Access</td>
-                </tr>
-            </tbody>
-        </MudSimpleTable>
-    </MudCardContent>
-</MudCard>
-
-@if (_loading)
-{
-    <LoadingState Message="Loading training data…" />
-}
-else if (_loadError != null)
-{
-    <ErrorState Message="@_loadError" OnRetry="LoadSurfacesAsync" />
-}
-else if (_surfaces is null)
-{
-    <EmptyState Message="No training data found yet. Run an import first." />
-}
-else
-{
-    <AuthorizeView Roles="@Roles.Admin">
-        <Authorized>
-            @* Admin-only strip. Sits directly above the thing it controls so the
-               effect of the switch is visible without navigating anywhere. *@
-            <MudPaper Class="mb-2 pa-2" Outlined="true">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                        <MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Size="Size.Small" Color="Color.Secondary" />
-                        <MudText Typo="Typo.body2">
-                            Gym point cloud is
-                            <strong>@(_gymPointCloudEnabled ? "enabled" : "disabled")</strong>
-                            for everyone
-                        </MudText>
-                    </MudStack>
-                    <MudButton Variant="Variant.Outlined"
-                               Size="Size.Small"
-                               Color="@(_gymPointCloudEnabled ? Color.Warning : Color.Success)"
-                               Disabled="@_togglingPointCloud"
-                               OnClick="ToggleGymPointCloudAsync">
-                        @(_togglingPointCloud
-                            ? "Saving…"
-                            : _gymPointCloudEnabled ? "Disable" : "Enable")
-                    </MudButton>
-                </MudStack>
-            </MudPaper>
-        </Authorized>
-    </AuthorizeView>
-}
-
-@* Rendering the point cloud is the expensive part of this page, so when the
-   switch is off the card is not rendered at all rather than merely hidden. *@
-@if (!_loading && _loadError == null && _surfaces != null && _gymPointCloudEnabled)
-{
-    <MudCard Class="@($"mb-4 {(_gymFullscreen ? "gym-fullscreen" : string.Empty)}")">
-        <MudCardHeader>
-            <CardHeaderContent>
-                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Style="width:100%">
-                    <div>
-                        <MudText Typo="Typo.h6">Gym trains point cloud (all rows)</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">
-                            @_surfaces.Meta.GymPointCount points
-                        </MudText>
-                    </div>
-                    <MudButton Variant="Variant.Outlined"
-                               Size="Size.Small"
+        <AuthorizeView>
+            <Authorized>
+                <MudStack Row="true" Spacing="2" Class="flex-wrap">
+                    <MudButton Href="/my-stats"
+                               Variant="Variant.Filled"
                                Color="Color.Primary"
-                               StartIcon="@(_gymFullscreen ? Icons.Material.Filled.FullscreenExit : Icons.Material.Filled.Fullscreen)"
-                               OnClick="ToggleGymFullscreenAsync">
-                        @(_gymFullscreen ? "Close fullscreen" : "Fullscreen")
+                               StartIcon="@Icons.Material.Filled.Timeline">
+                        My training
+                    </MudButton>
+                    <MudButton Href="/war/scout"
+                               Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Visibility">
+                        Scout opponent
+                    </MudButton>
+                    <MudButton Href="/war"
+                               Variant="Variant.Text"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.GpsFixed">
+                        Live War
                     </MudButton>
                 </MudStack>
-            </CardHeaderContent>
-        </MudCardHeader>
-        <MudCardContent Class="pa-0">
-            <div id="gym-cloud-chart" style="width: 100%; height: @(_gymFullscreen ? "calc(100dvh - 96px)" : "760px");"></div>
-        </MudCardContent>
-    </MudCard>
-}
-else if (!_loading && _loadError == null && _surfaces != null && !_gymPointCloudEnabled)
-{
-    <MudAlert Severity="Severity.Info" Class="mb-4">
-        The gym point cloud is temporarily switched off.
-    </MudAlert>
-}
+            </Authorized>
+            <NotAuthorized>
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="flex-wrap">
+                    <MudButton Href="/auth/login?returnUrl=%2F"
+                               Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Login">
+                        Sign in
+                    </MudButton>
+                    <MudLink Href="/privacy">How we handle your data</MudLink>
+                </MudStack>
+            </NotAuthorized>
+        </AuthorizeView>
+    </MudStack>
+</MudPaper>
 
-@code {
-    private string? _apiKey;
-    private bool _importing;
-    private bool _loading = true;
-    private string? _loadError;
-    private string? _statusMessage;
-    private Severity _statusSeverity = Severity.Info;
-    private SurfacesDatasetDto? _surfaces;
-    private bool _chartsDrawn;
-    private bool _gymFullscreen;
-    private bool _gymPointCloudEnabled = true;
-    private bool _togglingPointCloud;
-    private DotNetObjectReference<Home>? _dotNetRef;
+<AuthorizeView>
+    <Authorized>
+        <MudText Typo="Typo.h5" Class="mb-3">Your workspace</MudText>
+        <MudGrid Class="mb-5">
+            <MudItem xs="12" md="4">
+                <MudCard Style="height: 100%;">
+                    <MudCardContent>
+                        <MudStack Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.GpsFixed" Color="Color.Primary" />
+                            <MudText Typo="Typo.h6">War ops</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                Open Live War for current operational context, or jump straight into opponent scouting when you already know the target.
+                            </MudText>
+                            <MudStack Row="true" Spacing="1">
+                                <MudButton Href="/war" Variant="Variant.Text" Size="Size.Small">Live War</MudButton>
+                                <MudButton Href="/war/scout" Variant="Variant.Text" Size="Size.Small">Scout</MudButton>
+                            </MudStack>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudCard Style="height: 100%;">
+                    <MudCardContent>
+                        <MudStack Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Timeline" Color="Color.Primary" />
+                            <MudText Typo="Typo.h6">My training</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                Review your training history and supported observational views without mixing personal progress with the public research dataset.
+                            </MudText>
+                            <MudButton Href="/my-stats" Variant="Variant.Text" Size="Size.Small">Open my training</MudButton>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudCard Style="height: 100%;">
+                    <MudCardContent>
+                        <MudStack Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" />
+                            <MudText Typo="Typo.h6">Account &amp; connections</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                Keep identity and connection setup in one place instead of repeatedly entering technical credentials on product pages.
+                            </MudText>
+                            <MudButton Href="/player-account" Variant="Variant.Text" Size="Size.Small">Manage connections</MudButton>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
 
-    protected override async Task OnInitializedAsync()
-    {
-        // Read the switch before the data so a disabled cloud never briefly
-        // renders on load.
-        _gymPointCloudEnabled = (await UiSettings.GetAsync()).GymPointCloudEnabled;
-        await LoadSurfacesAsync();
-    }
-
-    private async Task ToggleGymPointCloudAsync()
-    {
-        if (_togglingPointCloud) return;
-        _togglingPointCloud = true;
-        try
-        {
-            var target = !_gymPointCloudEnabled;
-            if (await UiSettings.SetGymPointCloudAsync(target))
-            {
-                _gymPointCloudEnabled = target;
-                // The chart is torn down with the card, so it must be redrawn
-                // when the cloud is switched back on.
-                _chartsDrawn = false;
-                _statusSeverity = Severity.Success;
-                _statusMessage = target
-                    ? "Gym point cloud enabled for all users."
-                    : "Gym point cloud disabled for all users.";
-            }
-            else
-            {
-                _statusSeverity = Severity.Error;
-                _statusMessage = "Could not change the setting. Are you still signed in as an admin?";
-            }
-        }
-        finally
-        {
-            _togglingPointCloud = false;
-        }
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            _dotNetRef = DotNetObjectReference.Create(this);
-            await JS.InvokeVoidAsync("plotlyInterop.bindEscape", _dotNetRef);
-        }
-
-        if (_surfaces != null && !_chartsDrawn)
-        {
-            _chartsDrawn = true;
-            await DrawChartsAsync();
-        }
-    }
-
-    private async Task LoadSurfacesAsync()
-    {
-        _loading = true;
-        _loadError = null;
-        _chartsDrawn = false;
-
-        try
-        {
-            _surfaces = await SurfacesApi.GetLatestAsync();
-        }
-        catch (ApiFailure failure) when (failure.Category == ApiFailureCategory.NotFound)
-        {
-            // A missing current dataset is a successful empty state, not a failed load.
-            _surfaces = null;
-        }
-        catch (ApiFailure failure)
-        {
-            _loadError = BuildLoadFailureMessage(failure);
-            Logger.LogError(failure,
-                "Failed to load surfaces data. Endpoint={Endpoint} Status={StatusCode} Category={Category}",
-                failure.Endpoint,
-                failure.StatusCode is null ? null : (int)failure.StatusCode,
-                failure.Category);
-        }
-        catch (Exception ex)
-        {
-            _loadError = "Could not load training data. Please try again.";
-            Logger.LogError(ex, "Failed to load surfaces data");
-        }
-        finally
-        {
-            _loading = false;
-        }
-    }
-
-    private async Task RunImportAsync()
-    {
-        if (string.IsNullOrWhiteSpace(_apiKey)) return;
-
-        _importing = true;
-        _statusMessage = "Starting import…";
-        _statusSeverity = Severity.Info;
-        StateHasChanged();
-
-        try
-        {
-            var status = await SurfacesApi.StartImportAsync(_apiKey.Trim(), fresh: true);
-
-            if (status?.Outcome == "failed")
-            {
-                _statusMessage = "Import failed. Please try again.";
-                _statusSeverity = Severity.Error;
-                return;
-            }
-
-            _statusMessage = "Import queued — reloading data in a moment…";
-            StateHasChanged();
-
-            await Task.Delay(4000);
-            await LoadSurfacesAsync();
-
-            _statusMessage = "Data refreshed.";
-            _statusSeverity = Severity.Success;
-        }
-        catch (ApiFailure failure)
-        {
-            _statusMessage = BuildImportFailureMessage(failure);
-            _statusSeverity = Severity.Error;
-            Logger.LogError(failure,
-                "Import failed. Endpoint={Endpoint} Status={StatusCode} Category={Category}",
-                failure.Endpoint,
-                failure.StatusCode is null ? null : (int)failure.StatusCode,
-                failure.Category);
-        }
-        catch (Exception ex)
-        {
-            _statusMessage = "Import failed. Please try again.";
-            _statusSeverity = Severity.Error;
-            Logger.LogError(ex, "Import failed");
-        }
-        finally
-        {
-            _importing = false;
-        }
-    }
-
-    private async Task DrawChartsAsync()
-    {
-        if (_surfaces == null) return;
-        try
-        {
-            await JS.InvokeVoidAsync("plotlyInterop.render",
-                "gym-cloud-chart",
-                new[] { BuildGymTrace(_surfaces.Series.GymCloud) },
-                BuildLayout("Stat before train", "Happy before train", "Stat gained / energy"));
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to draw charts");
-        }
-    }
-
-    private async Task ToggleGymFullscreenAsync()
-    {
-        _gymFullscreen = !_gymFullscreen;
-        await InvokeAsync(StateHasChanged);
-        await RepaintGymChartAsync();
-    }
-
-    [JSInvokable]
-    public async Task ExitGymFullscreenFromEscapeAsync()
-    {
-        if (!_gymFullscreen) return;
-        _gymFullscreen = false;
-        await InvokeAsync(StateHasChanged);
-        await RepaintGymChartAsync();
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        try
-        {
-            await JS.InvokeVoidAsync("plotlyInterop.unbindEscape");
-        }
-        catch
-        {
-        }
-
-        _dotNetRef?.Dispose();
-    }
-
-    private async Task RepaintGymChartAsync()
-    {
-        await Task.Delay(16);
-        await DrawChartsAsync();
-        await JS.InvokeVoidAsync("plotlyInterop.resize", "gym-cloud-chart");
-        await Task.Delay(16);
-        await JS.InvokeVoidAsync("plotlyInterop.resize", "gym-cloud-chart");
-    }
-
-    private static object BuildGymTrace(GymCloudSeriesDto cloud) => new
-    {
-        type = "scatter3d",
-        mode = "markers",
-        x = cloud.X,
-        y = cloud.Y,
-        z = cloud.Z,
-        hovertemplate = "Stat before: %{x}<br>Happy before: %{y}<br>Gain / energy: %{z}<extra></extra>",
-        marker = new { size = 6, opacity = 0.88, color = "#58a6ff" }
-    };
-
-    private static object BuildLayout(string xTitle, string yTitle, string zTitle) => new
-    {
-        paper_bgcolor = "rgba(0,0,0,0)",
-        plot_bgcolor = "rgba(0,0,0,0)",
-        font = new { color = "#e8f1ff", family = "Roboto, sans-serif" },
-        scene = new
-        {
-            aspectmode = "manual",
-            aspectratio = new { x = 1.35, y = 1.35, z = 1.2 },
-            xaxis = new { title = xTitle, gridcolor = "#243457", zerolinecolor = "#243457" },
-            yaxis = new { title = yTitle, gridcolor = "#243457", zerolinecolor = "#243457" },
-            zaxis = new { title = zTitle, gridcolor = "#243457", zerolinecolor = "#243457" },
-            bgcolor = "rgba(0,0,0,0)"
-        },
-        margin = new { l = 0, r = 0, t = 0, b = 0 }
-    };
-
-    private static string BuildLoadFailureMessage(ApiFailure failure) => failure.Category switch
-    {
-        ApiFailureCategory.ApiUnavailable => "Could not load training data. The service is temporarily unavailable — try again shortly.",
-        ApiFailureCategory.BadGateway => "Could not load training data. The service is temporarily unavailable — try again shortly.",
-        ApiFailureCategory.Deserialization => "Could not load training data. Please try again.",
-        _ => "Could not load training data. Please try again."
-    };
-
-    private static string BuildImportFailureMessage(ApiFailure failure) => failure.Category switch
-    {
-        ApiFailureCategory.ApiUnavailable => "Import failed. The service is temporarily unavailable — try again shortly.",
-        ApiFailureCategory.BadGateway => "Import failed. The service is temporarily unavailable — try again shortly.",
-        ApiFailureCategory.Validation => "Import could not start. Check your Torn API key and try again.",
-        _ => "Import failed. Please try again."
-    };
-}
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+            Looking for the research view? The public 3D gym point cloud now lives in <MudLink Href="/gym-explorer">Gym Explorer</MudLink>, so it no longer dominates the landing page.
+        </MudAlert>
+    </Authorized>
+    <NotAuthorized>
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudCard Style="height: 100%;">
+                    <MudCardContent>
+                        <MudText Typo="Typo.h6" GutterBottom="true">Training context</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            Turn your own gym history into useful, evidence-backed views after signing in.
+                        </MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudCard Style="height: 100%;">
+                    <MudCardContent>
+                        <MudText Typo="Typo.h6" GutterBottom="true">War tools</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            Keep scouting and faction decisions close to the operational context that makes them useful.
+                        </MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudCard Style="height: 100%;">
+                    <MudCardContent>
+                        <MudText Typo="Typo.h6" GutterBottom="true">Research explorer</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            Explore the public gym point cloud when you want the raw research surface, without loading it on every visit.
+                        </MudText>
+                        <MudButton Href="/gym-explorer" Variant="Variant.Text" Size="Size.Small" Class="mt-2">Open Gym Explorer</MudButton>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    </NotAuthorized>
+</AuthorizeView>
