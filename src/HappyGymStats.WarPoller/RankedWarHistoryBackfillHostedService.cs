@@ -16,7 +16,7 @@ namespace HappyGymStats.WarPoller;
 public sealed class RankedWarHistoryBackfillHostedService(
     IServiceScopeFactory scopeFactory,
     WarPollerOptions options,
-    IWarPollerClock clock,
+    TimeProvider timeProvider,
     ILogger<RankedWarHistoryBackfillHostedService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -47,7 +47,7 @@ public sealed class RankedWarHistoryBackfillHostedService(
 
                 if (result.DelayBeforeNextIteration > TimeSpan.Zero)
                 {
-                    await clock.DelayAsync(result.DelayBeforeNextIteration, stoppingToken);
+                    await Task.Delay(result.DelayBeforeNextIteration, timeProvider, stoppingToken);
                 }
             }
         }
