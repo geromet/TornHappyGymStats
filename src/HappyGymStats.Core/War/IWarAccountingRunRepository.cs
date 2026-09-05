@@ -13,6 +13,25 @@ public sealed record FrozenWarAccountingRun(
     string FrozenBy,
     DateTimeOffset FrozenAtUtc);
 
+public enum WarAccountingRunLifecycleKind
+{
+    Approved = 1,
+    Superseded = 2
+}
+
+/// <summary>
+/// Append-only lifecycle evidence for a frozen run. Approval and supersession are
+/// events rather than mutable flags so actor, time and reason remain auditable.
+/// </summary>
+public sealed record WarAccountingRunLifecycleEvent(
+    Guid EventId,
+    Guid RunId,
+    WarAccountingRunLifecycleKind Kind,
+    string Actor,
+    DateTimeOffset OccurredAtUtc,
+    string Reason,
+    Guid? SupersedingRunId);
+
 public interface IWarAccountingRunRepository
 {
     /// <summary>
@@ -29,4 +48,33 @@ public interface IWarAccountingRunRepository
         CancellationToken ct);
 
     Task<FrozenWarAccountingRun?> GetAsync(Guid runId, CancellationToken ct);
+
+    /// <summary>
+    /// Appends the one approval event for a frozen run. Re-approval and approval after
+    /// supersession are rejected by the persistence contract.
+    /// </summary>
+    Task<WarAccountingRunLifecycleEvent> ApproveAsync(
+        Guid eventId,
+        Guid runId,
+        string actor,
+        DateTimeOffset occurredAtUtc,
+        string reason,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Supersedes an approved run with another approved frozen run from the same
+    /// faction/war scope. The replacement relationship is immutable and auditable.
+    /// </summary>
+    Task<WarAccountingRunLifecycleEvent> SupersedeAsync(
+        Guid eventId,
+        Guid runId,
+        Guid supersedingRunId,
+        string actor,
+        DateTimeOffset occurredAtUtc,
+        string reason,
+        CancellationToken ct);
+
+    Task<IReadOnlyList<WarAccountingRunLifecycleEvent>> GetLifecycleAsync(
+        Guid runId,
+        CancellationToken ct);
 }
