@@ -86,19 +86,19 @@
                 </MudNavLink>
             </div>
 
-            <AuthorizeView>
-                <Authorized>
-                    <div class="nav-group">
-                        <MudText Typo="Typo.overline" Class="nav-group-label">Training</MudText>
+            <div class="nav-group">
+                <MudText Typo="Typo.overline" Class="nav-group-label">Training</MudText>
+                <AuthorizeView>
+                    <Authorized>
                         <MudNavLink Href="/my-stats" Icon="@Icons.Material.Filled.ShowChart" aria-label="My Training">
                             <span class="nav-label">My Training</span>
                         </MudNavLink>
-                        <MudNavLink Href="/gym-explorer" Icon="@Icons.Material.Filled.ViewInAr" aria-label="Gym Explorer">
-                            <span class="nav-label">Gym Explorer</span>
-                        </MudNavLink>
-                    </div>
-                </Authorized>
-            </AuthorizeView>
+                    </Authorized>
+                </AuthorizeView>
+                <MudNavLink Href="/gym-explorer" Icon="@Icons.Material.Filled.ViewInAr" aria-label="Gym Explorer">
+                    <span class="nav-label">Gym Explorer</span>
+                </MudNavLink>
+            </div>
         </nav>
 
         <div class="rail-secondary">
@@ -139,9 +139,9 @@
             <AuthorizeView>
                 <Authorized>
                     <MudNavLink Href="/my-stats" Icon="@Icons.Material.Filled.ShowChart">My Training</MudNavLink>
-                    <MudNavLink Href="/gym-explorer" Icon="@Icons.Material.Filled.ViewInAr">Gym Explorer</MudNavLink>
                 </Authorized>
             </AuthorizeView>
+            <MudNavLink Href="/gym-explorer" Icon="@Icons.Material.Filled.ViewInAr">Gym Explorer</MudNavLink>
             <MudNavLink Href="/" Icon="@Icons.Material.Filled.SpaceDashboard" Match="NavLinkMatch.All">Overview</MudNavLink>
         </nav>
         <MudDivider Class="my-3" />
