@@ -34,16 +34,33 @@ public sealed class WarPollerSimplificationContractTests
     }
 
     [Fact]
-    public void War_poller_keeps_projection_heartbeat_and_backoff_as_effect_free_policy_helpers()
+    public void War_poller_keeps_orchestration_linear_and_policy_helpers_effect_free()
     {
         var root = ResolveRepositoryRoot();
         var service = File.ReadAllText(Path.Combine(root, "src/HappyGymStats.WarPoller/WarPollerService.cs"));
 
         var runOnce = ExtractMethodBody(service, "public async Task<WarPollerTickResult> RunOnceAsync(");
         Assert.Contains("ResolveActiveWarAsync", runOnce, StringComparison.Ordinal);
-        Assert.Contains("BuildPersistedState", runOnce, StringComparison.Ordinal);
+        Assert.Contains("CompleteNoActiveWarAsync", runOnce, StringComparison.Ordinal);
+        Assert.Contains("CompleteActiveWarAsync", runOnce, StringComparison.Ordinal);
         Assert.Contains("BuildHeartbeat", runOnce, StringComparison.Ordinal);
         Assert.Contains("ComputeFailureBackoff", runOnce, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetRankedWarReportAsync", runOnce, StringComparison.Ordinal);
+        Assert.DoesNotContain("ReplaceRosterSnapshotAsync", runOnce, StringComparison.Ordinal);
+
+        var activeCompletion = ExtractMethodBody(service, "private async Task<WarPollerTickResult> CompleteActiveWarAsync(");
+        Assert.Contains("GetRankedWarReportAsync", activeCompletion, StringComparison.Ordinal);
+        Assert.Contains("TryGetOurChainDeadlineAsync", activeCompletion, StringComparison.Ordinal);
+        Assert.Contains("BuildPersistedState", activeCompletion, StringComparison.Ordinal);
+        Assert.Contains("ReplaceRosterSnapshotAsync", activeCompletion, StringComparison.Ordinal);
+        Assert.Contains("BuildHeartbeat", activeCompletion, StringComparison.Ordinal);
+        Assert.Contains("TryNotifyHubAsync", activeCompletion, StringComparison.Ordinal);
+
+        var noWarCompletion = ExtractMethodBody(service, "private async Task<WarPollerTickResult> CompleteNoActiveWarAsync(");
+        Assert.Contains("UpsertCurrentAsync", noWarCompletion, StringComparison.Ordinal);
+        Assert.Contains("BuildHeartbeat", noWarCompletion, StringComparison.Ordinal);
+        Assert.Contains("TryNotifyHubAsync", noWarCompletion, StringComparison.Ordinal);
+        Assert.DoesNotContain("_tornApiClient", noWarCompletion, StringComparison.Ordinal);
 
         var projection = ExtractMethodBody(service, "private PersistedWarState BuildPersistedState(");
         AssertEffectFree(projection);
