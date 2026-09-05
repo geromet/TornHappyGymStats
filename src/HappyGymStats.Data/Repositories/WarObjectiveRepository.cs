@@ -27,7 +27,11 @@ public sealed class WarObjectiveRepository(HappyGymStatsDbContext db) : IWarObje
 
         try
         {
-            await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+            // The transaction-scoped advisory lock is the serialization primitive for
+            // one faction/war. ReadCommitted is intentional: a Serializable snapshot
+            // can be established while waiting for the advisory lock, then remain too
+            // old to observe the preceding writer and incorrectly retry version 1.
+            await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
             await AcquireWarObjectiveLockAsync(connection, transaction, factionId, warId, ct);
 
             var latest = await ReadLatestAsync(connection, transaction, factionId, warId, ct)
@@ -89,7 +93,10 @@ public sealed class WarObjectiveRepository(HappyGymStatsDbContext db) : IWarObje
 
         try
         {
-            await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+            // Match AppendNextAsync's lock + isolation contract so a freeze sees the
+            // commit from whichever writer acquired this faction/war lock immediately
+            // before it, instead of holding a stale Serializable snapshot.
+            await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
             await AcquireWarObjectiveLockAsync(connection, transaction, factionId, warId, ct);
 
             var durable = await ReadLatestAsync(connection, transaction, factionId, warId, ct)
@@ -142,9 +149,9 @@ public sealed class WarObjectiveRepository(HappyGymStatsDbContext db) : IWarObje
         long warId,
         CancellationToken ct)
     {
-        // Serializes durable-freeze and append writers for one faction/war even when
-        // no row exists yet. This prevents an accounting freeze from observing a
-        // synthetic version 1 while a concurrent explicit append claims version 2.
+        // Serialize durable-freeze and append writers for one faction/war even when
+        // no row exists yet. Reads performed after this lock use ReadCommitted so they
+        // observe the immediately preceding lock holder's committed version history.
         await using var lockCommand = connection.CreateCommand();
         lockCommand.Transaction = transaction;
         lockCommand.CommandText = "SELECT pg_advisory_xact_lock(hashtextextended(@key, 0))";
