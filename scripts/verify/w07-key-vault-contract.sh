@@ -206,7 +206,7 @@ rg -q 'x.DocumentVersion == TermsDocument.Version' "$STORED_KEY_STORE" \
   || fail "stored-key writer does not require consent to the current disclosure"
 rg -q 'x.RevokedAtUtc == null' "$STORED_KEY_STORE" \
   || fail "stored-key writer does not reject revoked consent"
-rg -q '_vault.Protect' "$STORED_KEY_STORE" \
+rg -q '(_vault|_vaultFactory\(\))\.Protect' "$STORED_KEY_STORE" \
   || fail "stored-key writer does not encrypt through WarKeyVault"
 pass "stored-key persistence is ciphertext-only and transactionally gated by owner/current consent"
 
