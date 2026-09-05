@@ -2,51 +2,43 @@
 
 This document is the coding-agent handoff for the remote branch audit and stranded-work recovery performed on 2026-09-05.
 
-## Post-retirement status — updated 2026-09-05 (after this map was first written)
+## Historical retirement outcome — not a live work queue
 
-The retirement this map hands off has since **executed in full**:
+The two retirement waves recorded in [#193](https://github.com/geromet/TornHappyGymStats/issues/193)
+reported **40 deletions** at 2026-09-05T17:39–17:40Z and **25 deletions** at
+2026-09-05T21:17–21:18Z, using per-ref expected-head checks. The reported remote
+collections were 66 → 27 and then 27 → 6. Branch creation occurred between
+observations, so collection sizes are not a substitute for deletion-ledger counts.
 
-- **Wave 1** (`workspace/retire-branches-20260905.sh --execute`, 2026-09-05T17:39–17:40Z):
-  40 remote refs deleted with per-branch `--force-with-lease` CAS; remote frontier 66 → 27.
-  Restore ledger `workspace/retire-branches-20260905.ledger.tsv`. Deleted set = the three
-  `fleet/consolidated/*-20260905` branches, every RECOVERED source/stable ref they absorbed
-  (safe only because coding-agent PRs #213/#214/#215/#194 had merged to `main` with
-  exact-head proof), and the LANDED/SUPERSEDED refs #193 had transcribed into its checkbox list.
-- **Wave 2** (`workspace/retire-branches-20260905-wave2.sh --execute`, 2026-09-05T21:17–21:18Z):
-  25 remaining non-default refs deleted, per-branch `--force-with-lease` CAS, 0 skipped / 0 failed.
-  Restore ledger `workspace/retire-branches-20260905-wave2.ledger.tsv`. Each was already
-  LANDED-MAIN / LANDED-VIA-STABLE / SUPERSEDED in the index below, plus
-  `docs/agent-terminal-handoff-20260905` (PR #216 merged) and `agent/issue-100-chain-planner`
-  (#194 merged) which post-date this map, plus
-  `fleet/stable/branch-inventory-reconcile-20260905` (PR #222 merged into #221's stable branch)
-  and `audit/docs-markdown-accuracy-20260905-2` (identical to `main`). Rollup PRs #176, #180,
-  #185 verified MERGED to `main`.
-- **Preserved** (neither wave): `agent/issue-101-home-gym-explorer` (PR #200),
-  `agent/issue-217-security-no-prerender` (PR #220),
-  `fleet/stable/fleet-archive-20260905-1952` (PR #221),
-  `audit/docs-markdown-accuracy-20260905` (PR #224), and
-  `fix/align-prod-nginx-conf-name` (live local worktree session, pid 415349).
+The post-wave-2 six-ref observation and local-worktree preserve exception are
+historical. They are **not current preservation instructions**. Later default
+merges and deletion changed that frontier again. Current existence and ownership
+must be checked through [the live-check procedure](BRANCH-INVENTORY-CURRENT.md),
+GitHub, and [#140](https://github.com/geromet/TornHappyGymStats/issues/140).
 
-**Live remote frontier is now 6 refs**: `main` + the five preserved branches above.
-Every other row in this document names a ref that **no longer exists on `origin`**
-(deleted in wave 1 or wave 2). A row being LANDED-MAIN / LANDED-VIA-STABLE / RECOVERED /
-SUPERSEDED / CONSOLIDATION means the ref is already retired — not that it is live. Do not
-re-merge or "recover" any of them; `ahead` after a squash/rollup merge is expected.
-Authoritative live coordination: #193 (retirement record) and #140.
+The three recovery rollups #213/#214/#215 and #194 subsequently reached default;
+do not recreate their retired branches. The tables below preserve the original
+recovery decisions and then-current statuses, **not commands to review, restore,
+preserve, merge or delete those refs today**.
 
-## Audit basis
+Durable evidence: [retired-head ledger and limits](RETIREMENT-PROVENANCE-2026-09-05.md).
+The original machine-local execution ledgers have not been supplied to this
+repository. Reconstructed PR heads are historical evidence, not certified
+deletion-time heads; MD-012 in #223 remains partial until that gap is reconciled.
+
+## Historical audit basis
 
 - Repository: `geromet/TornHappyGymStats`
 - Default branch: `main`
 - Default head throughout the initial recovery: `270666a030e0473c2891fef9e0fd696a6c0df443`
 - Original remote inventory: **62 branches total** (`main` + 61 non-default branches).
-- Current inventory after this recovery: **65 branches total**, because three non-default consolidation branches were added.
+- Inventory immediately after the initial recovery: **65 branches total**, because three non-default consolidation branches were added.
 - The audit compared remote branch history with current `main` and cross-referenced the complete PR history, including PRs whose base was another non-default stable branch.
 - Important: an old branch can still appear `ahead` of `main` after a squash/rollup merge because its original commit IDs are not ancestors of `main`. `ahead` alone is therefore **not** treated as evidence of missing work. PR/rollup history and current-tree intent decide the status below.
 - Local worktree registrations and unpushed local commits are deliberately **not** covered here. The coding agent should run a separate local `git worktree list` / local-ref audit.
 - No default-branch merge was performed by this recovery.
 
-## Status vocabulary
+## Historical status vocabulary
 
 - **DEFAULT** — repository default branch; never mutated by this recovery.
 - **OPEN-PR** — already has a current PR targeting `main`; no recovery merge was needed.
@@ -56,7 +48,7 @@ Authoritative live coordination: #193 (retirement record) and #140.
 - **SUPERSEDED** — branch/PR was explicitly replaced, contaminated, incomplete against current code, or closed in favor of a later canonical implementation. Do not merge it as-is.
 - **CONSOLIDATION** — new non-default recovery branch intended to become a single coding-agent review surface. Fleet/manual agents must not merge it into `main`.
 
-## Consolidation branches
+## Historical consolidation branches
 
 ### `fleet/consolidated/platform-security-data-20260905`
 
@@ -94,7 +86,7 @@ Recovered War core/evaluation work:
 
 Temporary non-default integration PRs: #201, #202.
 
-## Complete branch index
+## Historical branch index — original recovery snapshot
 
 | Branch | Status | PR / history | Recovery destination / action |
 |---|---|---|---|
@@ -164,14 +156,17 @@ Temporary non-default integration PRs: #201, #202.
 | `refactor/remove-unused-unit-of-work` | **SUPERSEDED** | #135 closed unmerged; temporary recovery #208 failed exact-head compile because current Core consumers still require `IUnitOfWork` | Recovery reversed from PLATFORM; do not merge as-is; any future cleanup must migrate all remaining consumers coherently |
 | `test/verifier-dependency-regression` | **SUPERSEDED** | #123 closed unmerged; superseded by #125 canonical verifier package | Do not merge |
 
-## Coding-agent review order
+## Current review and retirement authority
 
-1. Review the three **CONSOLIDATION** branches as coherent review units, not the original child/stable branches.
-2. Continue reviewing existing open PRs #194 and #200 independently.
-3. Do not infer missing work from an old branch being `ahead` until this inventory's PR/rollup classification has been checked.
-4. For each consolidation PR, rerun exact-head CI and inspect the union rather than trusting child-branch proof from an older base.
-5. Perform the separate local-worktree audit before deleting any local branch/worktree.
-6. Never delete an original remote recovery source merely because it is represented here until the coding-agent has accepted the consolidation and proven the source is safely redundant.
+The original review order is obsolete: #213/#214/#215 and #194 have merged to
+default and their recovery branches were retired. Do not check out or resurrect
+those refs to repeat the recovery. Review only PRs that are currently open after
+checking their actual bases, heads, dependencies and #140 ownership.
+
+Use [BRANCH-INVENTORY-CURRENT.md](BRANCH-INVENTORY-CURRENT.md) to obtain the live
+frontier. Local worktree/unpushed-work checks are still required for any separately
+authorized future cleanup. Neither this document nor a historical `ahead` count
+authorizes restoration, deletion or a default-branch merge.
 
 ## Durable workflow rule exposed by this incident
 
