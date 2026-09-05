@@ -1,5 +1,6 @@
 using HappyGymStats.Api.Controllers;
 using HappyGymStats.Core.War;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HappyGymStats.Tests;
@@ -59,7 +60,13 @@ public sealed class WarObjectiveConsumptionTests
             new FactionWarObjectiveVersion(
                 1234,
                 WarObjectiveVersion.CreateDefault(9876, DateTimeOffset.UnixEpoch)));
-        var sut = new WarObjectivesController(repository);
+        var sut = new WarObjectivesController(repository)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext()
+            }
+        };
 
         var result = await sut.GetEvaluation(1234, 9876, -1, CancellationToken.None);
 
