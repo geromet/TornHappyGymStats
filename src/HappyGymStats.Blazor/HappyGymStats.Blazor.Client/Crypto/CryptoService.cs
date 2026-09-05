@@ -46,8 +46,11 @@ public sealed class CryptoService(IJSRuntime js)
 
     public async Task DeleteKeyAsync()
     {
-        await js.InvokeVoidAsync("localStorage.removeItem", StorageKey);
+        // Delete the recoverable public-key cache first. If either storage operation fails,
+        // the wrapped private key is never removed before the cache cleanup succeeds. This keeps
+        // the page's "Key stored" state truthful and leaves a failed deletion safely retryable.
         await js.InvokeVoidAsync("localStorage.removeItem", PublicKeyStorageKey);
+        await js.InvokeVoidAsync("localStorage.removeItem", StorageKey);
     }
 
     private ValueTask<IJSObjectReference> ImportModuleAsync()

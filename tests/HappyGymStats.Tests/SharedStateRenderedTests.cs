@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text;
 using Bunit;
 using HappyGymStats.Blazor.Components.Pages;
+using HappyGymStats.Blazor.Components.Shared;
 using HappyGymStats.Blazor.Services;
 using HappyGymStats.Core.Models;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,6 +16,21 @@ namespace HappyGymStats.Tests;
 public sealed class SharedStateRenderedTests : BunitContext
 {
     [Fact]
+    public void LoadingState_exposes_polite_atomic_status_and_hides_spinner_from_assistive_tech()
+    {
+        Services.AddMudServices();
+
+        var cut = Render<LoadingState>(parameters => parameters
+            .Add(component => component.Message, "Loading scouting report..."));
+
+        var status = cut.Find("[role='status']");
+        Assert.Equal("polite", status.GetAttribute("aria-live"));
+        Assert.Equal("true", status.GetAttribute("aria-atomic"));
+        Assert.Contains("Loading scouting report...", status.TextContent, StringComparison.Ordinal);
+        Assert.NotNull(cut.Find("[aria-hidden='true']"));
+    }
+
+    [Fact]
     public void Home_renders_successful_empty_state_when_no_surface_dataset_exists()
     {
         ConfigureHome(new HomeMessageHandler(HttpStatusCode.NotFound));
@@ -23,8 +39,8 @@ public sealed class SharedStateRenderedTests : BunitContext
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Contains("No surfaces data found. Run an import first.", cut.Markup, StringComparison.Ordinal);
-            Assert.DoesNotContain("Could not load surfaces data", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("No training data found yet. Run an import first.", cut.Markup, StringComparison.Ordinal);
+            Assert.DoesNotContain("Could not load training data", cut.Markup, StringComparison.Ordinal);
         });
     }
 
@@ -37,8 +53,8 @@ public sealed class SharedStateRenderedTests : BunitContext
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Contains("Could not load surfaces data. The service is temporarily unavailable", cut.Markup, StringComparison.Ordinal);
-            Assert.DoesNotContain("No surfaces data found", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Could not load training data. The service is temporarily unavailable", cut.Markup, StringComparison.Ordinal);
+            Assert.DoesNotContain("No training data found", cut.Markup, StringComparison.Ordinal);
         });
     }
 

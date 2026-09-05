@@ -14,8 +14,16 @@ public sealed class M004FinalGateTests
         var layoutSource = ReadTrackedSource("src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Layout/MainLayout.razor");
 
         Assert.Contains("@attribute [Authorize]", myStatsSource, StringComparison.Ordinal);
-        Assert.Contains("MudNavLink Href=\"/my-stats\"", layoutSource, StringComparison.Ordinal);
-        Assert.Contains("Icons.Material.Filled.Lock", layoutSource, StringComparison.Ordinal);
+
+        var myStatsLink = layoutSource.IndexOf("MudNavLink Href=\"/my-stats\"", StringComparison.Ordinal);
+        Assert.True(myStatsLink >= 0, "My Training must remain reachable through /my-stats navigation.");
+
+        var authorizedStart = layoutSource.LastIndexOf("<Authorized>", myStatsLink, StringComparison.Ordinal);
+        var authorizedEnd = layoutSource.IndexOf("</Authorized>", myStatsLink, StringComparison.Ordinal);
+        Assert.True(
+            authorizedStart >= 0 && authorizedEnd > myStatsLink,
+            "The /my-stats navigation entry must remain inside an Authorized block.");
+        Assert.Contains("My Training", layoutSource, StringComparison.Ordinal);
     }
 
     [Fact]

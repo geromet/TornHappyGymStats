@@ -1,4 +1,6 @@
 @inherits LayoutComponentBase
+@implements IDisposable
+@using Microsoft.AspNetCore.Components.Routing
 @inject NavigationManager Navigation
 
 <MudThemeProvider Theme="@AppTheme.Theme" IsDarkMode="true" />
@@ -7,84 +9,231 @@
 <MudSnackbarProvider />
 
 <MudLayout>
-    <MudAppBar Elevation="1">
-        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
-                       OnClick="ToggleDrawer" />
-        <MudText Typo="Typo.h6" Class="ml-2">Happy Gym Stats</MudText>
+    <MudAppBar Elevation="0" Class="app-topbar">
+        <MudIconButton Icon="@Icons.Material.Filled.MenuOpen"
+                       Color="Color.Inherit"
+                       Edge="Edge.Start"
+                       Class="desktop-nav-toggle"
+                       aria-label="Toggle navigation rail"
+                       OnClick="ToggleDesktopRail" />
+        <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                       Color="Color.Inherit"
+                       Edge="Edge.Start"
+                       Class="mobile-nav-toggle"
+                       aria-label="Open navigation"
+                       OnClick="ToggleMobileDrawer" />
+        <a href="/" class="topbar-brand" aria-label="Happy Gym Stats home">HGS</a>
+        <MudDivider Vertical="true" Class="topbar-divider" />
+        <MudText Typo="Typo.subtitle1" Class="topbar-context">@CurrentPageTitle</MudText>
         <MudSpacer />
         <AuthorizeView>
             <Authorized Context="authState">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mr-2">
-                    <MudChip T="string" Color="Color.Success" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.VerifiedUser">
-                        @(authState.User.Identity?.Name ?? "signed in")
-                    </MudChip>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="account-summary">
+                    <MudIcon Icon="@Icons.Material.Filled.AccountCircle" Size="Size.Small" />
+                    <MudText Typo="Typo.body2">@(authState.User.Identity?.Name ?? "Signed in")</MudText>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Inherit" Href="/player-account">
+                        Account
+                    </MudButton>
                     <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Inherit" OnClick="SignOut">
                         Sign out
                     </MudButton>
                 </MudStack>
             </Authorized>
             <NotAuthorized>
-                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Inherit" StartIcon="@Icons.Material.Filled.Login" OnClick="SignIn">
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Login" OnClick="SignIn">
                     Sign in
                 </MudButton>
             </NotAuthorized>
         </AuthorizeView>
-        <MudLink Href="https://www.torn.com" Target="_blank" Color="Color.Inherit">
-            <MudText Typo="Typo.caption">Torn City</MudText>
-        </MudLink>
     </MudAppBar>
 
-    <MudDrawer @bind-Open="_drawerOpen" Elevation="1" Variant="DrawerVariant.Temporary">
+    <aside class="@DesktopRailClass" aria-label="Primary navigation">
+        <a href="/" class="rail-brand" aria-label="Happy Gym Stats overview">
+            <MudIcon Icon="@Icons.Material.Filled.FitnessCenter" />
+            <span class="nav-label">Happy Gym Stats</span>
+        </a>
+
+        <nav class="desktop-navigation" aria-label="Product areas">
+            <div class="nav-group">
+                <MudText Typo="Typo.overline" Class="nav-group-label">Command</MudText>
+                <MudNavLink Href="/" Icon="@Icons.Material.Filled.SpaceDashboard" Match="NavLinkMatch.All" aria-label="Overview">
+                    <span class="nav-label">Overview</span>
+                </MudNavLink>
+                <AuthorizeView>
+                    <Authorized>
+                        <MudNavLink Href="/war" Icon="@Icons.Material.Filled.GpsFixed" aria-label="Live War">
+                            <span class="nav-label">Live War</span>
+                        </MudNavLink>
+                    </Authorized>
+                </AuthorizeView>
+            </div>
+
+            <AuthorizeView>
+                <Authorized>
+                    <div class="nav-group">
+                        <MudText Typo="Typo.overline" Class="nav-group-label">Intelligence</MudText>
+                        <MudNavLink Href="/war/scout" Icon="@Icons.Material.Filled.Visibility" aria-label="Opponent Scout">
+                            <span class="nav-label">Opponent Scout</span>
+                        </MudNavLink>
+                    </div>
+                </Authorized>
+            </AuthorizeView>
+
+            <div class="nav-group">
+                <MudText Typo="Typo.overline" Class="nav-group-label">Planning</MudText>
+                <MudNavLink Href="/chain-calculator" Icon="@Icons.Material.Filled.Timeline" aria-label="Chain Planner">
+                    <span class="nav-label">Chain Planner</span>
+                </MudNavLink>
+            </div>
+
+            <div class="nav-group">
+                <MudText Typo="Typo.overline" Class="nav-group-label">Training</MudText>
+                <AuthorizeView>
+                    <Authorized>
+                        <MudNavLink Href="/my-stats" Icon="@Icons.Material.Filled.ShowChart" aria-label="My Training">
+                            <span class="nav-label">My Training</span>
+                        </MudNavLink>
+                    </Authorized>
+                </AuthorizeView>
+                <MudNavLink Href="/gym-explorer" Icon="@Icons.Material.Filled.ViewInAr" aria-label="Gym Explorer">
+                    <span class="nav-label">Gym Explorer</span>
+                </MudNavLink>
+            </div>
+        </nav>
+
+        <div class="rail-secondary">
+            <AuthorizeView>
+                <Authorized>
+                    <MudNavLink Href="/player-account" Icon="@Icons.Material.Filled.ManageAccounts" aria-label="Account and Connections">
+                        <span class="nav-label">Account &amp; Connections</span>
+                    </MudNavLink>
+                </Authorized>
+            </AuthorizeView>
+            <MudNavLink Href="/privacy" Icon="@Icons.Material.Filled.PrivacyTip" aria-label="Privacy">
+                <span class="nav-label">Privacy</span>
+            </MudNavLink>
+            <MudNavLink Href="/terms" Icon="@Icons.Material.Filled.Gavel" aria-label="Terms">
+                <span class="nav-label">Terms</span>
+            </MudNavLink>
+            <MudNavLink Href="/security" Icon="@Icons.Material.Filled.Security" aria-label="Security">
+                <span class="nav-label">Security</span>
+            </MudNavLink>
+        </div>
+    </aside>
+
+    <MudDrawer @bind-Open="_mobileDrawerOpen" Variant="DrawerVariant.Temporary" Class="mobile-drawer" Elevation="4">
         <MudDrawerHeader>
-            <MudText Typo="Typo.subtitle1" Class="mt-1">Happy Gym Stats</MudText>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Style="width:100%">
+                <a href="/" class="drawer-brand">Happy Gym Stats</a>
+                <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="Close navigation" OnClick="ToggleMobileDrawer" />
+            </MudStack>
         </MudDrawerHeader>
-        <MudNavMenu>
-            <MudNavLink Href="/" Icon="@Icons.Material.Filled.Home" Match="NavLinkMatch.All">Home</MudNavLink>
-            <MudNavLink Href="/login" Icon="@Icons.Material.Filled.Login">Login</MudNavLink>
-            <MudNavLink Href="/my-stats" Icon="@Icons.Material.Filled.ScatterPlot">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    <span>My stats</span>
-                    <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" />
-                </MudStack>
-            </MudNavLink>
-            <MudNavLink Href="/player-account" Icon="@Icons.Material.Filled.Person">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    <span>Player account</span>
-                    <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" />
-                </MudStack>
-            </MudNavLink>
-            <MudNavLink Href="/war" Icon="@Icons.Material.Filled.GpsFixed">War board</MudNavLink>
-            <MudNavLink Href="/war/scout" Icon="@Icons.Material.Filled.Visibility">Scout opponent</MudNavLink>
-<MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Settings">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    <span>Settings</span>
-                    <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" />
-                </MudStack>
-            </MudNavLink>
-            <MudNavLink Href="/chain-calculator" Icon="@Icons.Material.Filled.Timeline">Chain calculator</MudNavLink>
-            <MudNavLink Href="/terms" Icon="@Icons.Material.Filled.Gavel">Terms of use</MudNavLink>
+        <nav class="mobile-navigation" aria-label="Mobile primary navigation">
+            <AuthorizeView>
+                <Authorized>
+                    <MudNavLink Href="/war" Icon="@Icons.Material.Filled.GpsFixed">Live War</MudNavLink>
+                    <MudNavLink Href="/war/scout" Icon="@Icons.Material.Filled.Visibility">Opponent Scout</MudNavLink>
+                </Authorized>
+            </AuthorizeView>
+            <MudNavLink Href="/chain-calculator" Icon="@Icons.Material.Filled.Timeline">Chain Planner</MudNavLink>
+            <AuthorizeView>
+                <Authorized>
+                    <MudNavLink Href="/my-stats" Icon="@Icons.Material.Filled.ShowChart">My Training</MudNavLink>
+                </Authorized>
+            </AuthorizeView>
+            <MudNavLink Href="/gym-explorer" Icon="@Icons.Material.Filled.ViewInAr">Gym Explorer</MudNavLink>
+            <MudNavLink Href="/" Icon="@Icons.Material.Filled.SpaceDashboard" Match="NavLinkMatch.All">Overview</MudNavLink>
+        </nav>
+        <MudDivider Class="my-3" />
+        <nav class="mobile-secondary-navigation" aria-label="Account and legal navigation">
+            <AuthorizeView>
+                <Authorized>
+                    <MudNavLink Href="/player-account" Icon="@Icons.Material.Filled.ManageAccounts">Account &amp; Connections</MudNavLink>
+                </Authorized>
+            </AuthorizeView>
             <MudNavLink Href="/privacy" Icon="@Icons.Material.Filled.PrivacyTip">Privacy</MudNavLink>
-            <MudNavLink Href="/security" Icon="@Icons.Material.Filled.Key">Security</MudNavLink>
-        </MudNavMenu>
+            <MudNavLink Href="/terms" Icon="@Icons.Material.Filled.Gavel">Terms</MudNavLink>
+            <MudNavLink Href="/security" Icon="@Icons.Material.Filled.Security">Security</MudNavLink>
+        </nav>
     </MudDrawer>
 
     <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-6 pb-4">
-            @Body
-        </MudContainer>
-        <MudDivider />
-        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-3">
-            <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary">
-                Happy Gym Stats — Data stored locally, never shared externally.
-            </MudText>
-        </MudContainer>
+        <div class="@ShellContentClass">
+            <main class="@PageContentClass" id="main-content">
+                @Body
+            </main>
+            <footer class="app-footer">
+                <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary">
+                    Happy Gym Stats — Data stored locally, never shared externally.
+                </MudText>
+            </footer>
+        </div>
     </MudMainContent>
 </MudLayout>
 
 @code {
-    private bool _drawerOpen;
+    private bool _desktopRailCollapsed;
+    private bool _mobileDrawerOpen;
 
-    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+    private string DesktopRailClass => _desktopRailCollapsed
+        ? "desktop-rail desktop-rail--collapsed"
+        : "desktop-rail";
+
+    private string ShellContentClass => _desktopRailCollapsed
+        ? "shell-content shell-content--rail-collapsed"
+        : "shell-content";
+
+    private string CurrentPath
+    {
+        get
+        {
+            var relative = Navigation.ToBaseRelativePath(Navigation.Uri);
+            var delimiterIndex = relative.IndexOfAny(['?', '#']);
+            if (delimiterIndex >= 0)
+                relative = relative[..delimiterIndex];
+
+            return string.IsNullOrWhiteSpace(relative) ? "/" : $"/{relative.TrimStart('/')}";
+        }
+    }
+
+    private string CurrentPageTitle => CurrentPath switch
+    {
+        "/" => "Overview",
+        var path when path.StartsWith("/war/scout", StringComparison.OrdinalIgnoreCase) => "Opponent Scout",
+        var path when path.StartsWith("/war", StringComparison.OrdinalIgnoreCase) => "Live War",
+        "/chain-calculator" => "Chain Planner",
+        "/my-stats" => "My Training",
+        "/gym-explorer" => "Gym Explorer",
+        "/player-account" => "Account & Connections",
+        "/settings" => "Preferences",
+        "/privacy" => "Privacy",
+        "/terms" => "Terms",
+        "/security" => "Security",
+        _ => "Happy Gym Stats"
+    };
+
+    private string PageContentClass => CurrentPath switch
+    {
+        var path when path.StartsWith("/war", StringComparison.OrdinalIgnoreCase) => "page-content page-content--wide",
+        "/chain-calculator" => "page-content page-content--wide",
+        "/player-account" or "/settings" or "/privacy" or "/terms" or "/security" => "page-content page-content--reading",
+        _ => "page-content"
+    };
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private void ToggleDesktopRail() => _desktopRailCollapsed = !_desktopRailCollapsed;
+
+    private void ToggleMobileDrawer() => _mobileDrawerOpen = !_mobileDrawerOpen;
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs args)
+    {
+        _mobileDrawerOpen = false;
+        _ = InvokeAsync(StateHasChanged);
+    }
 
     private void SignIn()
     {
@@ -98,4 +247,8 @@
         Navigation.NavigateTo("/auth/logout?returnUrl=%2F", forceLoad: true);
     }
 
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
 }
