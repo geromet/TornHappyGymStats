@@ -1,0 +1,23 @@
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+    <div>
+        <MudText Typo="Typo.h4">War board</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary">
+            Live roster, score, chain, coverage ratio, hole alerts, and stale-health visibility from the repository-backed public war state.
+        </MudText>
+    </div>
+    <MudButton Variant="Variant.Filled"
+               Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Refresh"
+               OnClick="OnRefresh"
+               Disabled="@IsLoading">
+        Refresh
+    </MudButton>
+</MudStack>
+
+@code {
+    [Parameter]
+    public bool IsLoading { get; set; }
+
+    [Parameter]
+    public EventCallback OnRefresh { get; set; }
+}
