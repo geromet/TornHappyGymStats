@@ -16,7 +16,8 @@ public sealed class WarBoardStaticContractTests
         Assert.Contains("@rendermode InteractiveServer", content, StringComparison.Ordinal);
         Assert.Contains("Coverage ratio", content, StringComparison.Ordinal);
         Assert.Contains("Hole alerts", content, StringComparison.Ordinal);
-        Assert.Contains("Stale data.", content, StringComparison.Ordinal);
+        Assert.Contains("<StaleDataBanner", content, StringComparison.Ordinal);
+        Assert.Contains("Review heartbeat, warnings, and hub connection status before acting on roster gaps.", content, StringComparison.Ordinal);
         Assert.Contains("Hub connection", content, StringComparison.Ordinal);
         Assert.Contains("Attacks to finish", content, StringComparison.Ordinal);
         Assert.Contains("Hospital countdown", content, StringComparison.Ordinal);
