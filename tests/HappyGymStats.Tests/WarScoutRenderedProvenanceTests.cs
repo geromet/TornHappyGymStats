@@ -10,24 +10,25 @@ using MudBlazor.Services;
 
 namespace HappyGymStats.Tests;
 
-public sealed class WarScoutRenderedProvenanceTests : BunitContext
+public sealed class WarScoutRenderedProvenanceTests
 {
     [Fact]
-    public void Representative_scout_profile_renders_truthful_provenance_semantics()
+    public async Task Representative_scout_profile_renders_truthful_provenance_semantics()
     {
-        JSInterop.Mode = JSRuntimeMode.Loose;
-        Services.AddLogging();
-        Services.AddMudServices(options => options.PopoverOptions.CheckForPopoverProvider = false);
+        await using var context = new BunitContext();
+        context.JSInterop.Mode = JSRuntimeMode.Loose;
+        context.Services.AddLogging();
+        context.Services.AddMudServices(options => options.PopoverOptions.CheckForPopoverProvider = false);
 
         using var http = new HttpClient(new ScoutProfileHandler())
         {
             BaseAddress = new Uri("http://localhost")
         };
 
-        Services.AddSingleton<WarScoutService>(provider =>
+        context.Services.AddSingleton<WarScoutService>(provider =>
             new WarScoutService(http, provider.GetRequiredService<ILogger<WarScoutService>>()));
 
-        var cut = Render<WarScout>(parameters => parameters
+        var cut = context.Render<WarScout>(parameters => parameters
             .Add(component => component.FactionId, ScoutProfileHandler.FactionId));
 
         cut.WaitForAssertion(() =>
