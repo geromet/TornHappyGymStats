@@ -40,6 +40,13 @@ public sealed record WarPayoutPolicy(
     }
 }
 
+public sealed record StoredWarPayoutPolicy(
+    long FactionId,
+    long WarId,
+    WarPayoutPolicy Policy,
+    string ChangedBy,
+    DateTimeOffset CreatedAtUtc);
+
 public sealed record WarPayoutLine(
     long MemberId,
     string MemberName,
@@ -63,6 +70,58 @@ public sealed record WarPayoutReconciliation(
     decimal AllocatedAmount,
     decimal UnattributedResidual,
     IReadOnlyList<WarPayoutLine> Lines);
+
+public sealed record FrozenWarPayoutResult(
+    Guid RunId,
+    long FactionId,
+    long WarId,
+    Guid SourceSnapshotId,
+    int PolicyVersion,
+    decimal PoolAmount,
+    decimal AllocatedAmount,
+    decimal UnattributedResidual,
+    string CalculatedBy,
+    DateTimeOffset CalculatedAtUtc,
+    IReadOnlyList<WarPayoutLine> Lines);
+
+public interface IWarPayoutRepository
+{
+    Task<StoredWarPayoutPolicy> AppendPolicyAsync(
+        long factionId,
+        long warId,
+        decimal scoreRate,
+        decimal chainRate,
+        decimal attackRate,
+        decimal fixedMemberAmount,
+        string changedBy,
+        DateTimeOffset createdAtUtc,
+        CancellationToken ct);
+
+    Task<StoredWarPayoutPolicy?> GetPolicyAsync(
+        long factionId,
+        long warId,
+        int version,
+        CancellationToken ct);
+
+    Task<IReadOnlyList<StoredWarPayoutPolicy>> GetPolicyHistoryAsync(
+        long factionId,
+        long warId,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Calculates from the run's immutable source snapshot and the exact persisted
+    /// policy version, then persists one append-only reconciliation and member lines.
+    /// </summary>
+    Task<FrozenWarPayoutResult> CalculateAndFreezeAsync(
+        Guid runId,
+        int policyVersion,
+        decimal poolAmount,
+        string calculatedBy,
+        DateTimeOffset calculatedAtUtc,
+        CancellationToken ct);
+
+    Task<FrozenWarPayoutResult?> GetFrozenAsync(Guid runId, CancellationToken ct);
+}
 
 public static class WarPayoutCalculator
 {
