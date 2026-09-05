@@ -50,11 +50,65 @@ jobs:
       - name: Restore
         run: dotnet restore
 
-      # Canonical source/contracts/build gate plus the hermetic non-Postgres
-      # suite. The relational tier is a separate required-capable job below so
-      # neither environment can silently stand in for the other.
+      # Canonical source/contracts/build gate plus the hermetic legacy suite.
+      # The explicit tier jobs below run the same inventory through isolated
+      # UnitTests and IntegrationTests projects while #69 migrates file layout.
       - name: scripts/verify/build-and-test.sh
         run: bash scripts/verify/build-and-test.sh
+
+  unit:
+    name: unit tests
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install .NET (version from global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Restore unit tier
+        run: dotnet restore tests/HappyGymStats.UnitTests/HappyGymStats.UnitTests.csproj
+      - name: Run unit tier
+        run: dotnet test tests/HappyGymStats.UnitTests/HappyGymStats.UnitTests.csproj --nologo --no-restore
+
+  integration:
+    name: integration tests (non-Postgres)
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install .NET (version from global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Restore integration tier
+        run: dotnet restore tests/HappyGymStats.IntegrationTests/HappyGymStats.IntegrationTests.csproj
+      - name: Run non-Postgres integration tier
+        run: dotnet test tests/HappyGymStats.IntegrationTests/HappyGymStats.IntegrationTests.csproj --nologo --no-restore --filter "Category!=PostgresApiIntegration"
+
+  tier-parity:
+    name: test tier discovery parity
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install .NET (version from global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Restore legacy and explicit tiers
+        run: |
+          dotnet restore tests/HappyGymStats.Tests/HappyGymStats.Tests.csproj
+          dotnet restore tests/HappyGymStats.UnitTests/HappyGymStats.UnitTests.csproj
+          dotnet restore tests/HappyGymStats.IntegrationTests/HappyGymStats.IntegrationTests.csproj
+      - name: Prove no test disappeared or was duplicated
+        run: bash scripts/verify/test-tier-parity.sh
 
   architecture:
     name: architecture tests
