@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="bunit" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="M004UnitGateTests.cs" />
+    <Compile Include="..\HappyGymStats.Tests\*.cs"
+             Exclude="..\HappyGymStats.Tests\WarBoardStaticContractTests.cs;..\HappyGymStats.Tests\WarScoutStaticContractTests.cs;..\HappyGymStats.Tests\ApiEndpointTests.cs;..\HappyGymStats.Tests\CombatIntelPostgresPersistenceTests.cs;..\HappyGymStats.Tests\ConsentRecordPersistenceTests.cs;..\HappyGymStats.Tests\DbPipelineIntegrationTests.cs;..\HappyGymStats.Tests\DevelopmentAuthenticationTests.cs;..\HappyGymStats.Tests\HappyGymStatsDbContextTests.cs;..\HappyGymStats.Tests\ImportResumeEndpointSecurityTests.cs;..\HappyGymStats.Tests\InternalWarNotificationBoundaryTests.cs;..\HappyGymStats.Tests\M004FinalGateTests.cs;..\HappyGymStats.Tests\PostgresApiIntegrationTests.cs;..\HappyGymStats.Tests\PostgresImportRunTenantIsolationTests.cs;..\HappyGymStats.Tests\RankedWarHistoryBackfillStateRepositoryTests.cs;..\HappyGymStats.Tests\StoredApiKeyPersistenceTests.cs;..\HappyGymStats.Tests\StoredApiKeyPostgresPersistenceTests.cs;..\HappyGymStats.Tests\WarAccountingRunPostgresPersistenceTests.cs;..\HappyGymStats.Tests\WarAccountingSourcePostgresPersistenceTests.cs;..\HappyGymStats.Tests\WarApiHubEndpointTests.cs;..\HappyGymStats.Tests\WarHistoryPersistenceTests.cs;..\HappyGymStats.Tests\WarObjectiveAuthorizationTests.cs;..\HappyGymStats.Tests\WarObjectivePostgresPersistenceTests.cs;..\HappyGymStats.Tests\WarPayoutPostgresPersistenceTests.cs;..\HappyGymStats.Tests\WarPersistenceTests.cs;..\HappyGymStats.Tests\WarReadinessPostgresPersistenceTests.cs;..\HappyGymStats.Tests\WarScoutEndpointTests.cs"
+             Link="%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\HappyGymStats.Core\HappyGymStats.Core.csproj" />
+    <ProjectReference Include="..\..\src\HappyGymStats.Data\HappyGymStats.Data.csproj" />
+    <ProjectReference Include="..\..\src\HappyGymStats.Api\HappyGymStats.Api.csproj" />
+    <ProjectReference Include="..\..\src\HappyGymStats.WarPoller\HappyGymStats.WarPoller.csproj" />
+    <ProjectReference Include="..\..\src\HappyGymStats.Blazor\HappyGymStats.Blazor\HappyGymStats.Blazor.csproj" />
+  </ItemGroup>
+
+  <Target Name="RemoveInheritedHostAppSettings" AfterTargets="Build;Publish">
+    <ItemGroup>
+      <_InheritedHostAppSettings Include="$(OutDir)appsettings.json" />
+      <_InheritedHostAppSettings Include="$(OutDir)appsettings.*.json" />
+    </ItemGroup>
+    <Delete Files="@(_InheritedHostAppSettings)" />
+  </Target>
+</Project>
