@@ -22,16 +22,17 @@
 
     @if (_isLoading && _profile is null && _failure is null)
     {
-        <LoadingState Message="Loading scouting report..." Class="mb-0" />
+        <MudAlert Severity="Severity.Info" Dense="true">Loading scouting report...</MudAlert>
     }
 
-    @if (_failure is { Category: ApiFailureCategory.NotFound })
+    @if (_failure is not null)
     {
-        <EmptyState Message="No history yet. No captured ranked-war history exists yet for this faction. Backfill may still be in progress." Class="mb-0" />
-    }
-    else if (_failure is not null)
-    {
-        <ErrorState Message="@($"Scouting report unavailable. {_failure.SafeMessage}")" Dense="true" Class="mb-0" />
+        <MudAlert Severity="@(_failure.Category == ApiFailureCategory.NotFound ? Severity.Warning : Severity.Error)" Dense="true" Variant="Variant.Filled">
+            <strong>@(_failure.Category == ApiFailureCategory.NotFound ? "No history yet." : "Scouting report unavailable.")</strong>
+            @(_failure.Category == ApiFailureCategory.NotFound
+                ? "No captured ranked-war history exists yet for this faction. Backfill may still be in progress."
+                : _failure.SafeMessage)
+        </MudAlert>
     }
 
     @if (_profile is { } profile)
