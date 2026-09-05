@@ -256,7 +256,7 @@ public sealed class RankedWarHistoryBackfillFailureTests
         SqliteConnection connection,
         HttpMessageHandler handler,
         WarPollerOptions options,
-        IWarPollerClock clock)
+        TimeProvider clock)
     {
         await using (var db = new HappyGymStatsDbContext(CreateContextOptions(connection)))
         {
@@ -285,7 +285,7 @@ public sealed class RankedWarHistoryBackfillFailureTests
             RankedWarHistoryBackfillMaxFailureBackoffSeconds = maxFailureBackoffSeconds,
         };
 
-    private static RankedWarHistoryBackfillWorker CreateWorker(HappyGymStatsDbContext db, HttpMessageHandler handler, WarPollerOptions options, IWarPollerClock clock)
+    private static RankedWarHistoryBackfillWorker CreateWorker(HappyGymStatsDbContext db, HttpMessageHandler handler, WarPollerOptions options, TimeProvider clock)
     {
         var tornApiClient = new TornApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.torn.com/") });
         var warHistoryRepository = new WarHistoryRepository(db);
@@ -322,11 +322,11 @@ public sealed class RankedWarHistoryBackfillFailureTests
         throw new InvalidOperationException("Could not locate repository root from test output directory.");
     }
 
-    private sealed class FixedWarPollerClock(DateTimeOffset now) : IWarPollerClock
+    private sealed class FixedWarPollerClock(DateTimeOffset now) : TimeProvider
     {
         public DateTimeOffset UtcNow => now;
 
-        public Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken) => Task.CompletedTask;
+        public override DateTimeOffset GetUtcNow() => now;
     }
 
     private sealed class StaticHttpMessageHandler(Func<HttpResponseMessage> responder) : HttpMessageHandler
