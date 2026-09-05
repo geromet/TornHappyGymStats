@@ -68,9 +68,13 @@ public sealed class SharedStateAdoptionTests
     public void War_failure_copy_does_not_render_service_failure_detail()
     {
         var war = ReadWarPresentation();
+        var diagnostics = ReadRepoFile(
+            "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/War/WarDiagnosticsPanel.razor");
 
         Assert.DoesNotContain("WarBoard.CurrentFailure.SafeMessage", war, StringComparison.Ordinal);
-        Assert.DoesNotContain("@WarBoard.ConnectionError", war, StringComparison.Ordinal);
+        // Passing ConnectionError into the diagnostics component is allowed so it can decide
+        // whether a generic error state exists. The raw value itself must never be rendered.
+        Assert.DoesNotContain("@ConnectionError", diagnostics, StringComparison.Ordinal);
     }
 
     [Fact]
