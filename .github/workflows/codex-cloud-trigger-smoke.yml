@@ -1,0 +1,171 @@
+name: Codex Cloud trigger smoke test
+
+# Manual-only diagnostic for issue #232 (child of #227): post exactly one
+# github-actions[bot] comment that invokes Codex Cloud, so a maintainer can
+# verify Actions-bot-authored triggering and same-token deduplication.
+#
+# Deliberately minimal trust surface:
+#   - workflow_dispatch only; no push / pull_request / issues / schedule triggers.
+#   - top-level `permissions: {}`; the single job requests only
+#     `pull-requests: write` (post the comment) and `issues: read` (read #140).
+#     No contents/actions write, no repository secrets, no provider API keys.
+#   - never checks out or executes pull-request code. The fixed prompt template is
+#     read from the dispatched (trusted) ref via the GitHub contents API.
+#   - inputs are validated (numeric PR that is open in THIS repo; charset-limited
+#     token) and every failure path fails closed.
+#   - re-running with an already-used token is a NO-OP (no second comment/task).
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_pr:
+        description: Open pull request number in this repository to receive the one diagnostic comment
+        required: true
+        type: string
+      diagnostic_token:
+        description: "Unique new diagnostic token, ^[a-z0-9][a-z0-9-]{6,62}[a-z0-9]$ (never reuse a completed token)"
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: codex-cloud-trigger-smoke
+  cancel-in-progress: false
+
+jobs:
+  trigger:
+    name: Post one github-actions[bot] Codex diagnostic
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pull-requests: write
+      issues: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TARGET_PR: ${{ inputs.target_pr }}
+      DIAGNOSTIC_TOKEN: ${{ inputs.diagnostic_token }}
+      PROMPT_PATH: .github/agent/codex-cloud-trigger-smoke.prompt.md
+      TRUSTED_REF: ${{ github.sha }}
+    steps:
+      - name: Validate inputs and coordination state (fail closed)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if ! printf '%s' "${DIAGNOSTIC_TOKEN}" | grep -Eq '^[a-z0-9][a-z0-9-]{6,62}[a-z0-9]$'; then
+            echo "::error::diagnostic_token must match ^[a-z0-9][a-z0-9-]{6,62}[a-z0-9]$ (lowercase, digits, hyphens; 8-64 chars)"
+            exit 1
+          fi
+
+          if ! printf '%s' "${TARGET_PR}" | grep -Eq '^[1-9][0-9]{0,6}$'; then
+            echo "::error::target_pr must be a positive integer"
+            exit 1
+          fi
+
+          pr_state="$(gh api "repos/${GH_REPO}/pulls/${TARGET_PR}" --jq '.state' 2>/dev/null || true)"
+          if [ "${pr_state}" != "open" ]; then
+            echo "::error::#${TARGET_PR} is not an open pull request in ${GH_REPO} (state='${pr_state:-not-found}')"
+            exit 1
+          fi
+
+          # Coordination state must be readable, or fail closed.
+          if ! gh api "repos/${GH_REPO}/issues/140" --jq '.number' >/dev/null 2>&1; then
+            echo "::error::coordination issue #140 is not readable with this token; fail closed"
+            exit 1
+          fi
+
+          echo "Validated: target PR #${TARGET_PR} is open; #140 readable."
+
+      - name: NO-OP if this token was already posted to the target PR
+        id: dedup
+        shell: bash
+        run: |
+          set -euo pipefail
+          needle="Diagnostic token: ${DIAGNOSTIC_TOKEN}."
+          comments="$(gh api --paginate "repos/${GH_REPO}/issues/${TARGET_PR}/comments")"
+          existing="$(printf '%s' "${comments}" \
+            | jq -r --arg n "${needle}" 'map(select(.body != null and (.body | contains($n)))) | (.[0].html_url // "")')"
+          if [ -n "${existing}" ]; then
+            echo "skip=true" >> "${GITHUB_OUTPUT}"
+            echo "existing=${existing}" >> "${GITHUB_OUTPUT}"
+            echo "Token already present on #${TARGET_PR}: ${existing}"
+          else
+            echo "skip=false" >> "${GITHUB_OUTPUT}"
+            echo "Token not yet present on #${TARGET_PR}."
+          fi
+
+      - name: Compose the fixed diagnostic body from the trusted template
+        if: steps.dedup.outputs.skip == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Read the template from the dispatched (trusted) ref, not the working
+          # tree and not any PR head. Only the pre-validated token is substituted.
+          gh api "repos/${GH_REPO}/contents/${PROMPT_PATH}?ref=${TRUSTED_REF}" \
+            --jq '.content' | base64 --decode > "${RUNNER_TEMP}/template.md"
+
+          if ! grep -q '__DIAGNOSTIC_TOKEN__' "${RUNNER_TEMP}/template.md"; then
+            echo "::error::prompt template is missing the __DIAGNOSTIC_TOKEN__ placeholder"
+            exit 1
+          fi
+
+          # DIAGNOSTIC_TOKEN already matches ^[a-z0-9-]+$, so it is safe in the
+          # sed replacement and cannot introduce delimiters or metacharacters.
+          sed "s/__DIAGNOSTIC_TOKEN__/${DIAGNOSTIC_TOKEN}/g" \
+            "${RUNNER_TEMP}/template.md" > "${RUNNER_TEMP}/body.md"
+
+          echo "Composed diagnostic body ($(wc -c < "${RUNNER_TEMP}/body.md") bytes)."
+
+      - name: Post exactly one diagnostic comment
+        if: steps.dedup.outputs.skip == 'false'
+        id: post
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Body is passed as a structured JSON field read from a file; no issue or
+          # PR text is ever interpolated into the shell.
+          response="$(jq -n --rawfile body "${RUNNER_TEMP}/body.md" '{body: $body}' \
+            | gh api --method POST "repos/${GH_REPO}/issues/${TARGET_PR}/comments" --input -)"
+          comment_id="$(printf '%s' "${response}" | jq -r '.id')"
+          comment_url="$(printf '%s' "${response}" | jq -r '.html_url')"
+          comment_author="$(printf '%s' "${response}" | jq -r '.user.login')"
+          {
+            echo "id=${comment_id}"
+            echo "url=${comment_url}"
+            echo "author=${comment_author}"
+          } >> "${GITHUB_OUTPUT}"
+          if [ "${comment_author}" != "github-actions[bot]" ]; then
+            echo "::warning::comment author is '${comment_author}', expected 'github-actions[bot]'"
+          fi
+
+      - name: Job summary
+        if: always()
+        shell: bash
+        env:
+          DEDUP_SKIP: ${{ steps.dedup.outputs.skip }}
+          DEDUP_EXISTING: ${{ steps.dedup.outputs.existing }}
+          POSTED_ID: ${{ steps.post.outputs.id }}
+          POSTED_URL: ${{ steps.post.outputs.url }}
+          POSTED_AUTHOR: ${{ steps.post.outputs.author }}
+        run: |
+          {
+            echo "### Codex Cloud trigger smoke test"
+            echo
+            echo "- token: \`${DIAGNOSTIC_TOKEN}\`"
+            echo "- target PR: #${TARGET_PR}"
+            echo "- workflow run: ${GITHUB_SERVER_URL}/${GH_REPO}/actions/runs/${GITHUB_RUN_ID}"
+            if [ "${DEDUP_SKIP}" = "true" ]; then
+              echo "- result: **NO-OP** — token already present at ${DEDUP_EXISTING}"
+            else
+              echo "- result: posted comment \`${POSTED_ID}\`"
+              echo "- comment: ${POSTED_URL}"
+              echo "- author: \`${POSTED_AUTHOR}\` (expected \`github-actions[bot]\`)"
+              echo
+              echo "Next (maintainer): wait a bounded 10 minutes for the Codex connector"
+              echo "reaction/response. Record the task URL, observed checkout SHA, environment"
+              echo "name/ID and account/usage attribution on #232, summarize on #227. An eyes"
+              echo "reaction or a successful POST is not completion proof."
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
