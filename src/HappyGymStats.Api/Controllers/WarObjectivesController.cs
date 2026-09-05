@@ -24,7 +24,12 @@ public sealed class WarObjectivesController(IWarObjectiveRepository objectives) 
     public async Task<IActionResult> GetHistory(long factionId, long warId, CancellationToken ct)
         => Ok((await objectives.GetHistoryAsync(factionId, warId, ct)).Select(ToDto));
 
-    [Authorize(Roles = Roles.FactionOwner + "," + Roles.Admin)]
+    // The current identity model grants faction-owner as a global role and does not
+    // carry a claim that binds that role to the client-supplied Torn faction id.
+    // Until that binding exists, accepting faction-owner here would let one owner
+    // target another faction simply by changing request.FactionId. Keep mutation
+    // admin-only rather than pretending the role itself establishes data scope.
+    [Authorize(Roles = Roles.Admin)]
     [HttpPost]
     public async Task<IActionResult> Append(
         [FromBody] AppendWarObjectiveRequest request,
