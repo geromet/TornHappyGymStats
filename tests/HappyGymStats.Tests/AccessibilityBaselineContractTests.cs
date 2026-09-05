@@ -17,8 +17,8 @@ public sealed class AccessibilityBaselineContractTests
         Assert.Contains("button", css, StringComparison.Ordinal);
         Assert.Contains("input", css, StringComparison.Ordinal);
         Assert.Contains("[tabindex]:not([tabindex=\"-1\"])", css, StringComparison.Ordinal);
-        Assert.Contains("outline: 3px solid", css, StringComparison.Ordinal);
-        Assert.Contains("outline-offset: 3px", css, StringComparison.Ordinal);
+        Assert.Contains("outline: 3px solid var(--mud-palette-primary) !important", css, StringComparison.Ordinal);
+        Assert.Contains("outline-offset: 3px !important", css, StringComparison.Ordinal);
     }
 
     [Fact]
