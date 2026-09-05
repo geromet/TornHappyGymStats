@@ -5,7 +5,7 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
 readonly ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 readonly ARCHITECTURE="${ROOT_DIR}/docs/fleet/SELF-IMPROVING-FLEET.md"
-readonly ACTIVITY="${ROOT_DIR}/docs/fleet/archive/activity/2026-09.md"
+readonly ACTIVITY_DIR="${ROOT_DIR}/docs/fleet/archive/activity"
 readonly CHANGES="${ROOT_DIR}/docs/fleet/archive/instruction-changes.md"
 
 fail() {
@@ -24,30 +24,14 @@ require_literal() {
     || fail "${file#"${ROOT_DIR}/"} missing required contract text: ${literal}"
 }
 
-require_file "${ARCHITECTURE}"
-require_file "${ACTIVITY}"
-require_file "${CHANGES}"
+validate_activity_archive() {
+  local activity="$1"
 
-# Keep the durable files and live trackers wired together in the architecture contract.
-require_literal "${ARCHITECTURE}" 'docs/fleet/archive/activity/YYYY-MM.md'
-require_literal "${ARCHITECTURE}" 'docs/fleet/archive/instruction-changes.md'
-require_literal "${ARCHITECTURE}" '#170'
-require_literal "${ARCHITECTURE}" '#171'
-require_literal "${ARCHITECTURE}" 'no fleet merge into a repository default branch'
-require_literal "${ARCHITECTURE}" 'truthful evidence / no invented verification'
+  if grep -Fq 'FLEET-PROMPT-CHANGE |' "${activity}"; then
+    fail "${activity#"${ROOT_DIR}/"} contains a prompt-change marker"
+  fi
 
-# Activity snapshots and prompt-change records are intentionally separate durable streams.
-if grep -Fq 'FLEET-PROMPT-CHANGE |' "${ACTIVITY}"; then
-  fail "activity archive contains a prompt-change marker"
-fi
-if grep -Fq 'FLEET-SNAPSHOT |' "${CHANGES}"; then
-  fail "instruction-change archive contains an activity snapshot marker"
-fi
-
-# Activity labels are intentionally allowed to evolve (for example proof/recovery,
-# stable/integration, or capacity/integration). Pin the durable envelope rather than
-# rewriting append-only history to fit one rigid vocabulary.
-awk '
+  awk '
 function finish_entry() {
   if (!in_entry) return
   if (snapshot != 1) {
@@ -78,7 +62,54 @@ END {
   }
   exit failed
 }
-' "${ACTIVITY}"
+' "${activity}"
+}
+
+require_file "${ARCHITECTURE}"
+require_file "${CHANGES}"
+[[ -d "${ACTIVITY_DIR}" ]] || fail "missing activity archive directory: docs/fleet/archive/activity"
+
+# Keep the durable files and live trackers wired together in the architecture contract.
+require_literal "${ARCHITECTURE}" 'docs/fleet/archive/activity/YYYY-MM.md'
+require_literal "${ARCHITECTURE}" 'docs/fleet/archive/instruction-changes.md'
+require_literal "${ARCHITECTURE}" '#170'
+require_literal "${ARCHITECTURE}" '#171'
+require_literal "${ARCHITECTURE}" 'no fleet merge into a repository default branch'
+require_literal "${ARCHITECTURE}" 'truthful evidence / no invented verification'
+
+# Validate every monthly archive, not only the month in which this verifier was introduced.
+# This keeps the executable contract aligned with the documented YYYY-MM.md topology.
+shopt -s nullglob
+activity_files=("${ACTIVITY_DIR}"/*.md)
+(( ${#activity_files[@]} > 0 )) || fail "activity archive has no monthly files"
+for activity in "${activity_files[@]}"; do
+  filename="${activity##*/}"
+  [[ "${filename}" =~ ^[0-9]{4}-(0[1-9]|1[0-2])\.md$ ]] \
+    || fail "invalid monthly activity archive filename: ${filename}"
+  validate_activity_archive "${activity}"
+done
+
+# Month-agnostic regression: the same validator must accept a valid future-month archive.
+tmp_dir="$(mktemp -d)"
+trap 'rm -rf "${tmp_dir}"' EXIT
+future_activity="${tmp_dir}/2099-12.md"
+cat >"${future_activity}" <<'EOF'
+# Fleet Activity Archive — 2099-12
+
+## 2099-12-01T00:00Z — future-month contract fixture
+
+FLEET-SNAPSHOT | period=2099-12-01T00:00Z..2099-12-01T01:00Z
+repos: fixture repository
+shipped: fixture result
+coordination: fixture coordination state
+next-pressure: fixture next pressure
+EOF
+validate_activity_archive "${future_activity}"
+
+# Activity snapshots and prompt-change records are intentionally separate durable streams.
+if grep -Fq 'FLEET-SNAPSHOT |' "${CHANGES}"; then
+  fail "instruction-change archive contains an activity snapshot marker"
+fi
 
 # Every instruction change must be self-contained enough to evaluate and roll back.
 awk '
@@ -119,4 +150,4 @@ END {
 }
 ' "${CHANGES}"
 
-printf 'PASS: fleet archive structure, tracker wiring, and audit fields are deterministic\n'
+printf 'PASS: fleet archive structure, all monthly activity files, tracker wiring, and audit fields are deterministic\n'
