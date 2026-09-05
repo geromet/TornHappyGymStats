@@ -29,6 +29,7 @@ jobs:
     env:
       DOTNET_NOLOGO: '1'
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      HAPPYGYMSTATS_DEV_SEED_SCOUT: '1'
     steps:
       - uses: actions/checkout@v4
 
