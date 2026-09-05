@@ -42,35 +42,51 @@
                 <MudCard Class="war-summary-card">
                     <MudCardContent>
                         <MudText Typo="Typo.overline">@profile.FactionName</MudText>
-                        <MudText Typo="Typo.h5">@profile.TotalWarsObserved wars observed</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">@FormatDateRange(profile.EarliestWarStartedAtUtc, profile.LatestWarStartedAtUtc)</MudText>
+                        <Figure Label="Wars observed"
+                                Value="@profile.TotalWarsObserved.ToString()"
+                                Kind="@WarScoutProvenance.For(WarScoutMetric.TotalWarsObserved)"
+                                ValueTypo="Typo.h5" />
+                        <Figure Label="Observed window"
+                                Value="@FormatDateRange(profile.EarliestWarStartedAtUtc, profile.LatestWarStartedAtUtc)"
+                                Kind="@WarScoutProvenance.For(WarScoutMetric.ObservedDateRange)"
+                                ValueTypo="Typo.body2" />
                     </MudCardContent>
                 </MudCard>
             </MudItem>
             <MudItem xs="12" md="3">
                 <MudCard Class="war-summary-card">
                     <MudCardContent>
-                        <MudText Typo="Typo.overline">Active members</MudText>
-                        <MudText Typo="Typo.h5">@profile.ActiveMemberCount</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Consistent + occasional swingers</MudText>
+                        <Figure Label="Active members"
+                                Value="@profile.ActiveMemberCount.ToString()"
+                                Kind="@WarScoutProvenance.For(WarScoutMetric.ActiveMemberCount)"
+                                Note="Consistent + occasional swingers"
+                                ValueTypo="Typo.h5" />
                     </MudCardContent>
                 </MudCard>
             </MudItem>
             <MudItem xs="12" md="3">
                 <MudCard Class="war-summary-card">
                     <MudCardContent>
-                        <MudText Typo="Typo.overline">Idle-prone members</MudText>
-                        <MudText Typo="Typo.h5">@profile.IdleProneMemberCount</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Idle in half or more of their wars</MudText>
+                        <Figure Label="Idle-prone members"
+                                Value="@profile.IdleProneMemberCount.ToString()"
+                                Kind="@WarScoutProvenance.For(WarScoutMetric.IdleProneMemberCount)"
+                                Note="Idle in half or more of their wars"
+                                ValueTypo="Typo.h5" />
                     </MudCardContent>
                 </MudCard>
             </MudItem>
             <MudItem xs="12" md="3">
                 <MudCard Class="war-summary-card">
                     <MudCardContent>
-                        <MudText Typo="Typo.overline">Roster size</MudText>
-                        <MudText Typo="Typo.h5">@profile.TypicalRosterSize</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Typical fielded per war (@profile.Members.Count seen total)</MudText>
+                        <Figure Label="Roster size"
+                                Value="@profile.TypicalRosterSize.ToString()"
+                                Kind="@WarScoutProvenance.For(WarScoutMetric.TypicalRosterSize)"
+                                Note="Typical fielded per war"
+                                ValueTypo="Typo.h5" />
+                        <Figure Label="Members seen"
+                                Value="@profile.Members.Count.ToString()"
+                                Kind="@WarScoutProvenance.For(WarScoutMetric.MembersSeen)"
+                                ValueTypo="Typo.body2" />
                     </MudCardContent>
                 </MudCard>
             </MudItem>
@@ -80,36 +96,48 @@
             <MudItem xs="12" md="3">
                 <MudCard Class="war-summary-card">
                     <MudCardContent>
-                        <MudText Typo="Typo.overline">Record</MudText>
-                        <MudText Typo="Typo.h5">@(profile.WarsWithKnownOutcome > 0 ? FormatPercent(profile.WinRate) : "—")</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Win rate — @profile.WarsWithKnownOutcome of @profile.TotalWarsObserved observed wars have a recorded outcome</MudText>
+                        <Figure Label="Record"
+                                Value="@(profile.WarsWithKnownOutcome > 0 ? FormatPercent(profile.WinRate) : "—")"
+                                Kind="@WarScoutProvenance.For(WarScoutMetric.WinRate)"
+                                Note="Win rate"
+                                ValueTypo="Typo.h5" />
+                        <Figure Label="Outcome sample"
+                                Value="@($"{profile.WarsWithKnownOutcome} of {profile.TotalWarsObserved} wars")"
+                                Kind="@WarScoutProvenance.For(WarScoutMetric.OutcomeSample)"
+                                ValueTypo="Typo.body2" />
                     </MudCardContent>
                 </MudCard>
             </MudItem>
             <MudItem xs="12" md="3">
                 <MudCard Class="war-summary-card">
                     <MudCardContent>
-                        <MudText Typo="Typo.overline">Typical target score</MudText>
-                        <MudText Typo="Typo.h5">@(profile.TypicalTargetScore > 0 ? profile.TypicalTargetScore.ToString("N0") : "—")</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Their median final score — what you must beat</MudText>
+                        <Figure Label="Typical target score"
+                                Value="@(profile.TypicalTargetScore > 0 ? profile.TypicalTargetScore.ToString("N0") : "—")"
+                                Kind="@WarScoutProvenance.For(WarScoutMetric.TypicalTargetScore)"
+                                Note="Their median final score — what you must beat"
+                                ValueTypo="Typo.h5" />
                     </MudCardContent>
                 </MudCard>
             </MudItem>
             <MudItem xs="12" md="3">
                 <MudCard Class="war-summary-card">
                     <MudCardContent>
-                        <MudText Typo="Typo.overline">Score pace</MudText>
-                        <MudText Typo="Typo.h5">@(profile.PointsPerHour is { } pph ? $"{pph:N0}/h" : "—")</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Median points per hour of war</MudText>
+                        <Figure Label="Score pace"
+                                Value="@(profile.PointsPerHour is { } pph ? $"{pph:N0}/h" : "—")"
+                                Kind="@WarScoutProvenance.For(WarScoutMetric.PointsPerHour)"
+                                Note="Median points per hour of completed wars"
+                                ValueTypo="Typo.h5" />
                     </MudCardContent>
                 </MudCard>
             </MudItem>
             <MudItem xs="12" md="3">
                 <MudCard Class="war-summary-card">
                     <MudCardContent>
-                        <MudText Typo="Typo.overline">Scoring concentration</MudText>
-                        <MudText Typo="Typo.h5">@FormatPercent(profile.Top5ScoreShare) top 5</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">@FormatPercent(profile.Top10ScoreShare) from the top 10 — high share favours lockdown</MudText>
+                        <Figure Label="Scoring concentration"
+                                Value="@($"{FormatPercent(profile.Top5ScoreShare)} top 5")"
+                                Kind="@WarScoutProvenance.For(WarScoutMetric.Top5ScoreShare)"
+                                Note="@($"{FormatPercent(profile.Top10ScoreShare)} from the top 10 — high share favours lockdown")"
+                                ValueTypo="Typo.h5" />
                     </MudCardContent>
                 </MudCard>
             </MudItem>
@@ -120,10 +148,13 @@
                 <CardHeaderContent>
                     <MudText Typo="Typo.h6">Per-member war history</MudText>
                     <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        Ranked by lump-adjusted score per attack — chain-milestone lump wars are detected against the
-                        faction baseline of <strong>@profile.MedianScorePerAttack</strong> score/attack, then their
-                        bonus is removed so a single well-timed crossing hit doesn't inflate the rating.
+                        Ranked by lump-adjusted score per attack. Chain-milestone lump wars are detected against the faction baseline, then their bonus is removed so a single well-timed crossing hit doesn't inflate the rating.
                     </MudText>
+                    <Figure Label="Faction baseline score/attack"
+                            Value="@profile.MedianScorePerAttack.ToString()"
+                            Kind="@WarScoutProvenance.For(WarScoutMetric.MedianScorePerAttack)"
+                            Note="Historical median used for lump detection"
+                            ValueTypo="Typo.body2" />
                 </CardHeaderContent>
             </MudCardHeader>
             <MudCardContent>
@@ -142,35 +173,71 @@
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd DataLabel="Member">
-                            @context.MemberName
+                            <MudText Typo="Typo.body2">@context.MemberName</MudText>
                             @if (context.LumpWarCount > 0)
                             {
-                                <MudTooltip Text="@($"{context.LumpWarCount} war(s) where a chain-milestone bonus was detected and removed from the rating")">
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">
-                                        @context.LumpWarCount lump
-                                    </MudChip>
-                                </MudTooltip>
+                                <Figure Label="Detected lump wars"
+                                        Value="@($"{context.LumpWarCount} lump")"
+                                        Kind="@WarScoutProvenance.For(WarScoutMetric.LumpWarCount)"
+                                        Compact="true"
+                                        ValueTypo="Typo.caption" />
                             }
                         </MudTd>
                         <MudTd DataLabel="Threat tier">
-                            <MudChip T="string" Size="Size.Small" Color="@GetTierColor(context.ThreatTier)">
-                                @FormatTier(context.ThreatTier)
-                            </MudChip>
+                            <Figure Label="Threat tier"
+                                    Value="@FormatTier(context.ThreatTier)"
+                                    Kind="@WarScoutProvenance.For(WarScoutMetric.ThreatTier)"
+                                    Compact="true" />
                         </MudTd>
-                        <MudTd DataLabel="Wars">@context.WarsParticipated</MudTd>
-                        <MudTd DataLabel="Participation">@FormatPercent(context.ParticipationRate)</MudTd>
-                        <MudTd DataLabel="Lump-adjusted score/attack">@context.LumpAdjustedScorePerAttack</MudTd>
-                        <MudTd DataLabel="Raw score/attack">@context.AverageScorePerAttack</MudTd>
+                        <MudTd DataLabel="Wars">
+                            <Figure Label="Wars participated"
+                                    Value="@context.WarsParticipated.ToString()"
+                                    Kind="@WarScoutProvenance.For(WarScoutMetric.WarsParticipated)"
+                                    Compact="true" />
+                        </MudTd>
+                        <MudTd DataLabel="Participation">
+                            <Figure Label="Participation rate"
+                                    Value="@FormatPercent(context.ParticipationRate)"
+                                    Kind="@WarScoutProvenance.For(WarScoutMetric.ParticipationRate)"
+                                    Compact="true" />
+                        </MudTd>
+                        <MudTd DataLabel="Lump-adjusted score/attack">
+                            <Figure Label="Lump-adjusted score per attack"
+                                    Value="@context.LumpAdjustedScorePerAttack.ToString()"
+                                    Kind="@WarScoutProvenance.For(WarScoutMetric.LumpAdjustedScorePerAttack)"
+                                    Compact="true" />
+                        </MudTd>
+                        <MudTd DataLabel="Raw score/attack">
+                            <Figure Label="Raw score per attack"
+                                    Value="@context.AverageScorePerAttack.ToString()"
+                                    Kind="@WarScoutProvenance.For(WarScoutMetric.AverageScorePerAttack)"
+                                    Compact="true" />
+                        </MudTd>
                         <MudTd DataLabel="Lump-adjusted score/war">
-                            @context.LumpAdjustedScorePerWar
-                            @if (context.RawMedianScorePerWar != context.LumpAdjustedScorePerWar)
-                            {
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">raw @context.RawMedianScorePerWar</MudText>
-                            }
+                            <Figure Label="Lump-adjusted score per war"
+                                    Value="@context.LumpAdjustedScorePerWar.ToString()"
+                                    Kind="@WarScoutProvenance.For(WarScoutMetric.LumpAdjustedScorePerWar)"
+                                    Note="@(context.RawMedianScorePerWar != context.LumpAdjustedScorePerWar ? $"raw median {context.RawMedianScorePerWar}" : null)"
+                                    Compact="true" />
                         </MudTd>
-                        <MudTd DataLabel="Score range">@context.MinScoreInAWar – @context.MaxScoreInAWar</MudTd>
-                        <MudTd DataLabel="Idle rate">@FormatPercent(context.IdleRate)</MudTd>
-                        <MudTd DataLabel="Last seen">@FormatTimestamp(context.LastSeenAtUtc)</MudTd>
+                        <MudTd DataLabel="Score range">
+                            <Figure Label="Observed score range"
+                                    Value="@($"{context.MinScoreInAWar} – {context.MaxScoreInAWar}")"
+                                    Kind="@WarScoutProvenance.For(WarScoutMetric.ScoreRange)"
+                                    Compact="true" />
+                        </MudTd>
+                        <MudTd DataLabel="Idle rate">
+                            <Figure Label="Idle rate"
+                                    Value="@FormatPercent(context.IdleRate)"
+                                    Kind="@WarScoutProvenance.For(WarScoutMetric.IdleRate)"
+                                    Compact="true" />
+                        </MudTd>
+                        <MudTd DataLabel="Last seen">
+                            <Figure Label="Last seen"
+                                    Value="@FormatTimestamp(context.LastSeenAtUtc)"
+                                    Kind="@WarScoutProvenance.For(WarScoutMetric.LastSeen)"
+                                    Compact="true" />
+                        </MudTd>
                     </RowTemplate>
                 </MudTable>
             </MudCardContent>
@@ -228,13 +295,5 @@
         "OccasionalSwinger" => "Occasional swinger",
         "IdleProne" => "Idle-prone",
         _ => tier
-    };
-
-    private static Color GetTierColor(string tier) => tier switch
-    {
-        "ConsistentSwinger" => Color.Error,
-        "OccasionalSwinger" => Color.Warning,
-        "IdleProne" => Color.Default,
-        _ => Color.Default
     };
 }
