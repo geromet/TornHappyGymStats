@@ -41,11 +41,27 @@ public sealed class WarAccountingRunRepository(HappyGymStatsDbContext db) : IWar
                 objectiveVersion = 1;
             }
 
+            var sourceFacts = await ReadSourceFactsAsync(
+                connection,
+                transaction,
+                factionId,
+                warId,
+                ct);
+            var source = WarAccountingSourceFingerprint.Create(
+                Guid.NewGuid(),
+                factionId,
+                warId,
+                sourceFacts,
+                frozenBy,
+                frozenAtUtc);
+            await InsertSourceAsync(connection, transaction, source, ct);
+
             var frozen = new FrozenWarAccountingRun(
                 runId,
                 factionId,
                 warId,
                 objectiveVersion.Value,
+                source.SourceSnapshotId,
                 frozenBy.Trim(),
                 frozenAtUtc.ToUniversalTime());
 
@@ -73,7 +89,7 @@ public sealed class WarAccountingRunRepository(HappyGymStatsDbContext db) : IWar
         {
             await using var command = connection.CreateCommand();
             command.CommandText = """
-                SELECT "RunId", "FactionId", "WarId", "ObjectiveVersion", "FrozenBy", "FrozenAtUtc"
+                SELECT "RunId", "FactionId", "WarId", "ObjectiveVersion", "SourceSnapshotId", "FrozenBy", "FrozenAtUtc"
                 FROM "WarAccountingRuns"
                 WHERE "RunId" = @runId
                 """;
@@ -81,6 +97,79 @@ public sealed class WarAccountingRunRepository(HappyGymStatsDbContext db) : IWar
 
             await using var reader = await command.ExecuteReaderAsync(ct);
             return await reader.ReadAsync(ct) ? ReadRun(reader) : null;
+        }
+        finally
+        {
+            if (shouldClose)
+                await connection.CloseAsync();
+        }
+    }
+
+    public async Task<FrozenWarAccountingSource?> GetSourceAsync(Guid sourceSnapshotId, CancellationToken ct)
+    {
+        ValidateRunId(sourceSnapshotId, nameof(sourceSnapshotId));
+        EnsurePostgres();
+        var connection = db.Database.GetDbConnection();
+        var shouldClose = connection.State != ConnectionState.Open;
+        if (shouldClose)
+            await connection.OpenAsync(ct);
+
+        try
+        {
+            long factionId;
+            long warId;
+            string fingerprint;
+            string capturedBy;
+            DateTimeOffset capturedAtUtc;
+
+            await using (var command = connection.CreateCommand())
+            {
+                command.CommandText = """
+                    SELECT "FactionId", "WarId", "Fingerprint", "CapturedBy", "CapturedAtUtc"
+                    FROM "WarAccountingSourceSnapshots"
+                    WHERE "SourceSnapshotId" = @sourceSnapshotId
+                    """;
+                AddParameter(command, "sourceSnapshotId", DbType.Guid, sourceSnapshotId);
+
+                await using var reader = await command.ExecuteReaderAsync(ct);
+                if (!await reader.ReadAsync(ct))
+                    return null;
+
+                factionId = reader.GetInt64(0);
+                warId = reader.GetInt64(1);
+                fingerprint = reader.GetString(2);
+                capturedBy = reader.GetString(3);
+                capturedAtUtc = ReadUtc(reader, 4);
+            }
+
+            var members = new List<WarAccountingSourceMemberFact>();
+            await using (var command = connection.CreateCommand())
+            {
+                command.CommandText = """
+                    SELECT "FactionId", "WarId", "MemberId", "MemberName", "Score", "Chain", "Attacks", "CapturedAtUtc"
+                    FROM "WarAccountingSourceMemberFacts"
+                    WHERE "SourceSnapshotId" = @sourceSnapshotId
+                    ORDER BY "MemberId"
+                    """;
+                AddParameter(command, "sourceSnapshotId", DbType.Guid, sourceSnapshotId);
+
+                await using var reader = await command.ExecuteReaderAsync(ct);
+                while (await reader.ReadAsync(ct))
+                    members.Add(ReadSourceMember(reader));
+            }
+
+            var computedFingerprint = WarAccountingSourceFingerprint.Compute(factionId, warId, members);
+            if (!string.Equals(fingerprint, computedFingerprint, StringComparison.Ordinal))
+                throw new InvalidDataException("Persisted war accounting source fingerprint does not match its immutable member facts.");
+
+            return new FrozenWarAccountingSource(
+                sourceSnapshotId,
+                factionId,
+                warId,
+                fingerprint,
+                capturedBy,
+                capturedAtUtc,
+                members.AsReadOnly());
         }
         finally
         {
@@ -261,6 +350,31 @@ public sealed class WarAccountingRunRepository(HappyGymStatsDbContext db) : IWar
         return value is null || value is DBNull ? null : Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
     }
 
+    private static async Task<IReadOnlyList<WarAccountingSourceMemberFact>> ReadSourceFactsAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        long factionId,
+        long warId,
+        CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT "FactionId", "WarId", "MemberId", "MemberName", "Score", "Chain", "Attacks", "CapturedAtUtc"
+            FROM "RankedWarReportMembers"
+            WHERE "FactionId" = @factionId AND "WarId" = @warId
+            ORDER BY "MemberId"
+            """;
+        AddParameter(command, "factionId", DbType.Int64, factionId);
+        AddParameter(command, "warId", DbType.Int64, warId);
+
+        var result = new List<WarAccountingSourceMemberFact>();
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            result.Add(ReadSourceMember(reader));
+        return result;
+    }
+
     private static async Task InsertBaselineObjectiveAsync(
         DbConnection connection,
         DbTransaction transaction,
@@ -285,6 +399,55 @@ public sealed class WarAccountingRunRepository(HappyGymStatsDbContext db) : IWar
         await command.ExecuteNonQueryAsync(ct);
     }
 
+    private static async Task InsertSourceAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        FrozenWarAccountingSource source,
+        CancellationToken ct)
+    {
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = """
+                INSERT INTO "WarAccountingSourceSnapshots" (
+                    "SourceSnapshotId", "FactionId", "WarId", "Fingerprint", "CapturedBy", "CapturedAtUtc")
+                VALUES (
+                    @sourceSnapshotId, @factionId, @warId, @fingerprint, @capturedBy, @capturedAtUtc)
+                """;
+            AddParameter(command, "sourceSnapshotId", DbType.Guid, source.SourceSnapshotId);
+            AddParameter(command, "factionId", DbType.Int64, source.FactionId);
+            AddParameter(command, "warId", DbType.Int64, source.WarId);
+            AddParameter(command, "fingerprint", DbType.String, source.Fingerprint);
+            AddParameter(command, "capturedBy", DbType.String, source.CapturedBy);
+            AddParameter(command, "capturedAtUtc", DbType.DateTime, source.CapturedAtUtc.UtcDateTime);
+            await command.ExecuteNonQueryAsync(ct);
+        }
+
+        foreach (var member in source.Members)
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = """
+                INSERT INTO "WarAccountingSourceMemberFacts" (
+                    "SourceSnapshotId", "FactionId", "WarId", "MemberId", "MemberName",
+                    "Score", "Chain", "Attacks", "CapturedAtUtc")
+                VALUES (
+                    @sourceSnapshotId, @factionId, @warId, @memberId, @memberName,
+                    @score, @chain, @attacks, @capturedAtUtc)
+                """;
+            AddParameter(command, "sourceSnapshotId", DbType.Guid, source.SourceSnapshotId);
+            AddParameter(command, "factionId", DbType.Int64, member.FactionId);
+            AddParameter(command, "warId", DbType.Int64, member.WarId);
+            AddParameter(command, "memberId", DbType.Int64, member.MemberId);
+            AddParameter(command, "memberName", DbType.String, member.MemberName);
+            AddParameter(command, "score", DbType.Int32, member.Score);
+            AddParameter(command, "chain", DbType.Int32, member.Chain);
+            AddParameter(command, "attacks", DbType.Int32, member.Attacks);
+            AddParameter(command, "capturedAtUtc", DbType.DateTime, member.CapturedAtUtc.UtcDateTime);
+            await command.ExecuteNonQueryAsync(ct);
+        }
+    }
+
     private static async Task InsertRunAsync(
         DbConnection connection,
         DbTransaction transaction,
@@ -295,14 +458,15 @@ public sealed class WarAccountingRunRepository(HappyGymStatsDbContext db) : IWar
         command.Transaction = transaction;
         command.CommandText = """
             INSERT INTO "WarAccountingRuns" (
-                "RunId", "FactionId", "WarId", "ObjectiveVersion", "FrozenBy", "FrozenAtUtc")
+                "RunId", "FactionId", "WarId", "ObjectiveVersion", "SourceSnapshotId", "FrozenBy", "FrozenAtUtc")
             VALUES (
-                @runId, @factionId, @warId, @objectiveVersion, @frozenBy, @frozenAtUtc)
+                @runId, @factionId, @warId, @objectiveVersion, @sourceSnapshotId, @frozenBy, @frozenAtUtc)
             """;
         AddParameter(command, "runId", DbType.Guid, run.RunId);
         AddParameter(command, "factionId", DbType.Int64, run.FactionId);
         AddParameter(command, "warId", DbType.Int64, run.WarId);
         AddParameter(command, "objectiveVersion", DbType.Int32, run.ObjectiveVersion);
+        AddParameter(command, "sourceSnapshotId", DbType.Guid, run.SourceSnapshotId);
         AddParameter(command, "frozenBy", DbType.String, run.FrozenBy);
         AddParameter(command, "frozenAtUtc", DbType.DateTime, run.FrozenAtUtc.UtcDateTime);
         await command.ExecuteNonQueryAsync(ct);
@@ -314,8 +478,20 @@ public sealed class WarAccountingRunRepository(HappyGymStatsDbContext db) : IWar
             reader.GetInt64(1),
             reader.GetInt64(2),
             reader.GetInt32(3),
-            reader.GetString(4),
-            new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(5), DateTimeKind.Utc)));
+            reader.GetGuid(4),
+            reader.GetString(5),
+            ReadUtc(reader, 6));
+
+    private static WarAccountingSourceMemberFact ReadSourceMember(DbDataReader reader)
+        => new(
+            reader.GetInt64(0),
+            reader.GetInt64(1),
+            reader.GetInt64(2),
+            reader.GetString(3),
+            reader.GetInt32(4),
+            reader.GetInt32(5),
+            reader.GetInt32(6),
+            ReadUtc(reader, 7));
 
     private static WarAccountingRunLifecycleEvent ReadLifecycleEvent(DbDataReader reader)
         => new(
@@ -323,9 +499,12 @@ public sealed class WarAccountingRunRepository(HappyGymStatsDbContext db) : IWar
             reader.GetGuid(1),
             (WarAccountingRunLifecycleKind)reader.GetInt32(2),
             reader.GetString(3),
-            new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(4), DateTimeKind.Utc)),
+            ReadUtc(reader, 4),
             reader.GetString(5),
             reader.IsDBNull(6) ? null : reader.GetGuid(6));
+
+    private static DateTimeOffset ReadUtc(DbDataReader reader, int ordinal)
+        => new(DateTime.SpecifyKind(reader.GetDateTime(ordinal), DateTimeKind.Utc));
 
     private void EnsurePostgres()
     {
