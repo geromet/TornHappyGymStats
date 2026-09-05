@@ -128,6 +128,29 @@ public sealed class WarReadinessPostgresPersistenceTests : IAsyncLifetime
 
     [Fact]
     [Trait("Category", "PostgresApiIntegration")]
+    public async Task Stale_writer_cannot_recreate_declaration_after_revision_guarded_clear()
+    {
+        if (!_available)
+            return;
+
+        await using var db = CreateDbContext();
+        var repository = new WarReadinessRepository(db);
+        var first = WarReadinessMutationPolicy.Set(null, Command(53));
+        await repository.SaveAsync(first, 0, CancellationToken.None);
+
+        Assert.True(await repository.ClearAsync(100, 200, 53, first.Revision, CancellationToken.None));
+
+        var staleUpdate = WarReadinessMutationPolicy.Set(
+            first,
+            Command(53, WarReadinessState.Limited) with { UpdatedAtUtc = Now.AddMinutes(3) });
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => repository.SaveAsync(staleUpdate, first.Revision, CancellationToken.None));
+
+        Assert.Null(await repository.GetAsync(100, 200, 53, CancellationToken.None));
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresApiIntegration")]
     public async Task Database_constraints_reject_invalid_state_window_and_revision()
     {
         if (!_available)
