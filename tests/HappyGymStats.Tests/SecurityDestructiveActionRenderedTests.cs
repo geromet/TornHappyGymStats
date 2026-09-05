@@ -53,7 +53,7 @@ public sealed class SecurityDestructiveActionRenderedTests : BunitContext
         finalDelete.Click();
 
         cut.WaitForAssertion(() => Assert.Contains("No key stored", cut.Markup, StringComparison.Ordinal));
-        Assert.Equal(new[] { WrappedKeyStorageKey, PublicKeyStorageKey }, js.RemovedKeys);
+        Assert.Equal(new[] { PublicKeyStorageKey, WrappedKeyStorageKey }, js.RemovedKeys);
         Assert.DoesNotContain("Delete key permanently", cut.Markup, StringComparison.Ordinal);
     }
 
@@ -75,6 +75,37 @@ public sealed class SecurityDestructiveActionRenderedTests : BunitContext
             Assert.Contains("Delete key permanently", cut.Markup, StringComparison.Ordinal);
         });
         Assert.Empty(js.RemovedKeys);
+        Assert.True(js.ContainsKey(WrappedKeyStorageKey));
+        Assert.True(js.ContainsKey(PublicKeyStorageKey));
+    }
+
+    [Fact]
+    public void Partial_delete_failure_never_removes_private_key_before_public_cache_cleanup_is_complete()
+    {
+        var js = ConfigureSecurity();
+        js.ThrowOnRemoveKey = WrappedKeyStorageKey;
+        var cut = Render<Security>();
+
+        cut.WaitForAssertion(() => Assert.Contains("Key stored", cut.Markup, StringComparison.Ordinal));
+        FindButton(cut, "Delete key").Click();
+        FindButton(cut, "Delete key permanently").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Key deletion did not complete", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Key stored", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Delete key permanently", cut.Markup, StringComparison.Ordinal);
+        });
+        Assert.Equal(new[] { PublicKeyStorageKey }, js.RemovedKeys);
+        Assert.True(js.ContainsKey(WrappedKeyStorageKey));
+        Assert.False(js.ContainsKey(PublicKeyStorageKey));
+
+        js.ThrowOnRemoveKey = null;
+        FindButton(cut, "Delete key permanently").Click();
+
+        cut.WaitForAssertion(() => Assert.Contains("No key stored", cut.Markup, StringComparison.Ordinal));
+        Assert.False(js.ContainsKey(WrappedKeyStorageKey));
+        Assert.False(js.ContainsKey(PublicKeyStorageKey));
     }
 
     private CryptoStorageJsRuntime ConfigureSecurity()
@@ -102,6 +133,10 @@ public sealed class SecurityDestructiveActionRenderedTests : BunitContext
 
         public bool ThrowOnRemove { get; set; }
 
+        public string? ThrowOnRemoveKey { get; set; }
+
+        public bool ContainsKey(string key) => storage.ContainsKey(key);
+
         public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args) =>
             InvokeAsync<TValue>(identifier, CancellationToken.None, args);
 
@@ -121,14 +156,11 @@ public sealed class SecurityDestructiveActionRenderedTests : BunitContext
 
             if (identifier == "localStorage.removeItem")
             {
-                if (ThrowOnRemove)
+                if (ThrowOnRemove || string.Equals(key, ThrowOnRemoveKey, StringComparison.Ordinal))
                     throw new JSException("simulated storage failure");
 
-                if (key is not null)
-                {
+                if (key is not null && storage.Remove(key))
                     RemovedKeys.Add(key);
-                    storage.Remove(key);
-                }
 
                 return ValueTask.FromResult(default(TValue)!);
             }
