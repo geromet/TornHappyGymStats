@@ -192,6 +192,172 @@ public sealed class WarAccountingRunPostgresPersistenceTests : IAsyncLifetime
         Assert.Equal(frozen.ObjectiveVersion, persisted.ObjectiveVersion);
     }
 
+    [Fact]
+    [Trait("Category", "PostgresApiIntegration")]
+    public async Task Approval_and_supersession_are_append_only_audit_events()
+    {
+        if (!_available)
+            return;
+
+        const long factionId = 7234;
+        const long warId = 15876;
+        var sourceRunId = Guid.Parse("2f5f14f2-ae3b-4df2-b2d7-85283bb652d0");
+        var replacementRunId = Guid.Parse("1d7e94ea-33cb-4e38-a088-4cc67032ef80");
+        var approvalEventId = Guid.Parse("6abf54cb-c64f-48ec-98cc-e27960955056");
+        var replacementApprovalEventId = Guid.Parse("96f92849-44f3-4b31-a4cf-701d69130e64");
+        var supersessionEventId = Guid.Parse("5310ad39-f7a0-4fe5-8612-c5ffc66c5e87");
+
+        await using var db = CreateDbContext();
+        var repository = new WarAccountingRunRepository(db);
+        await repository.FreezeAsync(
+            sourceRunId,
+            factionId,
+            warId,
+            "freezer-one",
+            DateTimeOffset.Parse("2026-09-05T08:30:00Z"),
+            CancellationToken.None);
+        await repository.FreezeAsync(
+            replacementRunId,
+            factionId,
+            warId,
+            "freezer-two",
+            DateTimeOffset.Parse("2026-09-05T08:31:00Z"),
+            CancellationToken.None);
+
+        var approval = await repository.ApproveAsync(
+            approvalEventId,
+            sourceRunId,
+            "admin-one",
+            DateTimeOffset.Parse("2026-09-05T08:32:00Z"),
+            "Reviewed against source ledger and policy.",
+            CancellationToken.None);
+        var replacementApproval = await repository.ApproveAsync(
+            replacementApprovalEventId,
+            replacementRunId,
+            "admin-two",
+            DateTimeOffset.Parse("2026-09-05T08:33:00Z"),
+            "Replacement corrects an audited adjustment.",
+            CancellationToken.None);
+        var supersession = await repository.SupersedeAsync(
+            supersessionEventId,
+            sourceRunId,
+            replacementRunId,
+            "admin-three",
+            DateTimeOffset.Parse("2026-09-05T08:34:00Z"),
+            "Superseded by the approved corrected run.",
+            CancellationToken.None);
+
+        Assert.Equal(WarAccountingRunLifecycleKind.Approved, approval.Kind);
+        Assert.Equal(WarAccountingRunLifecycleKind.Approved, replacementApproval.Kind);
+        Assert.Equal(WarAccountingRunLifecycleKind.Superseded, supersession.Kind);
+        Assert.Equal(replacementRunId, supersession.SupersedingRunId);
+
+        var lifecycle = await repository.GetLifecycleAsync(sourceRunId, CancellationToken.None);
+        Assert.Equal(new[] { approval, supersession }, lifecycle);
+
+        await Assert.ThrowsAnyAsync<Exception>(() => repository.ApproveAsync(
+            Guid.NewGuid(),
+            sourceRunId,
+            "late-admin",
+            DateTimeOffset.Parse("2026-09-05T08:35:00Z"),
+            "Attempted re-approval.",
+            CancellationToken.None));
+
+        await Assert.ThrowsAnyAsync<Exception>(() => db.Database.ExecuteSqlInterpolatedAsync($$"""
+            UPDATE "WarAccountingRunLifecycleEvents"
+            SET "Reason" = {{"rewritten audit reason"}}
+            WHERE "EventId" = {{approvalEventId}}
+            """));
+
+        await Assert.ThrowsAnyAsync<Exception>(() => db.Database.ExecuteSqlInterpolatedAsync($$"""
+            DELETE FROM "WarAccountingRunLifecycleEvents"
+            WHERE "EventId" = {{supersessionEventId}}
+            """));
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresApiIntegration")]
+    public async Task Supersession_rejects_unapproved_replacement_and_cross_scope_injection()
+    {
+        if (!_available)
+            return;
+
+        const long factionId = 8234;
+        const long warId = 16876;
+        var sourceRunId = Guid.Parse("c98609fe-2b72-4378-9fc4-f773b46b96c9");
+        var replacementRunId = Guid.Parse("8cb896e3-143c-4763-844d-233741fd3c0a");
+        var foreignRunId = Guid.Parse("185e396f-4dd7-41b4-91fc-4807e45271a7");
+
+        await using var db = CreateDbContext();
+        var repository = new WarAccountingRunRepository(db);
+        await repository.FreezeAsync(
+            sourceRunId,
+            factionId,
+            warId,
+            "source-freezer",
+            DateTimeOffset.Parse("2026-09-05T08:40:00Z"),
+            CancellationToken.None);
+        await repository.FreezeAsync(
+            replacementRunId,
+            factionId,
+            warId,
+            "replacement-freezer",
+            DateTimeOffset.Parse("2026-09-05T08:41:00Z"),
+            CancellationToken.None);
+        await repository.FreezeAsync(
+            foreignRunId,
+            factionId + 1,
+            warId,
+            "foreign-freezer",
+            DateTimeOffset.Parse("2026-09-05T08:41:00Z"),
+            CancellationToken.None);
+
+        await repository.ApproveAsync(
+            Guid.NewGuid(),
+            sourceRunId,
+            "source-approver",
+            DateTimeOffset.Parse("2026-09-05T08:42:00Z"),
+            "Source approved.",
+            CancellationToken.None);
+
+        await Assert.ThrowsAnyAsync<Exception>(() => repository.SupersedeAsync(
+            Guid.NewGuid(),
+            sourceRunId,
+            replacementRunId,
+            "attacker",
+            DateTimeOffset.Parse("2026-09-05T08:43:00Z"),
+            "Replacement is not approved.",
+            CancellationToken.None));
+
+        await repository.ApproveAsync(
+            Guid.NewGuid(),
+            replacementRunId,
+            "replacement-approver",
+            DateTimeOffset.Parse("2026-09-05T08:44:00Z"),
+            "Replacement approved.",
+            CancellationToken.None);
+        await repository.ApproveAsync(
+            Guid.NewGuid(),
+            foreignRunId,
+            "foreign-approver",
+            DateTimeOffset.Parse("2026-09-05T08:44:00Z"),
+            "Foreign run approved.",
+            CancellationToken.None);
+
+        await Assert.ThrowsAnyAsync<Exception>(() => repository.SupersedeAsync(
+            Guid.NewGuid(),
+            sourceRunId,
+            foreignRunId,
+            "attacker",
+            DateTimeOffset.Parse("2026-09-05T08:45:00Z"),
+            "Attempted cross-faction replacement.",
+            CancellationToken.None));
+
+        var sourceLifecycle = await repository.GetLifecycleAsync(sourceRunId, CancellationToken.None);
+        Assert.Single(sourceLifecycle);
+        Assert.Equal(WarAccountingRunLifecycleKind.Approved, sourceLifecycle[0].Kind);
+    }
+
     private HappyGymStatsDbContext CreateDbContext()
     {
         if (_postgres is null)
