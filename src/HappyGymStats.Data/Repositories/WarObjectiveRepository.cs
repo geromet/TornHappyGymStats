@@ -28,29 +28,10 @@ public sealed class WarObjectiveRepository(HappyGymStatsDbContext db) : IWarObje
         try
         {
             await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+            await AcquireWarObjectiveLockAsync(connection, transaction, factionId, warId, ct);
 
-            // Serialize writers for one faction/war even when the first row does not yet exist.
-            await using (var lockCommand = connection.CreateCommand())
-            {
-                lockCommand.Transaction = transaction;
-                lockCommand.CommandText = "SELECT pg_advisory_xact_lock(hashtextextended(@key, 0))";
-                AddParameter(lockCommand, "key", DbType.String, $"war-objective:{factionId}:{warId}");
-                await lockCommand.ExecuteNonQueryAsync(ct);
-            }
-
-            var latest = await ReadLatestAsync(connection, transaction, factionId, warId, ct);
-            if (latest is null)
-            {
-                // Materialize the safe implicit competitive baseline before the first
-                // faction-authored change. This keeps version 1 permanently bound to
-                // the unconfigured semantics that consumers may already have observed,
-                // while the first explicit objective becomes version 2.
-                var baseline = new FactionWarObjectiveVersion(
-                    factionId,
-                    WarObjectiveVersion.CreateDefault(warId, DateTimeOffset.UnixEpoch));
-                await InsertAsync(connection, transaction, baseline, ct);
-                latest = baseline;
-            }
+            var latest = await ReadLatestAsync(connection, transaction, factionId, warId, ct)
+                         ?? await InsertBaselineAsync(connection, transaction, factionId, warId, ct);
 
             var objective = latest.Objective.CreateNext(
                 mode,
@@ -90,9 +71,38 @@ public sealed class WarObjectiveRepository(HappyGymStatsDbContext db) : IWarObje
         CancellationToken ct)
     {
         var current = await GetCurrentAsync(factionId, warId, ct);
-        return current ?? new FactionWarObjectiveVersion(
-            factionId,
-            WarObjectiveVersion.CreateDefault(warId, DateTimeOffset.UnixEpoch));
+        return current ?? CreateBaseline(factionId, warId);
+    }
+
+    public async Task<FactionWarObjectiveVersion> GetDurableEffectiveAsync(
+        long factionId,
+        long warId,
+        CancellationToken ct)
+    {
+        ValidateIds(factionId, warId);
+        EnsurePostgres();
+
+        var connection = db.Database.GetDbConnection();
+        var shouldClose = connection.State != ConnectionState.Open;
+        if (shouldClose)
+            await connection.OpenAsync(ct);
+
+        try
+        {
+            await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+            await AcquireWarObjectiveLockAsync(connection, transaction, factionId, warId, ct);
+
+            var durable = await ReadLatestAsync(connection, transaction, factionId, warId, ct)
+                          ?? await InsertBaselineAsync(connection, transaction, factionId, warId, ct);
+
+            await transaction.CommitAsync(ct);
+            return durable;
+        }
+        finally
+        {
+            if (shouldClose)
+                await connection.CloseAsync();
+        }
     }
 
     public async Task<IReadOnlyList<FactionWarObjectiveVersion>> GetHistoryAsync(
@@ -124,6 +134,38 @@ public sealed class WarObjectiveRepository(HappyGymStatsDbContext db) : IWarObje
             return (IReadOnlyList<FactionWarObjectiveVersion>)versions;
         }, ct);
     }
+
+    private static async Task AcquireWarObjectiveLockAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        long factionId,
+        long warId,
+        CancellationToken ct)
+    {
+        // Serializes durable-freeze and append writers for one faction/war even when
+        // no row exists yet. This prevents an accounting freeze from observing a
+        // synthetic version 1 while a concurrent explicit append claims version 2.
+        await using var lockCommand = connection.CreateCommand();
+        lockCommand.Transaction = transaction;
+        lockCommand.CommandText = "SELECT pg_advisory_xact_lock(hashtextextended(@key, 0))";
+        AddParameter(lockCommand, "key", DbType.String, $"war-objective:{factionId}:{warId}");
+        await lockCommand.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task<FactionWarObjectiveVersion> InsertBaselineAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        long factionId,
+        long warId,
+        CancellationToken ct)
+    {
+        var baseline = CreateBaseline(factionId, warId);
+        await InsertAsync(connection, transaction, baseline, ct);
+        return baseline;
+    }
+
+    private static FactionWarObjectiveVersion CreateBaseline(long factionId, long warId) =>
+        new(factionId, WarObjectiveVersion.CreateDefault(warId, DateTimeOffset.UnixEpoch));
 
     private static async Task InsertAsync(
         DbConnection connection,
