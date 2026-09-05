@@ -7,15 +7,25 @@ namespace HappyGymStats.Api.Infrastructure;
 /// <summary>
 /// Development-only ranked-war history used to render the evidence-first Scout page end to end.
 /// The fixture is deterministic and local to the development SQLite database; it never calls Torn.
+/// Activation is explicit so ordinary development-auth hosts and tests do not receive Scout data.
 /// </summary>
 internal static class DevelopmentScoutSeed
 {
     public const long ScoutedFactionId = 222;
     private const string ScopeKey = "dev-scout-render";
+    private const string EnableVariable = "HAPPYGYMSTATS_DEV_SEED_SCOUT";
     private static readonly long[] WarIds = [91001, 91002, 91003, 91004, 91005, 91006];
 
     public static async Task SeedAsync(HappyGymStatsDbContext db, ILogger logger, CancellationToken ct = default)
     {
+        var enabledRaw = Environment.GetEnvironmentVariable(EnableVariable);
+        var enabled = string.Equals(enabledRaw, "1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(enabledRaw, "true", StringComparison.OrdinalIgnoreCase);
+        if (!enabled)
+        {
+            return;
+        }
+
         db.RankedWarReportMembers.RemoveRange(
             db.RankedWarReportMembers.Where(member => WarIds.Contains(member.WarId)));
         db.RankedWarHistory.RemoveRange(
