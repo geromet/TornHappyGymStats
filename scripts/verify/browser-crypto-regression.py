@@ -47,37 +47,39 @@ def generate_legacy_dotnet_fixture() -> dict[str, str]:
         project_path = temp / "LegacyKeyWrappingFixture.csproj"
         program_path = temp / "Program.cs"
         project_path.write_text(
-            """<Project Sdk=\"Microsoft.NET.Sdk\">\n"
-            "  <PropertyGroup>\n"
-            "    <OutputType>Exe</OutputType>\n"
-            "    <TargetFramework>net10.0</TargetFramework>\n"
-            "    <ImplicitUsings>enable</ImplicitUsings>\n"
-            "    <Nullable>enable</Nullable>\n"
-            "  </PropertyGroup>\n"
-            "  <ItemGroup>\n"
-            f"    <ProjectReference Include=\"{ENCRYPTION_PROJECT.as_posix()}\" />\n"
-            "  </ItemGroup>\n"
-            "</Project>\n""",
+            f"""<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="{ENCRYPTION_PROJECT.as_posix()}" />
+  </ItemGroup>
+</Project>
+""",
             encoding="utf-8",
         )
         program_path.write_text(
-            """using System.Security.Cryptography;\n"
-            "using System.Text.Json;\n"
-            "using HappyGymStats.Encryption;\n"
-            "\n"
-            "if (args.Length != 1)\n"
-            "    return 2;\n"
-            "\n"
-            "using var ecdh = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);\n"
-            "var publicKeySpki = ecdh.ExportSubjectPublicKeyInfo();\n"
-            "var privateKeyPkcs8 = ecdh.ExportPkcs8PrivateKey();\n"
-            "var wrappedPrivateKey = KeyWrapping.WrapKey(privateKeyPkcs8, args[0].AsSpan());\n"
-            "Console.WriteLine(JsonSerializer.Serialize(new\n"
-            "{\n"
-            "    publicKeySpki = Convert.ToBase64String(publicKeySpki),\n"
-            "    wrappedPrivateKey = Convert.ToBase64String(wrappedPrivateKey)\n"
-            "}));\n"
-            "return 0;\n""",
+            """using System.Security.Cryptography;
+using System.Text.Json;
+using HappyGymStats.Encryption;
+
+if (args.Length != 1)
+    return 2;
+
+using var ecdh = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
+var publicKeySpki = ecdh.ExportSubjectPublicKeyInfo();
+var privateKeyPkcs8 = ecdh.ExportPkcs8PrivateKey();
+var wrappedPrivateKey = KeyWrapping.WrapKey(privateKeyPkcs8, args[0].AsSpan());
+Console.WriteLine(JsonSerializer.Serialize(new
+{
+    publicKeySpki = Convert.ToBase64String(publicKeySpki),
+    wrappedPrivateKey = Convert.ToBase64String(wrappedPrivateKey)
+}));
+return 0;
+""",
             encoding="utf-8",
         )
         completed = subprocess.run(
