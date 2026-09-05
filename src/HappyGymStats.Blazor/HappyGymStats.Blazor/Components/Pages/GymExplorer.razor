@@ -1,0 +1,314 @@
+@page "/gym-explorer"
+@rendermode InteractiveServer
+@inject SurfacesService SurfacesApi
+@inject UiSettingsService UiSettings
+@inject IJSRuntime JS
+@inject ILogger<GymExplorer> Logger
+@implements IAsyncDisposable
+
+<PageTitle>Gym Explorer · Happy Gym Stats</PageTitle>
+
+<MudPaper Class="pa-5 mb-4" Outlined="true">
+    <MudStack Spacing="2">
+        <MudText Typo="Typo.overline" Color="Color.Primary">Research view</MudText>
+        <MudText Typo="Typo.h4">Gym Explorer</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary">
+            Explore the public gym training dataset in 3D. This view is intentionally separate from Home and My Training: it is useful for research, but it is not a recommendation engine and does not claim an optimal training window.
+        </MudText>
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="flex-wrap">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="LoadSurfacesAsync"
+                       Disabled="@_loading">
+                Refresh dataset
+            </MudButton>
+            <MudLink Href="/my-stats">Open My Training</MudLink>
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@if (!string.IsNullOrEmpty(_statusMessage))
+{
+    <MudAlert Severity="@_statusSeverity" Dense="true" Class="mb-3">@_statusMessage</MudAlert>
+}
+
+@if (_loading)
+{
+    <LoadingState Message="Loading gym explorer data…" />
+}
+else if (_loadError != null)
+{
+    <ErrorState Message="@_loadError" OnRetry="LoadSurfacesAsync" />
+}
+else if (_surfaces is null)
+{
+    <EmptyState Message="No public gym dataset is available yet." />
+}
+else
+{
+    <MudGrid Class="mb-3">
+        <MudItem xs="12" sm="4">
+            <MudPaper Class="pa-3" Outlined="true">
+                <MudText Typo="Typo.overline" Color="Color.Secondary">Gym samples</MudText>
+                <MudText Typo="Typo.h5">@_surfaces.Meta.GymPointCount.ToString("N0")</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudPaper Class="pa-3" Outlined="true">
+                <MudText Typo="Typo.overline" Color="Color.Secondary">Source records</MudText>
+                <MudText Typo="Typo.h5">@_surfaces.Meta.RecordCount.ToString("N0")</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudPaper Class="pa-3" Outlined="true">
+                <MudText Typo="Typo.overline" Color="Color.Secondary">Dataset version</MudText>
+                <MudText Typo="Typo.h5">@_surfaces.Version</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <AuthorizeView Roles="@Roles.Admin">
+        <Authorized>
+            <MudPaper Class="mb-2 pa-2" Outlined="true">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="flex-wrap">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Size="Size.Small" Color="Color.Secondary" />
+                        <MudText Typo="Typo.body2">
+                            Public gym point cloud is <strong>@(_gymPointCloudEnabled ? "enabled" : "disabled")</strong>
+                        </MudText>
+                    </MudStack>
+                    <MudButton Variant="Variant.Outlined"
+                               Size="Size.Small"
+                               Color="@(_gymPointCloudEnabled ? Color.Warning : Color.Success)"
+                               Disabled="@_togglingPointCloud"
+                               OnClick="ToggleGymPointCloudAsync">
+                        @(_togglingPointCloud ? "Saving…" : _gymPointCloudEnabled ? "Disable" : "Enable")
+                    </MudButton>
+                </MudStack>
+            </MudPaper>
+        </Authorized>
+    </AuthorizeView>
+
+    @if (_gymPointCloudEnabled)
+    {
+        <MudCard Class="@($"mb-4 {(_gymFullscreen ? "gym-fullscreen" : string.Empty)}")">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Style="width:100%" Class="flex-wrap">
+                        <div>
+                            <MudText Typo="Typo.h6">Gym trains point cloud</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                X: stat before · Y: happy before · Z: stat gained / energy
+                            </MudText>
+                        </div>
+                        <MudButton Variant="Variant.Outlined"
+                                   Size="Size.Small"
+                                   Color="Color.Primary"
+                                   StartIcon="@(_gymFullscreen ? Icons.Material.Filled.FullscreenExit : Icons.Material.Filled.Fullscreen)"
+                                   OnClick="ToggleGymFullscreenAsync">
+                            @(_gymFullscreen ? "Close fullscreen" : "Fullscreen")
+                        </MudButton>
+                    </MudStack>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent Class="pa-0">
+                <div id="gym-cloud-chart" style="width: 100%; height: @(_gymFullscreen ? "calc(100dvh - 96px)" : "760px");"></div>
+            </MudCardContent>
+        </MudCard>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-4">
+            The public gym point cloud is temporarily switched off.
+        </MudAlert>
+    }
+}
+
+@code {
+    private bool _loading = true;
+    private string? _loadError;
+    private string? _statusMessage;
+    private Severity _statusSeverity = Severity.Info;
+    private SurfacesDatasetDto? _surfaces;
+    private bool _chartsDrawn;
+    private bool _gymFullscreen;
+    private bool _gymPointCloudEnabled = true;
+    private bool _togglingPointCloud;
+    private DotNetObjectReference<GymExplorer>? _dotNetRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _gymPointCloudEnabled = (await UiSettings.GetAsync()).GymPointCloudEnabled;
+        await LoadSurfacesAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("plotlyInterop.bindEscape", _dotNetRef);
+        }
+
+        if (_surfaces != null && _gymPointCloudEnabled && !_chartsDrawn)
+        {
+            _chartsDrawn = true;
+            await DrawChartAsync();
+        }
+    }
+
+    private async Task LoadSurfacesAsync()
+    {
+        _loading = true;
+        _loadError = null;
+        _chartsDrawn = false;
+
+        try
+        {
+            _surfaces = await SurfacesApi.GetLatestAsync();
+        }
+        catch (ApiFailure failure) when (failure.Category == ApiFailureCategory.NotFound)
+        {
+            _surfaces = null;
+        }
+        catch (ApiFailure failure)
+        {
+            _loadError = BuildLoadFailureMessage(failure);
+            Logger.LogError(failure,
+                "Failed to load gym explorer data. Endpoint={Endpoint} Status={StatusCode} Category={Category}",
+                failure.Endpoint,
+                failure.StatusCode is null ? null : (int)failure.StatusCode,
+                failure.Category);
+        }
+        catch (Exception ex)
+        {
+            _loadError = "Failed to load gym explorer data due to an unexpected error.";
+            Logger.LogError(ex, "Failed to load gym explorer data");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ToggleGymPointCloudAsync()
+    {
+        if (_togglingPointCloud) return;
+        _togglingPointCloud = true;
+
+        try
+        {
+            var target = !_gymPointCloudEnabled;
+            if (await UiSettings.SetGymPointCloudAsync(target))
+            {
+                _gymPointCloudEnabled = target;
+                _chartsDrawn = false;
+                _statusSeverity = Severity.Success;
+                _statusMessage = target
+                    ? "Public gym point cloud enabled."
+                    : "Public gym point cloud disabled.";
+            }
+            else
+            {
+                _statusSeverity = Severity.Error;
+                _statusMessage = "Could not change the setting. Are you still signed in as an admin?";
+            }
+        }
+        finally
+        {
+            _togglingPointCloud = false;
+        }
+    }
+
+    private async Task DrawChartAsync()
+    {
+        if (_surfaces == null) return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("plotlyInterop.render",
+                "gym-cloud-chart",
+                new[] { BuildGymTrace(_surfaces.Series.GymCloud) },
+                BuildLayout("Stat before train", "Happy before train", "Stat gained / energy"));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to draw gym explorer chart");
+        }
+    }
+
+    private async Task ToggleGymFullscreenAsync()
+    {
+        _gymFullscreen = !_gymFullscreen;
+        await InvokeAsync(StateHasChanged);
+        await RepaintGymChartAsync();
+    }
+
+    [JSInvokable]
+    public async Task ExitGymFullscreenFromEscapeAsync()
+    {
+        if (!_gymFullscreen) return;
+        _gymFullscreen = false;
+        await InvokeAsync(StateHasChanged);
+        await RepaintGymChartAsync();
+    }
+
+    private async Task RepaintGymChartAsync()
+    {
+        await Task.Delay(16);
+        await DrawChartAsync();
+        await JS.InvokeVoidAsync("plotlyInterop.resize", "gym-cloud-chart");
+        await Task.Delay(16);
+        await JS.InvokeVoidAsync("plotlyInterop.resize", "gym-cloud-chart");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("plotlyInterop.unbindEscape");
+        }
+        catch
+        {
+        }
+
+        _dotNetRef?.Dispose();
+    }
+
+    private static object BuildGymTrace(GymCloudSeriesDto cloud) => new
+    {
+        type = "scatter3d",
+        mode = "markers",
+        x = cloud.X,
+        y = cloud.Y,
+        z = cloud.Z,
+        hovertemplate = "Stat before: %{x}<br>Happy before: %{y}<br>Gain / energy: %{z}<extra></extra>",
+        marker = new { size = 6, opacity = 0.88, color = "#58a6ff" }
+    };
+
+    private static object BuildLayout(string xTitle, string yTitle, string zTitle) => new
+    {
+        paper_bgcolor = "rgba(0,0,0,0)",
+        plot_bgcolor = "rgba(0,0,0,0)",
+        font = new { color = "#e8f1ff", family = "Roboto, sans-serif" },
+        scene = new
+        {
+            aspectmode = "manual",
+            aspectratio = new { x = 1.35, y = 1.35, z = 1.2 },
+            xaxis = new { title = xTitle, gridcolor = "#243457", zerolinecolor = "#243457" },
+            yaxis = new { title = yTitle, gridcolor = "#243457", zerolinecolor = "#243457" },
+            zaxis = new { title = zTitle, gridcolor = "#243457", zerolinecolor = "#243457" },
+            bgcolor = "rgba(0,0,0,0)"
+        },
+        margin = new { l = 0, r = 0, t = 0, b = 0 }
+    };
+
+    private static string BuildLoadFailureMessage(ApiFailure failure) => failure.Category switch
+    {
+        ApiFailureCategory.ApiUnavailable => "Could not load gym explorer data. The service is temporarily unavailable — try again shortly.",
+        ApiFailureCategory.BadGateway => "Could not load gym explorer data. The service is temporarily unavailable — try again shortly.",
+        ApiFailureCategory.Deserialization => "Could not load gym explorer data: API response format was invalid.",
+        _ => $"Could not load gym explorer data: {failure.SafeMessage}"
+    };
+}
