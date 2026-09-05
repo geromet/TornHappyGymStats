@@ -106,6 +106,113 @@ public sealed class WarObjectivePostgresPersistenceTests : IAsyncLifetime
             "UPDATE \"WarObjectiveVersions\" SET \"Notes\" = 'tampered' WHERE \"FactionId\" = 1234 AND \"WarId\" = 9876 AND \"Version\" = 1"));
     }
 
+    [Fact]
+    [Trait("Category", "PostgresApiIntegration")]
+    public async Task Durable_effective_materializes_one_baseline_without_turning_normal_effective_reads_into_writes()
+    {
+        if (!_available)
+            return;
+
+        await using var db = CreateDbContext();
+        var repository = new WarObjectiveRepository(db);
+        const long factionId = 2234;
+        const long warId = 10876;
+
+        var synthetic = await repository.GetEffectiveAsync(factionId, warId, CancellationToken.None);
+        Assert.Equal(1, synthetic.Objective.Version);
+        Assert.False(synthetic.Objective.IsExplicit);
+        Assert.Empty(await repository.GetHistoryAsync(factionId, warId, CancellationToken.None));
+
+        var firstFreeze = await repository.GetDurableEffectiveAsync(factionId, warId, CancellationToken.None);
+        var secondFreeze = await repository.GetDurableEffectiveAsync(factionId, warId, CancellationToken.None);
+
+        Assert.Equal(firstFreeze, secondFreeze);
+        Assert.Equal(1, firstFreeze.Objective.Version);
+        Assert.False(firstFreeze.Objective.IsExplicit);
+
+        var frozenHistory = await repository.GetHistoryAsync(factionId, warId, CancellationToken.None);
+        var baseline = Assert.Single(frozenHistory);
+        Assert.Equal(firstFreeze, baseline);
+
+        var firstExplicit = await repository.AppendNextAsync(
+            factionId,
+            warId,
+            WarObjectiveMode.TermedWin,
+            changedBy: "leader-freeze",
+            createdAtUtc: DateTimeOffset.Parse("2026-09-05T02:00:00Z"),
+            stopAtFactionScore: 4000,
+            notes: "after freeze",
+            CancellationToken.None);
+
+        Assert.Equal(2, firstExplicit.Objective.Version);
+        Assert.Equal(
+            new[] { 1, 2 },
+            (await repository.GetHistoryAsync(factionId, warId, CancellationToken.None))
+                .Select(item => item.Objective.Version));
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresApiIntegration")]
+    public async Task Durable_freeze_and_explicit_append_serialize_to_persisted_versions_without_duplicate_baseline()
+    {
+        if (!_available)
+            return;
+
+        const long factionId = 3234;
+        const long warId = 11876;
+
+        await using var freezeDb = CreateDbContext();
+        await using var appendDb = CreateDbContext();
+        var freezeRepository = new WarObjectiveRepository(freezeDb);
+        var appendRepository = new WarObjectiveRepository(appendDb);
+
+        var freezeTask = freezeRepository.GetDurableEffectiveAsync(factionId, warId, CancellationToken.None);
+        var appendTask = appendRepository.AppendNextAsync(
+            factionId,
+            warId,
+            WarObjectiveMode.TermedLoss,
+            changedBy: "leader-race",
+            createdAtUtc: DateTimeOffset.Parse("2026-09-05T03:00:00Z"),
+            stopAtFactionScore: 5000,
+            notes: "serialized append",
+            CancellationToken.None);
+
+        await Task.WhenAll(freezeTask, appendTask);
+
+        var frozen = await freezeTask;
+        var appended = await appendTask;
+        Assert.Equal(2, appended.Objective.Version);
+        Assert.True(appended.Objective.IsExplicit);
+        Assert.Contains(frozen.Objective.Version, new[] { 1, 2 });
+
+        await using var verifyDb = CreateDbContext();
+        var verifyRepository = new WarObjectiveRepository(verifyDb);
+        var history = await verifyRepository.GetHistoryAsync(factionId, warId, CancellationToken.None);
+
+        Assert.Equal(new[] { 1, 2 }, history.Select(item => item.Objective.Version));
+        Assert.Equal(new[] { false, true }, history.Select(item => item.Objective.IsExplicit));
+
+        var persistedFrozen = Assert.Single(
+            history.Where(item => item.Objective.Version == frozen.Objective.Version));
+        Assert.Equal(frozen, persistedFrozen);
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresApiIntegration")]
+    public async Task Durable_effective_rejects_invalid_scope_before_persistence()
+    {
+        if (!_available)
+            return;
+
+        await using var db = CreateDbContext();
+        var repository = new WarObjectiveRepository(db);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => repository.GetDurableEffectiveAsync(0, 9876, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => repository.GetDurableEffectiveAsync(1234, 0, CancellationToken.None));
+    }
+
     private HappyGymStatsDbContext CreateDbContext()
     {
         if (_postgres is null)
