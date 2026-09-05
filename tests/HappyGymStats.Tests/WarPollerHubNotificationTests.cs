@@ -125,7 +125,6 @@ public sealed class WarPollerHubNotificationTests
         var ex = Assert.Throws<InvalidOperationException>(() => new WarPollerService(
             new TornApiClient(new HttpClient(new RecordingHttpMessageHandler((request, _) => Task.FromResult(RouteWarResponse(request)))) { BaseAddress = new Uri("https://api.torn.com/") }),
             persistence.WarRepository,
-            persistence.ImportRunRepository,
             persistence.UnitOfWork,
             options,
             new NoOpWarPollerNotifier(),
@@ -157,7 +156,6 @@ public sealed class WarPollerHubNotificationTests
         return new WarPollerService(
             new TornApiClient(new HttpClient(tornHandler) { BaseAddress = new Uri("https://api.torn.com/") }),
             persistence.WarRepository,
-            persistence.ImportRunRepository,
             persistence.UnitOfWork,
             options,
             new WarPollerNotifier(new HttpClient(notifyHandler), options, NullLogger<WarPollerNotifier>.Instance),
@@ -218,32 +216,19 @@ public sealed class WarPollerHubNotificationTests
         throw new InvalidOperationException("Could not locate repository root from test output directory.");
     }
 
-    private sealed class RecordingWarPollerClock(params DateTimeOffset[] timestamps) : IWarPollerClock
+    private sealed class RecordingWarPollerClock(params DateTimeOffset[] timestamps) : TimeProvider
     {
         private readonly Queue<DateTimeOffset> _timestamps = new(timestamps);
         private DateTimeOffset _last = timestamps.Length > 0 ? timestamps[^1] : DateTimeOffset.UtcNow;
 
-        public List<TimeSpan> Delays { get; } = [];
-
-        public DateTimeOffset UtcNow
+        public override DateTimeOffset GetUtcNow()
         {
-            get
+            if (_timestamps.Count > 0)
             {
-                if (_timestamps.Count > 0)
-                {
-                    _last = _timestamps.Dequeue();
-                }
-
-                return _last;
+                _last = _timestamps.Dequeue();
             }
-        }
 
-        public Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken)
-        {
-            Delays.Add(delay);
-            return cancellationToken.IsCancellationRequested
-                ? Task.FromCanceled(cancellationToken)
-                : Task.CompletedTask;
+            return _last;
         }
     }
 
@@ -272,14 +257,12 @@ public sealed class WarPollerHubNotificationTests
             Connection = connection;
             DbContext = dbContext;
             WarRepository = new WarStateRepository(dbContext);
-            ImportRunRepository = new ImportRunRepository(dbContext);
             UnitOfWork = dbContext;
         }
 
         public SqliteConnection Connection { get; }
         public HappyGymStatsDbContext DbContext { get; }
         public IWarStateRepository WarRepository { get; }
-        public IImportRunRepository ImportRunRepository { get; }
         public IUnitOfWork UnitOfWork { get; }
 
         public static async Task<TestPersistenceScope> CreateAsync()
