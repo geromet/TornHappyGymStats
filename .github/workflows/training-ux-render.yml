@@ -54,12 +54,12 @@ jobs:
       - name: Render Gym Explorer at all supported widths
         run: bash scripts/screenshot-board.sh --route /gym-explorer --out docs/evidence/training-ux/gym-explorer
 
-      - name: Verify complete render matrix
+      - name: Verify complete light/dark render matrix
         run: |
           set -euo pipefail
           mapfile -t shots < <(find docs/evidence/training-ux -type f -name '*.png' -print | sort)
           printf '%s\n' "${shots[@]}"
-          test "${#shots[@]}" -eq 9
+          test "${#shots[@]}" -eq 18
           for shot in "${shots[@]}"; do
             test -s "$shot"
           done
