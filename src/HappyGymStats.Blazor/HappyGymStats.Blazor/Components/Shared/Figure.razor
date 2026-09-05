@@ -8,30 +8,55 @@
    person forgets to say it is an estimate. Routing all of them through one
    component makes the omission impossible rather than merely discouraged. *@
 
-<div class="hgs-figure">
-    <MudText Typo="Typo.overline" Class="hgs-figure-label">
-        @Label
-        @if (FigureKinds.NeedsMarker(Kind))
+@if (Compact)
+{
+    <div class="hgs-figure hgs-figure-compact">
+        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+            <MudText Typo="@ValueTypo" Class="@ValueClass">@Value</MudText>
+            @if (FigureKinds.NeedsMarker(Kind))
+            {
+                <MudTooltip Text="@TooltipText" Arrow="true" Placement="Placement.Top">
+                    <span class="hgs-figure-marker hgs-figure-marker-@FigureKinds.Label(Kind)"
+                          aria-label="@($"{Label} — {FigureKinds.Label(Kind)}: {FigureKinds.Explanation(Kind)}")">
+                        @FigureKinds.Label(Kind)
+                    </span>
+                </MudTooltip>
+            }
+        </MudStack>
+
+        @if (!string.IsNullOrWhiteSpace(Note))
         {
-            <MudTooltip Text="@TooltipText" Arrow="true" Placement="Placement.Top">
-                <span class="hgs-figure-marker hgs-figure-marker-@FigureKinds.Label(Kind)"
-                      aria-label="@($"{FigureKinds.Label(Kind)}: {FigureKinds.Explanation(Kind)}")">
-                    @FigureKinds.Label(Kind)
-                </span>
-            </MudTooltip>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="hgs-figure-note">@Note</MudText>
         }
-    </MudText>
+    </div>
+}
+else
+{
+    <div class="hgs-figure">
+        <MudText Typo="Typo.overline" Class="hgs-figure-label">
+            @Label
+            @if (FigureKinds.NeedsMarker(Kind))
+            {
+                <MudTooltip Text="@TooltipText" Arrow="true" Placement="Placement.Top">
+                    <span class="hgs-figure-marker hgs-figure-marker-@FigureKinds.Label(Kind)"
+                          aria-label="@($"{FigureKinds.Label(Kind)}: {FigureKinds.Explanation(Kind)}")">
+                        @FigureKinds.Label(Kind)
+                    </span>
+                </MudTooltip>
+            }
+        </MudText>
 
-    <MudText Typo="@ValueTypo" Class="@ValueClass">@Value</MudText>
+        <MudText Typo="@ValueTypo" Class="@ValueClass">@Value</MudText>
 
-    @if (!string.IsNullOrWhiteSpace(Note))
-    {
-        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="hgs-figure-note">@Note</MudText>
-    }
-</div>
+        @if (!string.IsNullOrWhiteSpace(Note))
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="hgs-figure-note">@Note</MudText>
+        }
+    </div>
+}
 
 @code {
-    /// <summary>The caption above the number.</summary>
+    /// <summary>The caption above the number, or the accessible figure name in compact mode.</summary>
     [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
 
     /// <summary>The already-formatted value. Formatting stays with the caller.</summary>
@@ -39,6 +64,9 @@
 
     /// <summary>How much weight this number can bear. No default: choosing is the point.</summary>
     [Parameter, EditorRequired] public FigureKind Kind { get; set; }
+
+    /// <summary>Render only the value and provenance marker for dense tables whose column header already supplies the label.</summary>
+    [Parameter] public bool Compact { get; set; }
 
     /// <summary>Optional second line — a window, an error bar, a source.</summary>
     [Parameter] public string? Note { get; set; }
