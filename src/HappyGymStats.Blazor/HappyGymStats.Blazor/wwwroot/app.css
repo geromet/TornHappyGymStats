@@ -5,6 +5,35 @@ html, body {
     font-family: 'Roboto', sans-serif;
 }
 
+/* ── Accessibility baseline (UX #95) ────────────────────────────────────────
+   Component defaults are allowed to change, but keyboard focus must remain
+   obvious. The outline and offset communicate focus by shape and position,
+   rather than relying on a colour-only state. */
+:where(a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
+    outline: 3px solid var(--mud-palette-primary);
+    outline-offset: 3px;
+    box-shadow: 0 0 0 1px var(--mud-palette-surface);
+}
+
+/* Motion is an enhancement, never a requirement for understanding state.
+   Keep animations effectively instantaneous for users who request less motion
+   while preserving animation/transition completion semantics. */
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto !important;
+    }
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        transition-delay: 0ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
 .gym-fullscreen {
     position: fixed;
     inset: 0;
