@@ -39,42 +39,30 @@ public sealed class WarObjectiveRepository(HappyGymStatsDbContext db) : IWarObje
             }
 
             var latest = await ReadLatestAsync(connection, transaction, factionId, warId, ct);
-            var nextVersion = latest?.Objective.Version + 1 ?? 1;
-            var objective = WarObjectiveVersion.Restore(
-                warId,
-                nextVersion,
-                mode,
-                isExplicit: true,
-                stopAtFactionScore,
-                notes,
-                changedBy,
-                createdAtUtc);
-
-            await using (var command = connection.CreateCommand())
+            if (latest is null)
             {
-                command.Transaction = transaction;
-                command.CommandText = """
-                    INSERT INTO "WarObjectiveVersions" (
-                        "FactionId", "WarId", "Version", "Mode", "IsExplicit",
-                        "StopAtFactionScore", "Notes", "ChangedBy", "CreatedAtUtc")
-                    VALUES (
-                        @factionId, @warId, @version, @mode, @isExplicit,
-                        @stopAtFactionScore, @notes, @changedBy, @createdAtUtc)
-                    """;
-                AddParameter(command, "factionId", DbType.Int64, factionId);
-                AddParameter(command, "warId", DbType.Int64, objective.WarId);
-                AddParameter(command, "version", DbType.Int32, objective.Version);
-                AddParameter(command, "mode", DbType.Int32, (int)objective.Mode);
-                AddParameter(command, "isExplicit", DbType.Boolean, objective.IsExplicit);
-                AddParameter(command, "stopAtFactionScore", DbType.Int32, objective.StopAtFactionScore);
-                AddParameter(command, "notes", DbType.String, objective.Notes);
-                AddParameter(command, "changedBy", DbType.String, objective.ChangedBy);
-                AddParameter(command, "createdAtUtc", DbType.DateTime, objective.CreatedAtUtc.UtcDateTime);
-                await command.ExecuteNonQueryAsync(ct);
+                // Materialize the safe implicit competitive baseline before the first
+                // faction-authored change. This keeps version 1 permanently bound to
+                // the unconfigured semantics that consumers may already have observed,
+                // while the first explicit objective becomes version 2.
+                var baseline = new FactionWarObjectiveVersion(
+                    factionId,
+                    WarObjectiveVersion.CreateDefault(warId, DateTimeOffset.UnixEpoch));
+                await InsertAsync(connection, transaction, baseline, ct);
+                latest = baseline;
             }
 
+            var objective = latest.Objective.CreateNext(
+                mode,
+                changedBy,
+                createdAtUtc,
+                stopAtFactionScore,
+                notes);
+            var stored = new FactionWarObjectiveVersion(factionId, objective);
+            await InsertAsync(connection, transaction, stored, ct);
+
             await transaction.CommitAsync(ct);
-            return new FactionWarObjectiveVersion(factionId, objective);
+            return stored;
         }
         finally
         {
@@ -94,6 +82,17 @@ public sealed class WarObjectiveRepository(HappyGymStatsDbContext db) : IWarObje
         return await WithOpenConnectionAsync(
             connection => ReadLatestAsync(connection, transaction: null, factionId, warId, ct),
             ct);
+    }
+
+    public async Task<FactionWarObjectiveVersion> GetEffectiveAsync(
+        long factionId,
+        long warId,
+        CancellationToken ct)
+    {
+        var current = await GetCurrentAsync(factionId, warId, ct);
+        return current ?? new FactionWarObjectiveVersion(
+            factionId,
+            WarObjectiveVersion.CreateDefault(warId, DateTimeOffset.UnixEpoch));
     }
 
     public async Task<IReadOnlyList<FactionWarObjectiveVersion>> GetHistoryAsync(
@@ -124,6 +123,34 @@ public sealed class WarObjectiveRepository(HappyGymStatsDbContext db) : IWarObje
 
             return (IReadOnlyList<FactionWarObjectiveVersion>)versions;
         }, ct);
+    }
+
+    private static async Task InsertAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        FactionWarObjectiveVersion stored,
+        CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO "WarObjectiveVersions" (
+                "FactionId", "WarId", "Version", "Mode", "IsExplicit",
+                "StopAtFactionScore", "Notes", "ChangedBy", "CreatedAtUtc")
+            VALUES (
+                @factionId, @warId, @version, @mode, @isExplicit,
+                @stopAtFactionScore, @notes, @changedBy, @createdAtUtc)
+            """;
+        AddParameter(command, "factionId", DbType.Int64, stored.FactionId);
+        AddParameter(command, "warId", DbType.Int64, stored.Objective.WarId);
+        AddParameter(command, "version", DbType.Int32, stored.Objective.Version);
+        AddParameter(command, "mode", DbType.Int32, (int)stored.Objective.Mode);
+        AddParameter(command, "isExplicit", DbType.Boolean, stored.Objective.IsExplicit);
+        AddParameter(command, "stopAtFactionScore", DbType.Int32, stored.Objective.StopAtFactionScore);
+        AddParameter(command, "notes", DbType.String, stored.Objective.Notes);
+        AddParameter(command, "changedBy", DbType.String, stored.Objective.ChangedBy);
+        AddParameter(command, "createdAtUtc", DbType.DateTime, stored.Objective.CreatedAtUtc.UtcDateTime);
+        await command.ExecuteNonQueryAsync(ct);
     }
 
     private static async Task<FactionWarObjectiveVersion?> ReadLatestAsync(
