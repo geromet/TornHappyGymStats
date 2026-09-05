@@ -1,0 +1,44 @@
+name: Issue 98 branch proof
+
+on:
+  push:
+    branches:
+      - agent/issue-98-account-connections
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-98-branch-proof-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      HAPPYGYMSTATS_REQUIRE_POSTGRES_INTEGRATION: "1"
+      HAPPYGYMSTATS_POSTGRES_START_TIMEOUT_SECONDS: "300"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+      - name: Install .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Restore
+        run: dotnet restore
+      - name: Build and run hermetic tests
+        run: bash scripts/verify/build-and-test.sh
+      - name: Run architecture tests
+        run: dotnet test tests/HappyGymStats.ArchitectureTests/HappyGymStats.ArchitectureTests.csproj --nologo
+      - name: Verify whitespace formatting
+        run: dotnet format whitespace --verify-no-changes --no-restore
+      - name: Prove Docker availability
+        run: docker info
+      - name: Run non-skippable PostgreSQL integration tier
+        run: bash scripts/verify/s07-postgres-integration.sh
+      - name: Check diff whitespace
+        run: git diff --check origin/main...HEAD

@@ -70,7 +70,8 @@ public sealed class WarBoardStaticContractTests
         var content = ReadRepoFile("src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Layout/MainLayout.razor");
 
         Assert.Contains("Href=\"/war\"", content, StringComparison.Ordinal);
-        Assert.Contains(">War board<", content, StringComparison.Ordinal);
+        Assert.Contains(">Live War<", content, StringComparison.Ordinal);
+        Assert.DoesNotContain(">War board<", content, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -2,9 +2,11 @@ using System.Net;
 using System.Reflection;
 using Bunit;
 using HappyGymStats.Blazor.Components.Pages;
+using HappyGymStats.Blazor.Components.Shared;
 using HappyGymStats.Blazor.Services;
 using HappyGymStats.Core.Models;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using MudBlazor.Services;
 using Xunit;
 
@@ -12,6 +14,21 @@ namespace HappyGymStats.Tests;
 
 public sealed class SharedStateRenderedTests : BunitContext
 {
+    [Fact]
+    public void LoadingState_exposes_polite_atomic_status_and_hides_spinner_from_assistive_tech()
+    {
+        Services.AddMudServices();
+
+        var cut = Render<LoadingState>(parameters => parameters
+            .Add(component => component.Message, "Loading scouting report..."));
+
+        var status = cut.Find("[role='status']");
+        Assert.Equal("polite", status.GetAttribute("aria-live"));
+        Assert.Equal("true", status.GetAttribute("aria-atomic"));
+        Assert.Contains("Loading scouting report...", status.TextContent, StringComparison.Ordinal);
+        Assert.NotNull(cut.Find("[aria-hidden='true']"));
+    }
+
     [Fact]
     public void War_renders_loading_state_while_initial_state_is_pending()
     {
@@ -86,7 +103,7 @@ public sealed class SharedStateRenderedTests : BunitContext
         {
             BaseAddress = new Uri("http://localhost")
         };
-        var board = new WarBoardService(http, new NullAccessTokenProvider(), Microsoft.Extensions.Logging.Abstractions.NullLogger<WarBoardService>.Instance);
+        var board = new WarBoardService(http, new NullAccessTokenProvider(), NullLogger<WarBoardService>.Instance);
         SetField(board, "initialized", true);
         return board;
     }

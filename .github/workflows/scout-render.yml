@@ -1,0 +1,60 @@
+name: Scout render proof
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/HappyGymStats.Api/Infrastructure/DevelopmentScoutSeed.cs'
+      - 'src/HappyGymStats.Api/Program.cs'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/WarScout.razor'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/WarScout.razor.css'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/WarScoutProvenance.cs'
+      - 'src/HappyGymStats.Core/War/WarScoutService.cs'
+      - 'src/HappyGymStats.Data/Repositories/RankedWarHistoryBackfillStateRepository.cs'
+      - 'scripts/screenshot-board.sh'
+      - 'scripts/ux/shoot.py'
+      - '.github/workflows/scout-render.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scout-render-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    name: evidence-first Scout at 390 / 768 / desktop
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      HAPPYGYMSTATS_DEV_SEED_SCOUT: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install .NET (version from global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install screenshot tooling
+        run: bash scripts/screenshot-board.sh --setup
+
+      - name: Capture representative Scout briefing
+        run: bash scripts/screenshot-board.sh --route /war/scout/222 --out workspace/tmp/screenshots/scout
+
+      - name: Require all six viewport/theme frames
+        run: |
+          count="$(find workspace/tmp/screenshots/scout -maxdepth 1 -type f -name '*.png' | wc -l)"
+          echo "Scout screenshot count: ${count}"
+          test "${count}" -eq 6
+
+      - name: Upload render proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scout-render-proof
+          path: workspace/tmp/screenshots/scout
+          if-no-files-found: error
+          retention-days: 7

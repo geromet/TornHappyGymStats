@@ -29,10 +29,8 @@ public sealed class WarScoutServiceTests
     {
         await using var scope = await TestScope.CreateAsync();
 
-        // Scouted faction played as the "faction" side of war 1 and the "opponent" side of war 2.
         await SeedCapturedWarAsync(scope.Db, warId: 1, factionId: ScoutedFactionId, opponentFactionId: OtherFactionId);
         await SeedCapturedWarAsync(scope.Db, warId: 2, factionId: OtherFactionId, opponentFactionId: ScoutedFactionId);
-        // An unrelated war the scouted faction had no part in must not be included.
         await SeedCapturedWarAsync(scope.Db, warId: 3, factionId: OtherFactionId, opponentFactionId: 333);
 
         scope.Db.RankedWarReportMembers.AddRange(
@@ -81,7 +79,6 @@ public sealed class WarScoutServiceTests
     {
         await using var scope = await TestScope.CreateAsync();
 
-        // Two decided wars with finals and durations; the scouted faction won war 1, lost war 2.
         scope.Db.RankedWarHistory.AddRange(
             FullWar(warId: 1, factionId: ScoutedFactionId, opponentFactionId: OtherFactionId,
                 factionScore: 6000, opponentScore: 4000, winnerFactionId: ScoutedFactionId, durationHours: 6),
@@ -99,9 +96,45 @@ public sealed class WarScoutServiceTests
         Assert.NotNull(profile);
         Assert.Equal(2, profile!.WarsWithKnownOutcome);
         Assert.Equal(0.5m, profile.WinRate);
-        Assert.Equal(4500, profile.TypicalTargetScore);          // scouted faction's own finals [6000, 3000] -> median 4500
-        Assert.Equal(800m, profile.PointsPerHour);                // scouted score/duration: war1 6000/6=1000, war2 3000/5=600 -> median 800
-        Assert.Equal(1m, profile.Top5ScoreShare);                 // only two scorers, both in the top five
+        Assert.Equal(4500, profile.TypicalTargetScore);
+        Assert.Equal(800m, profile.PointsPerHour);
+        Assert.Equal(1m, profile.Top5ScoreShare);
+    }
+
+    [Fact]
+    public async Task GetProfileAsync_exposes_only_sanitized_latest_backfill_coverage()
+    {
+        await using var scope = await TestScope.CreateAsync();
+        await SeedCapturedWarAsync(scope.Db, warId: 1, factionId: ScoutedFactionId, opponentFactionId: OtherFactionId);
+
+        var updatedAt = new DateTimeOffset(2026, 9, 5, 8, 0, 0, TimeSpan.Zero);
+        scope.Db.RankedWarHistoryBackfillState.Add(new RankedWarHistoryBackfillStateEntity
+        {
+            ScopeKey = "public-war",
+            Status = RankedWarHistoryBackfillStatus.Completed,
+            Phase = RankedWarHistoryBackfillPhase.Idle,
+            NextHistoryPageUrl = "https://operator-only.invalid/retry",
+            PagesProcessed = 42,
+            ReportsProcessed = 137,
+            RetryCount = 3,
+            LastFailureCategory = "RateLimited",
+            LastErrorMessage = "operator-only diagnostic",
+            LastSuccessAtUtc = updatedAt.AddMinutes(-2),
+            UpdatedAtUtc = updatedAt,
+            CreatedAtUtc = updatedAt.AddDays(-1),
+        });
+        await scope.Db.SaveChangesAsync();
+
+        var profile = await scope.Service.GetProfileAsync(ScoutedFactionId, CancellationToken.None);
+
+        Assert.NotNull(profile);
+        Assert.Equal(RankedWarHistoryBackfillStatus.Completed, profile!.Evidence.BackfillStatus);
+        Assert.Equal(42, profile.Evidence.PagesProcessed);
+        Assert.Equal(137, profile.Evidence.ReportsProcessed);
+        Assert.Equal(updatedAt, profile.Evidence.UpdatedAtUtc);
+        Assert.True(profile.Evidence.IsComplete);
+        Assert.DoesNotContain("Error", typeof(WarScoutEvidenceMetadata).GetProperties().Select(property => property.Name));
+        Assert.DoesNotContain("Retry", typeof(WarScoutEvidenceMetadata).GetProperties().Select(property => property.Name));
     }
 
     private static RankedWarHistoryEntity FullWar(
@@ -187,7 +220,8 @@ public sealed class WarScoutServiceTests
             await db.Database.EnsureCreatedAsync();
 
             IWarHistoryRepository repository = new WarHistoryRepository(db);
-            return new TestScope(connection, db, new WarScoutService(repository));
+            IRankedWarHistoryBackfillStateRepository backfillRepository = new RankedWarHistoryBackfillStateRepository(db);
+            return new TestScope(connection, db, new WarScoutService(repository, backfillRepository));
         }
 
         public async ValueTask DisposeAsync()

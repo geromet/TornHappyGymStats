@@ -13,66 +13,83 @@ namespace HappyGymStats.Tests;
 public sealed class WarScoutRenderedProvenanceTests
 {
     [Fact]
-    public async Task Representative_scout_profile_renders_truthful_provenance_semantics()
+    public async Task Representative_scout_profile_renders_evidence_before_compact_roster_with_truthful_provenance()
     {
-        await using var context = new BunitContext();
-        context.JSInterop.Mode = JSRuntimeMode.Loose;
-        context.Services.AddLogging();
-        context.Services.AddMudServices(options => options.PopoverOptions.CheckForPopoverProvider = false);
-
-        using var http = new HttpClient(new ScoutProfileHandler())
-        {
-            BaseAddress = new Uri("http://localhost")
-        };
-
+        await using var context = CreateContext();
+        var profile = CreateProfile();
+        using var http = new HttpClient(new ScoutProfileHandler(profile)) { BaseAddress = new Uri("http://localhost") };
         context.Services.AddSingleton<WarScoutService>(provider =>
             new WarScoutService(http, provider.GetRequiredService<ILogger<WarScoutService>>()));
 
         var cut = context.Render<WarScout>(parameters => parameters
-            .Add(component => component.FactionId, ScoutProfileHandler.FactionId));
+            .Add(component => component.FactionId, profile.FactionId));
 
         cut.WaitForAssertion(() =>
         {
             Assert.Contains("Deterministic Faction", cut.Markup, StringComparison.Ordinal);
-            Assert.Contains("Example Opponent", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Evidence coverage", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("42 pages", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("137 reports", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Multi-war sample", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Historical conclusions", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Threat roster", cut.Markup, StringComparison.Ordinal);
+            Assert.True(cut.Markup.IndexOf("Evidence coverage", StringComparison.Ordinal) < cut.Markup.IndexOf("Threat roster", StringComparison.Ordinal));
+            Assert.Single(cut.FindAll("details.scout-member"));
+            Assert.InRange(cut.FindAll(".scout-conclusion").Count, 4, 5);
 
             var warsObserved = cut.FindAll(".hgs-figure")
                 .Single(element => element.TextContent.Contains("Wars observed", StringComparison.Ordinal));
             Assert.Empty(warsObserved.QuerySelectorAll(".hgs-figure-marker"));
 
             var winRate = cut.FindAll(".hgs-figure")
-                .Single(element => element.TextContent.Contains("Win rate", StringComparison.Ordinal));
+                .First(element => element.TextContent.Contains("Win rate", StringComparison.Ordinal));
             Assert.NotNull(winRate.QuerySelector(".hgs-figure-marker-inferred"));
 
-            var participationMarker = cut.FindAll(".hgs-figure-marker-inferred")
-                .Single(element => (element.GetAttribute("aria-label") ?? string.Empty)
-                    .Contains("Participation rate", StringComparison.Ordinal));
-            Assert.Contains("inferred", participationMarker.TextContent, StringComparison.OrdinalIgnoreCase);
-
             Assert.Empty(cut.FindAll(".hgs-figure-marker-projected"));
+            Assert.DoesNotContain("lockdown", cut.Markup, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("what you must beat", cut.Markup, StringComparison.OrdinalIgnoreCase);
         });
     }
 
-    private sealed class ScoutProfileHandler : HttpMessageHandler
+    [Fact]
+    public async Task Sparse_history_renders_raw_evidence_but_no_briefing_conclusions()
     {
-        public const long FactionId = 123456;
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
+        await using var context = CreateContext();
+        var profile = CreateProfile() with
         {
-            Assert.Equal(HttpMethod.Get, request.Method);
-            Assert.Equal($"/api/v1/war/scout/{FactionId}", request.RequestUri?.AbsolutePath);
+            TotalWarsObserved = 2,
+            EarliestWarStartedAtUtc = new DateTimeOffset(2026, 8, 1, 12, 0, 0, TimeSpan.Zero),
+            LatestWarStartedAtUtc = new DateTimeOffset(2026, 8, 8, 12, 0, 0, TimeSpan.Zero)
+        };
+        using var http = new HttpClient(new ScoutProfileHandler(profile)) { BaseAddress = new Uri("http://localhost") };
+        context.Services.AddSingleton<WarScoutService>(provider =>
+            new WarScoutService(http, provider.GetRequiredService<ILogger<WarScoutService>>()));
 
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = JsonContent.Create(CreateProfile())
-            });
-        }
+        var cut = context.Render<WarScout>(parameters => parameters
+            .Add(component => component.FactionId, profile.FactionId));
 
-        private static FactionScoutDto CreateProfile() => new(
-            FactionId,
-            "Deterministic Faction",
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Sparse history", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Sparse multi-war sample", cut.Markup, StringComparison.Ordinal);
+            Assert.Empty(cut.FindAll(".scout-conclusion"));
+            Assert.Single(cut.FindAll("details.scout-member"));
+        });
+    }
+
+    private static BunitContext CreateContext()
+    {
+        var context = new BunitContext();
+        context.JSInterop.Mode = JSRuntimeMode.Loose;
+        context.Services.AddLogging();
+        context.Services.AddMudServices(options => options.PopoverOptions.CheckForPopoverProvider = false);
+        return context;
+    }
+
+    private static FactionScoutDto CreateProfile()
+        => new FactionScoutDto(
+            FactionId: 123456,
+            FactionName: "Deterministic Faction",
             TotalWarsObserved: 8,
             EarliestWarStartedAtUtc: new DateTimeOffset(2026, 8, 1, 12, 0, 0, TimeSpan.Zero),
             LatestWarStartedAtUtc: new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero),
@@ -106,6 +123,30 @@ public sealed class WarScoutRenderedProvenanceTests
                     IdleRate: 0.125m,
                     LastSeenAtUtc: new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero),
                     ThreatTier: "ConsistentSwinger")
-            ]);
+            ])
+        {
+            Evidence = new WarScoutEvidenceDto(
+                BackfillStatus: "Completed",
+                PagesProcessed: 42,
+                ReportsProcessed: 137,
+                UpdatedAtUtc: new DateTimeOffset(2026, 9, 2, 12, 0, 0, TimeSpan.Zero),
+                LastSuccessAtUtc: new DateTimeOffset(2026, 9, 2, 11, 58, 0, TimeSpan.Zero),
+                IsComplete: true)
+        };
+
+    private sealed class ScoutProfileHandler(FactionScoutDto profile) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Assert.Equal(HttpMethod.Get, request.Method);
+            Assert.Equal($"/api/v1/war/scout/{profile.FactionId}", request.RequestUri?.AbsolutePath);
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(profile)
+            });
+        }
     }
 }

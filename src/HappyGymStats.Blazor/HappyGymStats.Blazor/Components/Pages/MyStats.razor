@@ -19,17 +19,33 @@ else
         <div>
             <MudText Typo="Typo.h4">My Training</MudText>
             <MudText Typo="Typo.body1" Color="Color.Secondary">
-                Review your observed training efficiency and its relationship with happiness and stat size. These charts describe your imported history; they do not prescribe a training strategy.
+                Review observations from the account you're signed in with. These charts describe imported training history; they do not prescribe a training strategy.
             </MudText>
         </div>
 
-        @if (_loadError != null)
+        @if (_loadError is not null)
         {
             <ErrorState Message="@_loadError" OnRetry="LoadSurfacesAsync" />
         }
-        else if (_surfaces == null)
+        else if (_surfaces is null)
         {
-            <EmptyState Message="No personal gym stats found yet. Import data first." />
+            <EmptyState Message="No personal gym stats found yet." />
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.h6">Connect your training data</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Add or refresh your Torn connection in Account &amp; Connections, then reload this page. Raw API keys stay out of My Training.
+                    </MudText>
+                    <MudStack Row="true" Spacing="2" Class="flex-wrap">
+                        <MudButton Href="/player-account" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Link">
+                            Account &amp; Connections
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadSurfacesAsync">
+                            Refresh
+                        </MudButton>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
         }
         else
         {
@@ -74,28 +90,26 @@ else
                 </MudItem>
             </MudGrid>
 
-            <MudCard>
-                <MudCardContent>
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="flex-wrap:wrap">
-                        <div style="min-width: 180px">
-                            <MudText Typo="Typo.overline">Filter</MudText>
-                            <select aria-label="Stat filter"
-                                    value="@_statFilter"
-                                    @onchange="OnStatFilterChangedAsync"
-                                    style="display:block;width:100%;min-height:40px;padding:6px 10px;border-radius:4px">
-                                <option value="all">All stats</option>
-                                @foreach (var statType in AvailableStatTypes)
-                                {
-                                    <option value="@statType">@FormatStatType(statType)</option>
-                                }
-                            </select>
-                        </div>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">
-                            Dataset @_surfaces.Version · @_surfaces.Meta.RecordCount records processed · @points.Count observations in this view
-                        </MudText>
-                    </MudStack>
-                </MudCardContent>
-            </MudCard>
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="2" Class="flex-wrap">
+                    <div style="min-width: 180px">
+                        <MudText Typo="Typo.overline">Filter</MudText>
+                        <select aria-label="Stat filter"
+                                value="@_statFilter"
+                                @onchange="OnStatFilterChangedAsync"
+                                style="display:block;width:100%;min-height:40px;padding:6px 10px;border-radius:4px">
+                            <option value="all">All stats</option>
+                            @foreach (var statType in AvailableStatTypes)
+                            {
+                                <option value="@statType">@FormatStatType(statType)</option>
+                            }
+                        </select>
+                    </div>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Dataset @_surfaces.Version · @_surfaces.Meta.RecordCount records processed · @points.Count observations in this view
+                    </MudText>
+                </MudStack>
+            </MudPaper>
 
             <MudGrid>
                 <MudItem xs="12" lg="6">
@@ -138,50 +152,26 @@ else
                     </MudCard>
                 </MudItem>
             </MudGrid>
-        }
 
-        <MudCard>
-            <MudCardHeader>
-                <CardHeaderContent>
-                    <MudText Typo="Typo.h6">Refresh training data</MudText>
-                </CardHeaderContent>
-            </MudCardHeader>
-            <MudCardContent>
-                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-                    Import your authenticated Torn gym history, then refresh these observations.
-                </MudText>
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
-                    <MudTextField @bind-Value="_apiKey"
-                                  Label="Torn API Key"
-                                  InputType="InputType.Password"
-                                  Variant="Variant.Outlined"
-                                  Adornment="Adornment.Start"
-                                  AdornmentIcon="@Icons.Material.Filled.Key"
-                                  Style="flex: 1;"
-                                  Disabled="@_importing" />
-                    <MudButton Variant="Variant.Filled"
-                               Color="Color.Primary"
-                               StartIcon="@Icons.Material.Filled.Refresh"
-                               OnClick="RunImportAsync"
-                               Disabled="@(_importing || string.IsNullOrWhiteSpace(_apiKey))">
-                        @(_importing ? "Importing..." : "Import + Refresh")
-                    </MudButton>
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="2" Class="flex-wrap">
+                    <div>
+                        <MudText Typo="Typo.h6">Refresh training data</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            Connection setup belongs in Account &amp; Connections; My Training only reads the data associated with your signed-in account.
+                        </MudText>
+                    </div>
+                    <MudStack Row="true" Spacing="2">
+                        <MudButton Href="/player-account" Variant="Variant.Text">Manage connection</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadSurfacesAsync">Refresh</MudButton>
+                    </MudStack>
                 </MudStack>
-
-                @if (!string.IsNullOrEmpty(_importStatusMessage))
-                {
-                    <MudAlert Severity="@_importStatusSeverity" Dense="true">@_importStatusMessage</MudAlert>
-                }
-            </MudCardContent>
-        </MudCard>
+            </MudPaper>
+        }
     </MudStack>
 }
 
 @code {
-    private string? _apiKey;
-    private bool _importing;
-    private string? _importStatusMessage;
-    private Severity _importStatusSeverity = Severity.Info;
     private bool _loading = true;
     private string? _loadError;
     private MyStatsDatasetDto? _surfaces;
@@ -201,11 +191,11 @@ else
         .OrderBy(statType => statType, StringComparer.OrdinalIgnoreCase)
         .ToArray();
 
-    protected override async Task OnInitializedAsync() => await LoadSurfacesAsync();
+    protected override Task OnInitializedAsync() => LoadSurfacesAsync();
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_surfaces != null && !_chartsDrawn)
+        if (_surfaces is not null && !_chartsDrawn)
         {
             _chartsDrawn = true;
             await DrawChartsAsync();
@@ -229,7 +219,7 @@ else
         catch (ApiFailure failure)
         {
             _surfaces = null;
-            _loadError = BuildLoadFailureMessage(failure);
+            _loadError = "Could not load your stats. Please try again.";
             Logger.LogError(failure,
                 "Failed to load personal stats data. Endpoint={Endpoint} Status={StatusCode} Category={Category}",
                 failure.Endpoint,
@@ -239,56 +229,12 @@ else
         catch (Exception ex)
         {
             _surfaces = null;
-            _loadError = "Failed to load personal stats data due to an unexpected error.";
+            _loadError = "Could not load your stats. Please try again.";
             Logger.LogError(ex, "Failed to load personal stats data");
         }
         finally
         {
             _loading = false;
-        }
-    }
-
-    private async Task RunImportAsync()
-    {
-        if (string.IsNullOrWhiteSpace(_apiKey))
-        {
-            _importStatusMessage = "Import requires a Torn API key.";
-            _importStatusSeverity = Severity.Warning;
-            return;
-        }
-
-        _importing = true;
-        _importStatusMessage = "Queueing personal stats import...";
-        _importStatusSeverity = Severity.Info;
-        StateHasChanged();
-
-        try
-        {
-            await SurfacesApi.StartMyStatsImportAsync(_apiKey.Trim(), fresh: true);
-            _apiKey = null;
-            _importStatusMessage = "Import queued — reloading personal stats...";
-            _importStatusSeverity = Severity.Success;
-            await LoadSurfacesAsync();
-        }
-        catch (ApiFailure failure)
-        {
-            _importStatusMessage = BuildImportFailureMessage(failure);
-            _importStatusSeverity = Severity.Error;
-            Logger.LogError(failure,
-                "Personal stats import failed. Endpoint={Endpoint} Status={StatusCode} Category={Category}",
-                failure.Endpoint,
-                failure.StatusCode is null ? null : (int)failure.StatusCode,
-                failure.Category);
-        }
-        catch (Exception ex)
-        {
-            _importStatusMessage = "Import failed due to an unexpected error.";
-            _importStatusSeverity = Severity.Error;
-            Logger.LogError(ex, "Personal stats import failed");
-        }
-        finally
-        {
-            _importing = false;
         }
     }
 
@@ -300,7 +246,10 @@ else
 
     private async Task DrawChartsAsync()
     {
-        if (_surfaces == null) return;
+        if (_surfaces is null)
+        {
+            return;
+        }
 
         var points = FilteredPoints;
         var timedPoints = points
@@ -310,17 +259,18 @@ else
 
         try
         {
-            await JS.InvokeVoidAsync("plotlyInterop.render",
+            await JS.InvokeVoidAsync(
+                "plotlyInterop.render",
                 "training-efficiency-time-chart",
                 new[] { BuildTimeTrace(timedPoints) },
                 BuildLayout("Date (UTC)", "Stat gain / energy"));
-
-            await JS.InvokeVoidAsync("plotlyInterop.render",
+            await JS.InvokeVoidAsync(
+                "plotlyInterop.render",
                 "training-efficiency-stat-chart",
                 new[] { BuildStatTrace(points) },
                 BuildLayout("Stat before train", "Stat gain / energy"));
-
-            await JS.InvokeVoidAsync("plotlyInterop.render",
+            await JS.InvokeVoidAsync(
+                "plotlyInterop.render",
                 "training-efficiency-happy-chart",
                 new[] { BuildHappyTrace(points) },
                 BuildLayout("Happiness before train", "Stat gain / energy"));
@@ -333,8 +283,10 @@ else
 
     private IReadOnlyList<TrainingPoint> BuildTrainingPoints()
     {
-        if (_surfaces == null)
+        if (_surfaces is null)
+        {
             return Array.Empty<TrainingPoint>();
+        }
 
         var cloud = _surfaces.Series.GymCloud;
         var count = Math.Min(cloud.X.Length, Math.Min(cloud.Y.Length, cloud.Z.Length));
@@ -343,8 +295,15 @@ else
 
         for (var i = 0; i < count; i++)
         {
-            var metadata = i < text.Length ? ParsePointMetadata(text[i]) : ("unknown", (DateTimeOffset?)null);
-            result[i] = new TrainingPoint(cloud.X[i], cloud.Y[i], cloud.Z[i], metadata.Item1, metadata.Item2);
+            var metadata = i < text.Length
+                ? ParsePointMetadata(text[i])
+                : ("unknown", (DateTimeOffset?)null);
+            result[i] = new TrainingPoint(
+                cloud.X[i],
+                cloud.Y[i],
+                cloud.Z[i],
+                metadata.StatType,
+                metadata.OccurredAtUtc);
         }
 
         return result;
@@ -353,11 +312,15 @@ else
     private static (string StatType, DateTimeOffset? OccurredAtUtc) ParsePointMetadata(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
+        {
             return ("unknown", null);
+        }
 
         var separator = text.IndexOf(' ');
         if (separator <= 0 || separator == text.Length - 1)
+        {
             return (text.Trim(), null);
+        }
 
         var statType = text[..separator].Trim();
         var timestampText = text[(separator + 1)..].Trim();
@@ -379,7 +342,9 @@ else
             .ToArray();
 
         if (timestamps.Length == 0)
+        {
             return "Timestamp metadata unavailable";
+        }
 
         var start = timestamps[0].UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var end = timestamps[^1].UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -405,11 +370,10 @@ else
     {
         type = "scatter",
         mode = "markers",
-        x = points.Select(point => point.OccurredAtUtc!.Value.ToString("O", CultureInfo.InvariantCulture)).ToArray(),
+        x = points.Select(point => point.OccurredAtUtc!.Value.UtcDateTime.ToString("O", CultureInfo.InvariantCulture)).ToArray(),
         y = points.Select(point => point.Efficiency).ToArray(),
         text = points.Select(point => FormatStatType(point.StatType)).ToArray(),
-        hovertemplate = "%{text}<br>%{x}<br>Gain / energy: %{y}<extra></extra>",
-        marker = new { size = 7, opacity = 0.82 }
+        hovertemplate = "%{text}<br>%{x}<br>gain/energy %{y:.4f}<extra></extra>"
     };
 
     private static object BuildStatTrace(IReadOnlyList<TrainingPoint> points) => new
@@ -419,8 +383,7 @@ else
         x = points.Select(point => point.StatBefore).ToArray(),
         y = points.Select(point => point.Efficiency).ToArray(),
         text = points.Select(point => FormatStatType(point.StatType)).ToArray(),
-        hovertemplate = "%{text}<br>Stat before: %{x}<br>Gain / energy: %{y}<extra></extra>",
-        marker = new { size = 7, opacity = 0.82 }
+        hovertemplate = "%{text}<br>stat %{x:,.0f}<br>gain/energy %{y:.4f}<extra></extra>"
     };
 
     private static object BuildHappyTrace(IReadOnlyList<TrainingPoint> points) => new
@@ -430,41 +393,16 @@ else
         x = points.Select(point => point.HappinessBefore).ToArray(),
         y = points.Select(point => point.Efficiency).ToArray(),
         text = points.Select(point => FormatStatType(point.StatType)).ToArray(),
-        hovertemplate = "%{text}<br>Happiness before: %{x}<br>Gain / energy: %{y}<extra></extra>",
-        marker = new { size = 7, opacity = 0.82 }
+        hovertemplate = "%{text}<br>happiness %{x:,.0f}<br>gain/energy %{y:.4f}<extra></extra>"
     };
 
     private static object BuildLayout(string xTitle, string yTitle) => new
     {
+        margin = new { l = 64, r = 24, t = 20, b = 56 },
         paper_bgcolor = "rgba(0,0,0,0)",
         plot_bgcolor = "rgba(0,0,0,0)",
-        font = new { color = "#e8f1ff", family = "Roboto, sans-serif" },
-        xaxis = new { title = xTitle, gridcolor = "#243457", zerolinecolor = "#243457" },
-        yaxis = new { title = yTitle, gridcolor = "#243457", zerolinecolor = "#243457" },
-        margin = new { l = 56, r = 18, t = 12, b = 52 }
-    };
-
-    private static string BuildLoadFailureMessage(ApiFailure failure) => failure.Category switch
-    {
-        ApiFailureCategory.ApiUnavailable => "Could not load your stats. The service is temporarily unavailable — try again shortly.",
-        ApiFailureCategory.BadGateway => "Could not load your stats. The service is temporarily unavailable — try again shortly.",
-        ApiFailureCategory.Validation => "Could not load your stats: request was rejected. Sign in again and verify account claims.",
-        ApiFailureCategory.NotFound => "No personal gym stats found yet. Import data first.",
-        ApiFailureCategory.Deserialization => "Could not load your stats: API response format was invalid.",
-        _ => $"Could not load your stats: {failure.SafeMessage}"
-    };
-
-    private static string BuildImportFailureMessage(ApiFailure failure) => failure.Category switch
-    {
-        ApiFailureCategory.Unauthorized => "Import rejected: your session is not authenticated. Sign in again.",
-        ApiFailureCategory.Forbidden => "Import rejected: your authenticated account does not match the requested owner.",
-        ApiFailureCategory.IdentitySetupRequired => "Import blocked: connect your account identity map before importing personal stats.",
-        ApiFailureCategory.Validation => "Import rejected: request validation failed.",
-        ApiFailureCategory.BadGateway => "Import failed. The service is temporarily unavailable — try again shortly.",
-        ApiFailureCategory.ApiUnavailable => "Import failed. The service is temporarily unavailable — try again shortly.",
-        ApiFailureCategory.Deserialization => "Import failed: API response format was invalid.",
-        ApiFailureCategory.ImportFailure => "Import failed. Please try again.",
-        _ => $"Import failed: {failure.SafeMessage}"
+        xaxis = new { title = xTitle, automargin = true },
+        yaxis = new { title = yTitle, automargin = true }
     };
 
     private sealed record TrainingPoint(

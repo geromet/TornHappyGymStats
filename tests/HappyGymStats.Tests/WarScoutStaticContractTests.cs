@@ -6,7 +6,7 @@ namespace HappyGymStats.Tests;
 public sealed class WarScoutStaticContractTests
 {
     [Fact]
-    public void WarScout_page_declares_authorized_interactive_route_and_required_labels()
+    public void WarScout_page_declares_authorized_interactive_route_and_evidence_first_labels()
     {
         var content = ReadRepoFile("src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/WarScout.razor");
 
@@ -14,8 +14,24 @@ public sealed class WarScoutStaticContractTests
         Assert.Contains("@attribute [Authorize]", content, StringComparison.Ordinal);
         Assert.Contains("@rendermode InteractiveServer", content, StringComparison.Ordinal);
         Assert.Contains("Pre-war briefing", content, StringComparison.Ordinal);
+        Assert.Contains("Evidence coverage", content, StringComparison.Ordinal);
+        Assert.Contains("Historical conclusions", content, StringComparison.Ordinal);
+        Assert.Contains("Threat roster", content, StringComparison.Ordinal);
         Assert.Contains("Lump-adjusted score", content, StringComparison.Ordinal);
-        Assert.Contains("Threat tier", content, StringComparison.Ordinal);
+        Assert.Contains("<details class=\"scout-member\">", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("lockdown", content, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("what you must beat", content, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void WarScout_responsive_css_has_mobile_tablet_and_desktop_layout_contracts()
+    {
+        var content = ReadRepoFile("src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/WarScout.razor.css");
+
+        Assert.Contains("@media (max-width: 767px)", content, StringComparison.Ordinal);
+        Assert.Contains("@media (min-width: 768px) and (max-width: 1099px)", content, StringComparison.Ordinal);
+        Assert.Contains("grid-template-columns: minmax(12rem, 1.8fr) repeat(4, minmax(7rem, 1fr));", content, StringComparison.Ordinal);
+        Assert.Contains("@media (max-width: 420px)", content, StringComparison.Ordinal);
     }
 
     [Fact]

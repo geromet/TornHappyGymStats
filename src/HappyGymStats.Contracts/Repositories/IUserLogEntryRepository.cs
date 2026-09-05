@@ -8,6 +8,9 @@ public interface IUserLogEntryRepository
 {
     Task<HashSet<string>> GetExistingLogIdsAsync(Guid anonymousId, CancellationToken ct);
 
+    // Stages missing global log-type dictionary entries. Caller commits via IUnitOfWork.
+    Task AddLogTypesIfMissingAsync(IEnumerable<LogTypeEntity> types, CancellationToken ct);
+
     // Stages add. Caller commits via IUnitOfWork.
     Task AddRangeAsync(IEnumerable<UserLogEntryEntity> entries, CancellationToken ct);
 
@@ -21,9 +24,7 @@ public interface IUserLogEntryRepository
 
     Task<IReadOnlyList<GymLogEntry>> GetGymLogEntriesAsync(Guid anonymousId, CancellationToken ct);
 
-    // Returns fully-formed CursorPage with encoded cursor string.
-    Task<CursorPage<GymTrainDto>> GetGymTrainsPageAsync(int take, PageCursor? cursor, CancellationToken ct);
-
+    // Returns fully-formed CursorPage with encoded cursor string for one owner.
     Task<CursorPage<GymTrainDto>> GetGymTrainsPageAsync(Guid anonymousId, int take, PageCursor? cursor, CancellationToken ct);
 
     // Returns per-user gym train summary (count + latest date) for a set of AnonymousIds.

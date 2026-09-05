@@ -34,8 +34,7 @@ public sealed class StoredApiKeyPostgresPersistenceTests : IAsyncLifetime
 
         try
         {
-            _postgres = new PostgreSqlBuilder()
-                .WithImage("postgres:16-alpine")
+            _postgres = new PostgreSqlBuilder("postgres:16-alpine")
                 .WithDatabase("happygymstats")
                 .WithUsername("postgres")
                 .WithPassword("postgres")

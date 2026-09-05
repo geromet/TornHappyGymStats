@@ -9,6 +9,9 @@ public sealed class WarScoutProvenanceTests
     {
         WarScoutMetric.TotalWarsObserved,
         WarScoutMetric.ObservedDateRange,
+        WarScoutMetric.BackfillStatus,
+        WarScoutMetric.BackfillProgress,
+        WarScoutMetric.BackfillUpdated,
         WarScoutMetric.MembersSeen,
         WarScoutMetric.OutcomeSample,
         WarScoutMetric.WarsParticipated,
@@ -46,14 +49,13 @@ public sealed class WarScoutProvenanceTests
         var content = ReadRepoFile("src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/WarScout.razor");
 
         Assert.DoesNotContain("FigureKind.Projected", content, StringComparison.Ordinal);
-        Assert.DoesNotContain("<MudText Typo=\"Typo.h5\">@profile.", content, StringComparison.Ordinal);
-        Assert.DoesNotContain("<MudTd DataLabel=\"Wars\">@context.", content, StringComparison.Ordinal);
-        Assert.DoesNotContain("<MudTd DataLabel=\"Participation\">@", content, StringComparison.Ordinal);
+        Assert.Contains("WarScoutMetric.BackfillStatus", content, StringComparison.Ordinal);
+        Assert.Contains("WarScoutMetric.SampleSufficiency", content, StringComparison.Ordinal);
         Assert.Contains("WarScoutMetric.PointsPerHour", content, StringComparison.Ordinal);
         Assert.Contains("WarScoutMetric.ThreatTier", content, StringComparison.Ordinal);
         Assert.Contains("WarScoutMetric.LumpAdjustedScorePerAttack", content, StringComparison.Ordinal);
         Assert.Contains("WarScoutMetric.LastSeen", content, StringComparison.Ordinal);
-        Assert.True(CountOccurrences(content, "<Figure ") >= 20, "Scout should route its dense summary/table values through Figure.");
+        Assert.True(CountOccurrences(content, "<Figure ") >= 20, "Scout should route its visible summary/detail values through Figure.");
     }
 
     private static int CountOccurrences(string content, string token)

@@ -9,11 +9,13 @@ readonly REQUIRE_ENV_VAR="HAPPYGYMSTATS_REQUIRE_POSTGRES_INTEGRATION"
 readonly TIMEOUT_ENV_VAR="HAPPYGYMSTATS_POSTGRES_START_TIMEOUT_SECONDS"
 readonly DEFAULT_TIMEOUT_SECONDS=90
 readonly TEST_FILTER='Category=PostgresApiIntegration'
+readonly TEST_PROJECT='tests/HappyGymStats.IntegrationTests/HappyGymStats.IntegrationTests.csproj'
 
 # shellcheck source=scripts/verify/verify-common.sh
 source "${ROOT_DIR}/scripts/verify/verify-common.sh"
 cd "${ROOT_DIR}" || verify_die "cannot cd to ${ROOT_DIR}"
 verify_require_commands dotnet grep sed tee mktemp
+verify_require_file "${TEST_PROJECT}"
 
 is_true() {
   [[ "${1:-}" =~ ^(1|true|TRUE|yes|YES)$ ]]
@@ -62,16 +64,16 @@ readonly output_file="${results_dir}/dotnet-test.log"
 declare -a timeout_prefix=()
 if command -v timeout >/dev/null 2>&1; then
   timeout_prefix=(timeout "${startup_timeout}")
-  echo "RUN: dotnet test --filter \"${TEST_FILTER}\" (timeout ${startup_timeout}s)"
+  echo "RUN: dotnet test ${TEST_PROJECT} --filter \"${TEST_FILTER}\" (timeout ${startup_timeout}s)"
 else
-  echo "RUN: dotnet test --filter \"${TEST_FILTER}\" (no timeout binary; relying on test-level timeout)"
+  echo "RUN: dotnet test ${TEST_PROJECT} --filter \"${TEST_FILTER}\" (no timeout binary; relying on test-level timeout)"
 fi
 
 # Do not wrap this in `if ...; then`: the old implementation read `$?` after the
 # `if` statement, which can erase the command's real failure status. Preserve the
 # left side of the tee pipeline explicitly instead.
 set +e
-"${timeout_prefix[@]}" dotnet test \
+"${timeout_prefix[@]}" dotnet test "${TEST_PROJECT}" \
   --nologo \
   --filter "${TEST_FILTER}" \
   --results-directory "${results_dir}" \

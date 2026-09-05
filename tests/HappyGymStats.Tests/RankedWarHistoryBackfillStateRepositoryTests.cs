@@ -44,6 +44,38 @@ public sealed class RankedWarHistoryBackfillStateRepositoryTests
     }
 
     [Fact]
+    public async Task GetLatestAsync_returns_the_most_recent_scope_without_sqlite_datetimeoffset_ordering()
+    {
+        await using var scope = await TestScope.CreateAsync();
+        var older = new DateTimeOffset(2026, 9, 2, 9, 0, 0, TimeSpan.Zero);
+        var newer = older.AddHours(2);
+
+        scope.Db.RankedWarHistoryBackfillState.AddRange(
+            new RankedWarHistoryBackfillStateEntity
+            {
+                ScopeKey = "older-scope",
+                Status = "Running",
+                CreatedAtUtc = older,
+                UpdatedAtUtc = older,
+            },
+            new RankedWarHistoryBackfillStateEntity
+            {
+                ScopeKey = "newer-scope",
+                Status = "Completed",
+                CreatedAtUtc = older,
+                UpdatedAtUtc = newer,
+                PagesProcessed = 4,
+            });
+        await scope.Db.SaveChangesAsync();
+
+        var latest = await scope.Repository.GetLatestAsync(CancellationToken.None);
+
+        Assert.NotNull(latest);
+        Assert.Equal("newer-scope", latest.ScopeKey);
+        Assert.Equal(4, latest.PagesProcessed);
+    }
+
+    [Fact]
     public async Task UpsertAsync_advances_cursor_and_progress_counters_idempotently_by_scope_key()
     {
         await using var scope = await TestScope.CreateAsync();

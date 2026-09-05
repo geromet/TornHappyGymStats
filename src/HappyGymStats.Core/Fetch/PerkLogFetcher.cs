@@ -14,7 +14,6 @@ public sealed class PerkLogFetcher
 {
     private readonly TornApiClient _client;
     private readonly IAffiliationEventRepository _affiliationRepo;
-    private readonly ILogTypeRepository _logTypeRepo;
     private readonly IUserLogEntryRepository _userLogRepo;
     private readonly IFactionIdMapRepository _factionIdMapRepo;
     private readonly IFactionMembershipRepository _factionMembershipRepo;
@@ -23,7 +22,6 @@ public sealed class PerkLogFetcher
     public PerkLogFetcher(
         TornApiClient client,
         IAffiliationEventRepository affiliationRepo,
-        ILogTypeRepository logTypeRepo,
         IUserLogEntryRepository userLogRepo,
         IFactionIdMapRepository factionIdMapRepo,
         IFactionMembershipRepository factionMembershipRepo,
@@ -31,7 +29,6 @@ public sealed class PerkLogFetcher
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
         _affiliationRepo = affiliationRepo ?? throw new ArgumentNullException(nameof(affiliationRepo));
-        _logTypeRepo = logTypeRepo ?? throw new ArgumentNullException(nameof(logTypeRepo));
         _userLogRepo = userLogRepo ?? throw new ArgumentNullException(nameof(userLogRepo));
         _factionIdMapRepo = factionIdMapRepo ?? throw new ArgumentNullException(nameof(factionIdMapRepo));
         _factionMembershipRepo = factionMembershipRepo ?? throw new ArgumentNullException(nameof(factionMembershipRepo));
@@ -50,7 +47,7 @@ public sealed class PerkLogFetcher
         if (string.IsNullOrWhiteSpace(apiKey))
             throw new ArgumentException("API key must be provided.", nameof(apiKey));
 
-        await _logTypeRepo.AddRangeIfMissingAsync(
+        await _userLogRepo.AddLogTypesIfMissingAsync(
             logTypes.Select(t => new LogTypeEntity { LogTypeId = t.Id, LogTypeTitle = t.Title }),
             ct);
         await _unitOfWork.SaveChangesAsync(ct);

@@ -1,4 +1,5 @@
 using HappyGymStats.Api.Infrastructure;
+using HappyGymStats.Api.Services;
 using Microsoft.AspNetCore.Authentication;
 using HappyGymStats.Core.Faction;
 using HappyGymStats.Core.Fetch;
@@ -86,6 +87,11 @@ builder.Services.AddHttpClient<TornApiClient>(client =>
     client.BaseAddress = new Uri("https://api.torn.com/");
     client.Timeout = TimeSpan.FromSeconds(30);
 });
+builder.Services.AddHttpClient<ITornConnectionValidator, TornConnectionValidator>(client =>
+{
+    client.BaseAddress = new Uri("https://api.torn.com/");
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
 
 builder.Services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<HappyGymStatsDbContext>());
 
@@ -94,15 +100,19 @@ builder.Services.AddScoped<IUserLogEntryRepository, UserLogEntryRepository>();
 builder.Services.AddScoped<IImportRunRepository, ImportRunRepository>();
 builder.Services.AddScoped<IModifierProvenanceRepository, ModifierProvenanceRepository>();
 builder.Services.AddScoped<IAffiliationEventRepository, AffiliationEventRepository>();
-builder.Services.AddScoped<ILogTypeRepository, LogTypeRepository>();
 builder.Services.AddScoped<IFactionIdMapRepository, FactionIdMapRepository>();
 builder.Services.AddScoped<IFactionMembershipRepository, FactionMembershipRepository>();
 builder.Services.AddScoped<IWarStateRepository, WarStateRepository>();
 builder.Services.AddScoped<IWarHistoryRepository, WarHistoryRepository>();
+builder.Services.AddScoped<IRankedWarHistoryBackfillStateRepository, RankedWarHistoryBackfillStateRepository>();
 builder.Services.AddScoped<ICombatIntelRepository, CombatIntelRepository>();
 builder.Services.AddScoped<IWarObjectiveRepository, WarObjectiveRepository>();
 builder.Services.AddScoped<IWarAccountingRunRepository, WarAccountingRunRepository>();
 builder.Services.AddScoped<IWarPayoutRepository, WarPayoutRepository>();
+builder.Services.AddScoped(sp => new StoredApiKeyStore(
+    sp.GetRequiredService<HappyGymStatsDbContext>(),
+    () => WarKeyVault.FromEnvironment()));
+builder.Services.AddScoped<IAccountConnectionService, AccountConnectionService>();
 
 builder.Services.AddScoped<LogFetcher>();
 builder.Services.AddScoped<PerkLogFetcher>();
@@ -165,6 +175,8 @@ using (var scope = app.Services.CreateScope())
         {
             await DevelopmentWarSeed.SeedAsync(db, app.Logger);
         }
+
+        await DevelopmentScoutSeed.SeedAsync(db, app.Logger);
     }
 }
 
