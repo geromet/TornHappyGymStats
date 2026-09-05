@@ -294,7 +294,6 @@ public sealed class WarPollerServiceTests
         => new(
             new TornApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.torn.com/") }),
             persistence.WarRepository,
-            persistence.ImportRunRepository,
             persistence.UnitOfWork,
             options ?? new WarPollerOptions { ScopeKey = ScopeKey, ApiKey = ApiKey, FactionId = FactionId, PollIntervalSeconds = 30, FailureBackoffSeconds = 60, MaxFailureBackoffSeconds = 300 },
             new NoOpWarPollerNotifier(),
@@ -410,32 +409,27 @@ public sealed class WarPollerServiceTests
         throw new InvalidOperationException("Could not locate repository root from test output directory.");
     }
 
-    private sealed class RecordingWarPollerClock(params DateTimeOffset[] timestamps) : IWarPollerClock
+    private sealed class RecordingWarPollerClock(params DateTimeOffset[] timestamps) : TimeProvider
     {
         private readonly Queue<DateTimeOffset> _timestamps = new(timestamps);
         private DateTimeOffset _last = timestamps.Length > 0 ? timestamps[^1] : DateTimeOffset.UtcNow;
 
         public List<TimeSpan> Delays { get; } = [];
 
-        public DateTimeOffset UtcNow
+        public override DateTimeOffset GetUtcNow()
         {
-            get
+            if (_timestamps.Count > 0)
             {
-                if (_timestamps.Count > 0)
-                {
-                    _last = _timestamps.Dequeue();
-                }
-
-                return _last;
+                _last = _timestamps.Dequeue();
             }
+
+            return _last;
         }
 
-        public Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken)
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
         {
-            Delays.Add(delay);
-            return cancellationToken.IsCancellationRequested
-                ? Task.FromCanceled(cancellationToken)
-                : Task.CompletedTask;
+            Delays.Add(dueTime);
+            return TimeProvider.System.CreateTimer(callback, state, TimeSpan.Zero, Timeout.InfiniteTimeSpan);
         }
     }
 
@@ -481,7 +475,6 @@ public sealed class WarPollerServiceTests
             Connection = connection;
             DbContext = dbContext;
             WarRepository = new WarStateRepository(dbContext);
-            ImportRunRepository = new ImportRunRepository(dbContext);
             UnitOfWork = unitOfWork;
             CancellationSource = cancellationSource;
         }
@@ -489,7 +482,6 @@ public sealed class WarPollerServiceTests
         public SqliteConnection Connection { get; }
         public HappyGymStatsDbContext DbContext { get; }
         public IWarStateRepository WarRepository { get; }
-        public IImportRunRepository ImportRunRepository { get; }
         public IUnitOfWork UnitOfWork { get; }
         public CancellationTokenSource CancellationSource { get; }
 

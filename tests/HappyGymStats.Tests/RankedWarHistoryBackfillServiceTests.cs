@@ -207,7 +207,7 @@ public sealed class RankedWarHistoryBackfillServiceTests
             stateRepository,
             db,
             options,
-            new WarPollerClock(),
+            TimeProvider.System,
             NullLogger<RankedWarHistoryBackfillWorker>.Instance);
     }
 
@@ -216,7 +216,7 @@ public sealed class RankedWarHistoryBackfillServiceTests
         HttpMessageHandler handler,
         bool enabled,
         out WarPollerOptions options,
-        IWarPollerClock? clock = null)
+        TimeProvider? clock = null)
     {
         options = new WarPollerOptions
         {
@@ -228,7 +228,7 @@ public sealed class RankedWarHistoryBackfillServiceTests
             RankedWarHistoryBackfillMaxReportsPerIteration = 10,
         };
 
-        var effectiveClock = clock ?? new WarPollerClock();
+        var effectiveClock = clock ?? TimeProvider.System;
         var db = new HappyGymStatsDbContext(CreateContextOptions(connection));
         var worker = CreateWorker(db, handler, options);
 
@@ -370,27 +370,20 @@ public sealed class RankedWarHistoryBackfillServiceTests
             => responder(request, cancellationToken);
     }
 
-    private sealed class BlockingWarPollerClock(DateTimeOffset now) : IWarPollerClock
+    private sealed class BlockingWarPollerClock(DateTimeOffset now) : TimeProvider
     {
         private readonly TaskCompletionSource _delayEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public DateTimeOffset UtcNow => now;
+        public override DateTimeOffset GetUtcNow() => now;
 
         public bool CancellationObserved { get; private set; }
 
-        public async Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken)
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
         {
             _delayEntered.TrySetResult();
-
-            try
-            {
-                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                CancellationObserved = true;
-                throw;
-            }
+            return new ObservedTimer(
+                TimeProvider.System.CreateTimer(callback, state, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan),
+                () => CancellationObserved = true);
         }
 
         public async Task<bool> WaitForDelayAsync(TimeSpan timeout)
@@ -404,6 +397,38 @@ public sealed class RankedWarHistoryBackfillServiceTests
             catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
             {
                 return false;
+            }
+        }
+
+        private sealed class ObservedTimer(ITimer inner, Action onDispose) : ITimer
+        {
+            private readonly ITimer _inner = inner;
+            private readonly Action _onDispose = onDispose;
+            private int _disposed;
+
+            public bool Change(TimeSpan dueTime, TimeSpan period)
+                => _inner.Change(dueTime, period);
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                {
+                    return;
+                }
+
+                _onDispose();
+                _inner.Dispose();
+            }
+
+            public async ValueTask DisposeAsync()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                {
+                    return;
+                }
+
+                _onDispose();
+                await _inner.DisposeAsync();
             }
         }
     }
