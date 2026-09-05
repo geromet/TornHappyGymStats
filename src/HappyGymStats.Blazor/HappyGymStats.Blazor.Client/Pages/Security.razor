@@ -166,11 +166,8 @@ else
         _generating = true;
         try
         {
-            var (publicKeySpki, wrappedKey) = CryptoService.GenerateKeyPair(_password);
-            await Crypto.StoreWrappedKeyAsync(wrappedKey);
-            await Crypto.StorePublicKeyAsync(publicKeySpki);
+            _cachedPublicKeyBase64 = await Crypto.GenerateAndStoreKeyAsync(_password);
             _hasKey = true;
-            _cachedPublicKeyBase64 = Convert.ToBase64String(publicKeySpki);
             _password = "";
             _passwordConfirm = "";
             Snackbar.Add("Key generated and stored.", Severity.Success);
@@ -192,16 +189,15 @@ else
         _verifying = true;
         try
         {
-            using var key = await Crypto.LoadKeyAsync(_verifyPassword);
-            if (key is null)
+            var publicKeyBase64 = await Crypto.VerifyStoredKeyAsync(_verifyPassword);
+            if (publicKeyBase64 is null)
             {
                 _verifyError = "Wrong password or key data is corrupted.";
                 return;
             }
-            var spki = key.ExportSubjectPublicKeyInfo();
-            _publicKeyBase64 = Convert.ToBase64String(spki);
-            await Crypto.StorePublicKeyAsync(spki);
-            _cachedPublicKeyBase64 = _publicKeyBase64;
+
+            _publicKeyBase64 = publicKeyBase64;
+            _cachedPublicKeyBase64 = publicKeyBase64;
             Snackbar.Add("Key unlocked successfully.", Severity.Success);
         }
         finally
