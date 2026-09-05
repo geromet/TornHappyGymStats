@@ -21,6 +21,16 @@ public interface IWarObjectiveRepository
         long warId,
         CancellationToken ct);
 
+    /// <summary>
+    /// Resolves the objective consumers should act on. Unconfigured wars receive the
+    /// deterministic non-explicit competitive default instead of forcing each consumer
+    /// to invent its own fallback semantics.
+    /// </summary>
+    Task<FactionWarObjectiveVersion> GetEffectiveAsync(
+        long factionId,
+        long warId,
+        CancellationToken ct);
+
     Task<IReadOnlyList<FactionWarObjectiveVersion>> GetHistoryAsync(
         long factionId,
         long warId,
