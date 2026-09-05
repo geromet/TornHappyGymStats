@@ -56,12 +56,12 @@
         <nav class="desktop-navigation" aria-label="Product areas">
             <div class="nav-group">
                 <MudText Typo="Typo.overline" Class="nav-group-label">Command</MudText>
-                <MudNavLink Href="/" Icon="@Icons.Material.Filled.SpaceDashboard" Match="NavLinkMatch.All">
+                <MudNavLink Href="/" Icon="@Icons.Material.Filled.SpaceDashboard" Match="NavLinkMatch.All" aria-label="Overview">
                     <span class="nav-label">Overview</span>
                 </MudNavLink>
                 <AuthorizeView>
                     <Authorized>
-                        <MudNavLink Href="/war" Icon="@Icons.Material.Filled.GpsFixed">
+                        <MudNavLink Href="/war" Icon="@Icons.Material.Filled.GpsFixed" aria-label="Live War">
                             <span class="nav-label">Live War</span>
                         </MudNavLink>
                     </Authorized>
@@ -72,7 +72,7 @@
                 <Authorized>
                     <div class="nav-group">
                         <MudText Typo="Typo.overline" Class="nav-group-label">Intelligence</MudText>
-                        <MudNavLink Href="/war/scout" Icon="@Icons.Material.Filled.Visibility">
+                        <MudNavLink Href="/war/scout" Icon="@Icons.Material.Filled.Visibility" aria-label="Opponent Scout">
                             <span class="nav-label">Opponent Scout</span>
                         </MudNavLink>
                     </div>
@@ -81,7 +81,7 @@
 
             <div class="nav-group">
                 <MudText Typo="Typo.overline" Class="nav-group-label">Planning</MudText>
-                <MudNavLink Href="/chain-calculator" Icon="@Icons.Material.Filled.Timeline">
+                <MudNavLink Href="/chain-calculator" Icon="@Icons.Material.Filled.Timeline" aria-label="Chain Planner">
                     <span class="nav-label">Chain Planner</span>
                 </MudNavLink>
             </div>
@@ -90,10 +90,10 @@
                 <Authorized>
                     <div class="nav-group">
                         <MudText Typo="Typo.overline" Class="nav-group-label">Training</MudText>
-                        <MudNavLink Href="/my-stats" Icon="@Icons.Material.Filled.ShowChart">
+                        <MudNavLink Href="/my-stats" Icon="@Icons.Material.Filled.ShowChart" aria-label="My Training">
                             <span class="nav-label">My Training</span>
                         </MudNavLink>
-                        <MudNavLink Href="/gym-explorer" Icon="@Icons.Material.Filled.ViewInAr">
+                        <MudNavLink Href="/gym-explorer" Icon="@Icons.Material.Filled.ViewInAr" aria-label="Gym Explorer">
                             <span class="nav-label">Gym Explorer</span>
                         </MudNavLink>
                     </div>
@@ -104,18 +104,18 @@
         <div class="rail-secondary">
             <AuthorizeView>
                 <Authorized>
-                    <MudNavLink Href="/player-account" Icon="@Icons.Material.Filled.ManageAccounts">
+                    <MudNavLink Href="/player-account" Icon="@Icons.Material.Filled.ManageAccounts" aria-label="Account and Connections">
                         <span class="nav-label">Account &amp; Connections</span>
                     </MudNavLink>
                 </Authorized>
             </AuthorizeView>
-            <MudNavLink Href="/privacy" Icon="@Icons.Material.Filled.PrivacyTip">
+            <MudNavLink Href="/privacy" Icon="@Icons.Material.Filled.PrivacyTip" aria-label="Privacy">
                 <span class="nav-label">Privacy</span>
             </MudNavLink>
-            <MudNavLink Href="/terms" Icon="@Icons.Material.Filled.Gavel">
+            <MudNavLink Href="/terms" Icon="@Icons.Material.Filled.Gavel" aria-label="Terms">
                 <span class="nav-label">Terms</span>
             </MudNavLink>
-            <MudNavLink Href="/security" Icon="@Icons.Material.Filled.Security">
+            <MudNavLink Href="/security" Icon="@Icons.Material.Filled.Security" aria-label="Security">
                 <span class="nav-label">Security</span>
             </MudNavLink>
         </div>
