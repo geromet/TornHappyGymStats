@@ -63,7 +63,7 @@
 
 @if (_loading)
 {
-    <LoadingState Message="Loading surfaces data…" />
+    <LoadingState Message="Loading training data…" />
 }
 else if (_loadError != null)
 {
@@ -71,7 +71,7 @@ else if (_loadError != null)
 }
 else if (_surfaces is null)
 {
-    <EmptyState Message="No surfaces data found. Run an import first." />
+    <EmptyState Message="No training data found yet. Run an import first." />
 }
 else
 {
@@ -233,7 +233,7 @@ else if (!_loading && _loadError == null && _surfaces != null && !_gymPointCloud
         }
         catch (Exception ex)
         {
-            _loadError = "Failed to load surfaces data due to an unexpected error.";
+            _loadError = "Could not load training data. Please try again.";
             Logger.LogError(ex, "Failed to load surfaces data");
         }
         finally
@@ -283,7 +283,7 @@ else if (!_loading && _loadError == null && _surfaces != null && !_gymPointCloud
         }
         catch (Exception ex)
         {
-            _statusMessage = "Import failed due to an unexpected error.";
+            _statusMessage = "Import failed. Please try again.";
             _statusSeverity = Severity.Error;
             Logger.LogError(ex, "Import failed");
         }
@@ -377,19 +377,17 @@ else if (!_loading && _loadError == null && _surfaces != null && !_gymPointCloud
 
     private static string BuildLoadFailureMessage(ApiFailure failure) => failure.Category switch
     {
-        ApiFailureCategory.ApiUnavailable => "Could not load surfaces data. The service is temporarily unavailable — try again shortly.",
-        ApiFailureCategory.BadGateway => "Could not load surfaces data. The service is temporarily unavailable — try again shortly.",
-        ApiFailureCategory.Deserialization => "Could not load surfaces data: API response format was invalid.",
-        _ => $"Could not load surfaces data: {failure.SafeMessage}"
+        ApiFailureCategory.ApiUnavailable => "Could not load training data. The service is temporarily unavailable — try again shortly.",
+        ApiFailureCategory.BadGateway => "Could not load training data. The service is temporarily unavailable — try again shortly.",
+        ApiFailureCategory.Deserialization => "Could not load training data. Please try again.",
+        _ => "Could not load training data. Please try again."
     };
 
     private static string BuildImportFailureMessage(ApiFailure failure) => failure.Category switch
     {
         ApiFailureCategory.ApiUnavailable => "Import failed. The service is temporarily unavailable — try again shortly.",
         ApiFailureCategory.BadGateway => "Import failed. The service is temporarily unavailable — try again shortly.",
-        ApiFailureCategory.ImportFailure => "Import failed: backend rejected or could not process the import.",
-        ApiFailureCategory.Validation => "Import rejected: request validation failed.",
-        ApiFailureCategory.Deserialization => "Import failed: API response format was invalid.",
-        _ => $"Import failed: {failure.SafeMessage}"
+        ApiFailureCategory.Validation => "Import could not start. Check your Torn API key and try again.",
+        _ => "Import failed. Please try again."
     };
 }
