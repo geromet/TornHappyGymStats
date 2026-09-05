@@ -11,6 +11,8 @@ namespace HappyGymStats.Tests;
 
 public sealed class BlazorApiFailureTests
 {
+    private const string BackendImportErrorDetail = "backend-detail-should-not-reach-safe-message";
+
     [Fact]
     public async Task GetLatest_returns_null_for_not_found_cache()
     {
@@ -137,7 +139,7 @@ public sealed class BlazorApiFailureTests
     }
 
     [Fact]
-    public async Task StartMyStatsImport_classifies_failed_import_outcome()
+    public async Task StartMyStatsImport_failed_outcome_does_not_expose_backend_detail_in_safe_message()
     {
         using var http = CreateHttpClient(_ => JsonResponse(HttpStatusCode.OK, FailedImportStatusJson));
         var sut = new SurfacesService(http);
@@ -146,6 +148,24 @@ public sealed class BlazorApiFailureTests
 
         Assert.Equal(ApiFailureCategory.ImportFailure, failure.Category);
         Assert.Equal("/api/v1/torn/import-jobs/me", failure.Endpoint);
+        Assert.Equal("Import failed due to a backend validation or processing error.", failure.SafeMessage);
+        Assert.DoesNotContain(BackendImportErrorDetail, failure.SafeMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain(BackendImportErrorDetail, failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StartImport_failed_outcome_does_not_expose_backend_detail_in_safe_message()
+    {
+        using var http = CreateHttpClient(_ => JsonResponse(HttpStatusCode.OK, FailedImportStatusJson));
+        var sut = new SurfacesService(http);
+
+        var failure = await Assert.ThrowsAsync<ApiFailure>(() => sut.StartImportAsync("safe-key", fresh: true));
+
+        Assert.Equal(ApiFailureCategory.ImportFailure, failure.Category);
+        Assert.Equal("/api/v1/torn/import-jobs", failure.Endpoint);
+        Assert.Equal("Import failed due to a backend validation or processing error.", failure.SafeMessage);
+        Assert.DoesNotContain(BackendImportErrorDetail, failure.SafeMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain(BackendImportErrorDetail, failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -214,7 +234,7 @@ public sealed class BlazorApiFailureTests
           "pagesFetched": 1,
           "logsFetched": 10,
           "logsAppended": 0,
-          "errorMessage": "validation"
+          "errorMessage": "backend-detail-should-not-reach-safe-message"
         }
         """;
 
