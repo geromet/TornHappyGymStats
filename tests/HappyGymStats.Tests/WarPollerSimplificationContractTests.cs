@@ -33,6 +33,85 @@ public sealed class WarPollerSimplificationContractTests
         Assert.DoesNotContain("IWarPollerClock", historyHost, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void War_poller_keeps_projection_heartbeat_and_backoff_as_effect_free_policy_helpers()
+    {
+        var root = ResolveRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(root, "src/HappyGymStats.WarPoller/WarPollerService.cs"));
+
+        var runOnce = ExtractMethodBody(service, "public async Task<WarPollerTickResult> RunOnceAsync(");
+        Assert.Contains("ResolveActiveWarAsync", runOnce, StringComparison.Ordinal);
+        Assert.Contains("BuildPersistedState", runOnce, StringComparison.Ordinal);
+        Assert.Contains("BuildHeartbeat", runOnce, StringComparison.Ordinal);
+        Assert.Contains("ComputeFailureBackoff", runOnce, StringComparison.Ordinal);
+
+        var projection = ExtractMethodBody(service, "private PersistedWarState BuildPersistedState(");
+        AssertEffectFree(projection);
+        Assert.DoesNotContain("_timeProvider", projection, StringComparison.Ordinal);
+
+        var heartbeat = ExtractMethodBody(service, "private WarPollerHeartbeatEntity BuildHeartbeat(");
+        AssertEffectFree(heartbeat);
+        Assert.DoesNotContain("_timeProvider", heartbeat, StringComparison.Ordinal);
+
+        var backoff = ExtractMethodBody(service, "private TimeSpan ComputeFailureBackoff(");
+        AssertEffectFree(backoff);
+        Assert.DoesNotContain("_timeProvider", backoff, StringComparison.Ordinal);
+
+        Assert.Equal(1, CountOccurrences(service, "interface IWarPoller"));
+    }
+
+    private static void AssertEffectFree(string methodBody)
+    {
+        Assert.DoesNotContain("await ", methodBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("_tornApiClient", methodBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("_warStateRepository", methodBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("_unitOfWork", methodBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("_warPollerNotifier", methodBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("_logger", methodBody, StringComparison.Ordinal);
+    }
+
+    private static string ExtractMethodBody(string source, string signature)
+    {
+        var signatureIndex = source.IndexOf(signature, StringComparison.Ordinal);
+        Assert.True(signatureIndex >= 0, $"Method signature not found: {signature}");
+
+        var openingBrace = source.IndexOf('{', signatureIndex);
+        Assert.True(openingBrace >= 0, $"Opening brace not found for: {signature}");
+
+        var depth = 0;
+        for (var index = openingBrace; index < source.Length; index++)
+        {
+            switch (source[index])
+            {
+                case '{':
+                    depth++;
+                    break;
+                case '}':
+                    depth--;
+                    if (depth == 0)
+                    {
+                        return source[openingBrace..(index + 1)];
+                    }
+                    break;
+            }
+        }
+
+        throw new InvalidOperationException($"Closing brace not found for: {signature}");
+    }
+
+    private static int CountOccurrences(string source, string value)
+    {
+        var count = 0;
+        var offset = 0;
+        while ((offset = source.IndexOf(value, offset, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            offset += value.Length;
+        }
+
+        return count;
+    }
+
     private static string ResolveRepositoryRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);
