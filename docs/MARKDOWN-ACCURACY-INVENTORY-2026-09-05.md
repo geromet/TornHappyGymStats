@@ -16,10 +16,11 @@ Classification:
 
 ## Executive summary
 
-- **10 verified findings across 9 files**.
-- **3 high**, **6 medium**, **1 low** severity.
-- The highest-risk drift is not product prose; it is **agent/workflow authority**: one verifier skill tells agents to edit a router that explicitly says not to do that, and `MILESTONES.md` calls gitignored `workspace/V2/` authoritative despite the canonical clean-clone agreement saying the opposite.
+- **13 verified findings across 12 files**.
+- **5 high**, **7 medium**, **1 low** severity.
+- The highest-risk drift is concentrated in **agent/workflow authority and key-access truth**: verifier/fixing guidance contradicts canonical routing/evidence rules, `MILESTONES.md` calls gitignored `workspace/V2/` authoritative despite the clean-clone agreement, and the published member-key disclosure says Limited-only while the live connection validator requires Full Access.
 - The human-input queue contains already-resolved P0 work and can send a human toward actions that are no longer required.
+- The Torn user-log reference also overstates what the active `UserLogEntries` import/persistence path retains by promising title/category/raw JSON that `LogFetcher.Map` does not map into the persisted entity.
 - Historical fleet/archive and baseline UX research files are intentionally **not** treated as defects for recording old state.
 
 ## Verified findings
@@ -36,6 +37,9 @@ Classification:
 | MD-008 | Medium | `docs/WORKING-AGREEMENT.md` | Evidence guidance still says “Until those checks are merged” for #61/#77. Both checks are already landed. | #61 is closed by merged PR #119; #77 is closed by merged PR #120, and current main mechanically classifies/validates evidence. | Replace the transitional paragraph with the landed behavior and current executable entrypoints. |
 | MD-009 | Medium | `docs/architecture/business-logic-and-reconstruction-flow.md` | Its “minimal verification” command posts `{"apiKey":"…","fresh":false}` to `POST /api/v1/torn/import-jobs`; current controller rejects non-fresh anonymous base-endpoint imports and tells callers to resume through authenticated `/me`. | `ImportController.StartImport` requires `request.Fresh == true`; `/api/v1/torn/import-jobs/me` is the authenticated resume/import path. | Fix the command and update the “current flow” section to distinguish fresh anonymous/base import from authenticated `/me`. |
 | MD-010 | Medium | `docs/UX-PLAN.md` | The static implementation table is materially stale even though the file says issues are authoritative: it says #105 is “not started” although #105 is completed, #106 is only “partly done” although it is closed/absorbed into #95 after a completed slice, and #98 is “not started” although live #98 is explicitly PARTIAL with its server lifecycle landed. | Live #105, #106, and #98 bodies/states on 2026-09-05. | Remove the duplicate status column or regenerate it from issues; keep the file as a stable UX principles/pointer document. |
+| MD-011 | **High** | `docs/torn-api/terms-of-service.md` | Usage 3 tells members that a stored member key is **“Limited only”** and that a Full Access key is refused. The actual account-connection path uses `AccountConnectionService.ConnectAsync` → `TornConnectionValidator.GetPlayerIdAsync`, whose `/v2/key/info` check rejects every key whose access is not `Full Access`. | Pinned `TornConnectionValidator.GetKeyInfoAsync` throws `TornApiException("Torn API key requires Full Access")` for non-Full keys; `AccountConnectionService.ConnectAsync` invokes that validator before linking/storing the member key. | Decide the real least-access contract, then align the member-key disclosure, validator and focused positive/negative controls. Do not publish Limited-only while runtime requires Full Access. |
+| MD-012 | Medium | `docs/torn-api/endpoints-and-log-types.md` | The `/user/log` storage section says the app retains `title and category` and `raw json` for each imported log entry. The active `LogFetcher` persistence path maps API logs to `UserLogEntryEntity` with owner/id/timestamp/type plus parsed happy/action/text fields; it does not map title, category, or raw JSON into `UserLogEntries`. | `LogFetcher.Map` constructs `UserLogEntryEntity` without title/category/raw-payload fields and `UserLogEntryRepository.AddRangeAsync` persists those entities through `HappyGymStatsDbContext.UserLogEntries`. | Rewrite the storage contract to the normalized fields actually retained, or deliberately implement raw/title/category retention with an explicit privacy/retention contract. Do not claim data is retained when this path discards it. |
+| MD-013 | **High** | `.claude/skills/fixing-a-bug/SKILL.md` | Tier detection says **any** change under `scripts/`, any CLI/script behavior, script/CLI test, remote-exec harness, or verifier logic requires T3 remote/sandbox evidence. That turns file location/tooling category into a remote-mutation risk signal and contradicts the canonical tier contract. | Pinned `AGENTS.md` defines T1 as source/internal behavior and reserves T3 for **deployment or remote-mutation behavior**, explicitly saying tiers add obligations only when the corresponding runtime risk exists. | Make tier selection risk/behavior-based: require T3 only when the fix actually exercises deployment/remote mutation; use T1 plus the relevant real/hermetic tool fixture for local CLI/script/verifier logic. |
 
 ## Important non-findings / false positives rejected
 
@@ -43,7 +47,7 @@ Classification:
 - `docs/fleet/BRANCH-INVENTORY-2026-09-05.md` records old branch state by design. #140 explicitly describes it as historical recovery provenance, not live existence authority.
 - `docs/fleet/archive/activity/2026-09.md` and `docs/fleet/archive/instruction-changes.md` are append-only historical records; changing current repo state does not invalidate their old snapshots.
 - `docs/ux/*` explicitly states its research baseline and that current repository/issues supersede baseline observations. Its old observations are therefore not automatically current-state defects.
-- Torn API reference/sample documents were not marked wrong without a concrete contract/code discrepancy.
+- Torn API helper/faction reference documents were not marked wrong without a concrete contract/code discrepancy. The concrete member-key and user-log mismatches are recorded as MD-011 and MD-012 rather than generalized to unrelated Torn API docs.
 
 ## Full 33-file coverage ledger
 
@@ -52,7 +56,7 @@ Classification:
 | `AGENTS.md` | CURRENT / NO VERIFIED DRIFT | Correct clean-clone router to working agreement/issues/LOCK. |
 | `CLAUDE.md` | CURRENT / NO VERIFIED DRIFT | Correctly reduced to Claude-specific router. |
 | `README.md` | **FINDING** | MD-001. |
-| `.claude/skills/fixing-a-bug/SKILL.md` | CURRENT / NO VERIFIED DRIFT | No concrete repo-state contradiction proven. |
+| `.claude/skills/fixing-a-bug/SKILL.md` | **FINDING** | MD-013. |
 | `.claude/skills/looking-at-the-app/SKILL.md` | **FINDING** | MD-002. |
 | `.claude/skills/writing-a-verify-script/SKILL.md` | **FINDING** | MD-003. |
 | `.github/pull_request_template.md` | CURRENT / NO VERIFIED DRIFT | Matches structured evidence contract. |
@@ -70,10 +74,10 @@ Classification:
 | `docs/fleet/SELF-IMPROVING-FLEET.md` | CURRENT / NO VERIFIED DRIFT | No concrete contradiction proven. |
 | `docs/fleet/archive/activity/2026-09.md` | HISTORICAL / SNAPSHOT | Append-only activity archive. |
 | `docs/fleet/archive/instruction-changes.md` | HISTORICAL / SNAPSHOT | Append-only instruction history. |
-| `docs/torn-api/endpoints-and-log-types.md` | CURRENT / NO VERIFIED DRIFT | No concrete implementation discrepancy proven. |
+| `docs/torn-api/endpoints-and-log-types.md` | **FINDING** | MD-012. |
 | `docs/torn-api/faction-members-contract.md` | CURRENT / NO VERIFIED DRIFT | Recent pinned OpenAPI contract for #86. |
 | `docs/torn-api/helper-curl-log-samples.md` | CURRENT / NO VERIFIED DRIFT | No concrete contract discrepancy proven. |
-| `docs/torn-api/terms-of-service.md` | CURRENT / NO VERIFIED DRIFT | Recent versioned disclosure; historical changelog references remain history. |
+| `docs/torn-api/terms-of-service.md` | **FINDING** | MD-011. |
 | `docs/ux/README.md` | RESEARCH / GUIDANCE SNAPSHOT | Explicit baseline + current-state override. |
 | `docs/ux/00-executive-and-design-principles.md` | RESEARCH / GUIDANCE SNAPSHOT | Baseline/design guidance. |
 | `docs/ux/01-current-audit-and-competitive-context.md` | RESEARCH / GUIDANCE SNAPSHOT | “Current” is scoped by report baseline/publication note. |
@@ -85,14 +89,16 @@ Classification:
 
 ## Remediation order
 
-1. **Agent/workflow authority first:** MD-003, MD-005, MD-004, MD-008.
-2. **Commands/routes that lead directly to failure:** MD-002, MD-009, MD-001.
-3. **Duplicate status/topology drift:** MD-006, MD-010, MD-007.
+1. **Agent/workflow authority first:** MD-003, MD-013, MD-005, MD-004, MD-008.
+2. **Security/data-contract truth:** MD-011, MD-012.
+3. **Commands/routes that lead directly to failure:** MD-002, MD-009, MD-001.
+4. **Duplicate status/topology drift:** MD-006, MD-010, MD-007.
 
 ## Done criteria for the remediation tracker
 
 - Every FINDING above is either corrected, deliberately archived with unmistakable historical labeling, or disproven with current evidence and removed from the inventory.
 - Agent-facing guidance has one authority path: tracked working agreement + executable verifier contracts + GitHub issues/LOCK; no `workspace/V2` authority language remains.
+- API-key access-level and user-log retention claims match the executable connection/import/persistence contracts, including focused negative controls where the boundary is security/privacy relevant.
 - All documented commands/routes used as current examples resolve against then-current code.
 - Time-sensitive status tables/queues are removed, generated, or explicitly snapshot-dated so they cannot masquerade as live issue state.
 - A fresh Markdown enumeration on the then-current default head records the new file count and confirms no new current-state contradiction was introduced.
