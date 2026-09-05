@@ -1,71 +1,77 @@
 # Retirement Provenance — 2026-09-05
 
-## What is durably recoverable
+## Reconciled execution evidence
+
+All **65 retired refs** now have an exact deletion-time head and timestamp from
+the operator's original execution ledgers: **40 in wave 1 and 25 in wave 2**.
+The coding agent supplied both files verbatim in
+[#193 comment 5555320434](https://github.com/geromet/TornHappyGymStats/issues/193#issuecomment-5555320434).
+Their TSV blocks are preserved unchanged here:
+
+- [retire-branches-20260905.ledger.tsv](retire-branches-20260905.ledger.tsv)
+- [retire-branches-20260905-wave2.ledger.tsv](retire-branches-20260905-wave2.ledger.tsv)
+
+These were originally generated under the operator's gitignored `workspace/`.
+A clean clone now contains the records; no machine-local file upload is needed.
+They are historical evidence, not current branch authority or executable work
+instructions. Read #140 and enumerate origin for current ownership and existence.
+
+## Reconciliation with the earlier reconstruction
 
 [RETIRED-BRANCH-HEADS-2026-09-05.tsv](RETIRED-BRANCH-HEADS-2026-09-05.tsv)
-records all **65 named refs** in #193's two deletion sets: 40 in wave 1 and 25
-in wave 2. Each row records a full historical SHA when a branch-bound source
-supports it, the evidence type, its GitHub URL and the remaining verification limit.
+retains the prior historical observations and adds separate execution fields.
 
-Reconstruction sources:
+| Evidence | Reconciliation result |
+| --- | --- |
+| 63 GitHub PR `head.ref` / `head.sha` mappings | All match the supplied execution heads |
+| 1 main-equality observation | Matches the supplied execution head |
+| 1 previously unknown head | Resolved by the wave-1 execution ledger |
 
-- [#193](https://github.com/geromet/TornHappyGymStats/issues/193): checked wave-1
-  candidates (excluding the unchecked preserve) and explicit wave-2 deleted set.
-- GitHub REST pull-request history (`state=all`, all pages): the latest-numbered
-  PR whose `head.ref` exactly matches the branch. The ledger preserves its full
-  `head.sha`; a squash `merge_commit_sha` is deliberately **not substituted**.
-- [The audit owner's main-equality record](https://github.com/geromet/TornHappyGymStats/issues/140#issuecomment-5554569979)
-  for `audit/docs-markdown-accuracy-20260905-2`, which had no PR or unique work.
+The previously unresolved `fix/security-local-return-urls` was deleted at
+`2026-09-05T17:40:26Z` with head
+`150f9aeb65dedcc556bdeb6ee9b1eaa48e538fba`. This value comes from its own operator
+record, not replacement PR #144. Its original `historical_head_sha=UNKNOWN` and
+note remain as a record of what the earlier reconstruction could establish;
+`deletion_head_sha` now provides the resolved value.
 
-Result: **63 PR-head mappings**, **1 explicitly recorded main-equality mapping**,
-and **1 unresolved head** (`fix/security-local-return-urls`). Its replacement
-#144 is evidence of supersession, not proof of the old branch's exact head.
-No SHA has been guessed from a similar commit message or replacement tree.
+The existing `historical_head_sha`, `evidence_kind`, `evidence_url` and `note`
+columns retain their original values. Added columns carry `deleted_at`,
+`deletion_head_sha`, `execution_evidence_url`, `execution_ledger` and
+`reconciliation`. All `deletion_head_verified=yes` flags mean **reconciled against
+the supplied operator execution record**. They do not claim this auditor witnessed
+the deletion or independently replayed its compare-and-swap operation.
 
-## What this does not certify
+The earlier reconstruction used #193's named deletion sets, the latest-numbered
+GitHub PR with an exactly matching `head.ref`, and
+[the main-equality observation](https://github.com/geromet/TornHappyGymStats/issues/140#issuecomment-5554569979).
+PR heads alone were insufficient deletion-time evidence. The supplied original
+ledgers close that evidence gap without rewriting earlier observations.
 
-The TSV is a historical-head evidence ledger, **not an exact restore ledger**.
-All rows currently say `deletion_head_verified=no`. A branch can move after its
-PR's last observed head; PR metadata alone cannot prove the deletion-time ref.
-The original operator execution ledgers are required to certify those values:
+## Validation and limits
 
-- `workspace/retire-branches-20260905.ledger.tsv`
-- `workspace/retire-branches-20260905-wave2.ledger.tsv`
+Reconciliation checked both original TSV blocks byte-for-byte against the supplied
+GitHub comment, 65 unique branch names, disjoint 40/25 wave membership, exact
+coverage of the earlier ledger, full 40-character hexadecimal SHAs, and each
+recorded restore command's agreement with its own SHA and branch. All 64 previously
+known heads agree; the remaining head is resolved; no discrepancies remain.
 
-Those machine-local files were named in #193 but were not present in this repair
-environment or its Git history. They are missing evidence, not required project
-setup. The branch-freeze statements in the execution report support the operator's
-account but do not replace the missing per-ref execution rows.
+Every one of the 65 SHAs also resolved through GitHub's Git commit API
+(`GET /repos/geromet/TornHappyGymStats/git/commits/{sha}`) to the same SHA and a
+commit tree during this reconciliation. This is a point-in-time object-availability
+check, not a permanent object backup guarantee. A future restoration may require
+fetching the object first. A reviewed Git bundle would be a separate backup task.
 
-MD-012 in [#223](https://github.com/geromet/TornHappyGymStats/issues/223) therefore
-remains **PARTIAL**, not complete. MD-011's obsolete current review instructions
-are removed by the companion guidance repair. Default incorporation of that repair
-still belongs to the coding-agent/human review workflow.
+MD-012 in [#223](https://github.com/geromet/TornHappyGymStats/issues/223) has its
+missing execution evidence reconciled. #221 carries the clean-clone copies and
+MD-011's corrected current-authority guidance. Default incorporation and final
+acceptance of #221 remain with Gerome's coding-agent/human workflow; the broader
+MD-001..MD-015 tracker is not completed by this retirement repair.
 
-## Closing the remaining evidence gap
+## Restoration boundary
 
-1. Supply the two original TSV ledgers, preserving branch and full pre-deletion
-   SHA fields. Review for unrelated machine/private data before committing.
-2. Reconcile every named branch against this 40/25 set. Preserve discrepancies
-   explicitly; never overwrite a PR observation and pretend it was the execution
-   value. Add separate execution-head/source fields if values differ.
-3. Recover the unresolved head from the original ledger (or another independently
-   branch-bound observation). Do not substitute #144's merge or head SHA.
-4. Verify each supplied SHA is a commit; record any unavailable object. Historical
-   metadata is not a permanent backup guarantee. If a durable object backup is
-   required, preserve a reviewed bundle/artifact rather than reopening 65 branches.
-5. Only mark deletion-time verification complete when all rows are reconciled to
-   the original execution evidence. Until then #193 must not claim the provenance
-   acceptance criterion complete.
-
-No restore commands are generated: neither this ledger nor the original deletion
-approval authorizes restoring refs. Any later restoration needs fresh ownership,
-ref-existence and worktree checks under #140 and explicit scope.
-
-## Validation performed for this reconstruction
-
-The 40/25 sets are disjoint and contain 65 unique full branch names. Each recovered
-SHA is 40 hexadecimal characters and each PR source maps exactly to the recorded
-branch. The original historical inventory rows are preserved; only their active
-authority framing is corrected. The live companion now describes read-only
-enumeration instead of pinning a branch count that immediately becomes stale.
+The original TSVs preserve operator-generated `git push` restore commands as
+data. **Do not execute those commands as part of this audit or documentation
+repair.** Neither this ledger nor the earlier deletion approval authorizes
+restoring refs. Any later restoration requires explicit scope and fresh #140
+ownership, ref-existence and local-worktree checks. No refs were restored or
+deleted by this reconciliation; fleet/manual agents never merge to default.

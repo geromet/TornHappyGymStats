@@ -22,9 +22,10 @@ recovery decisions and then-current statuses, **not commands to review, restore,
 preserve, merge or delete those refs today**.
 
 Durable evidence: [retired-head ledger and limits](RETIREMENT-PROVENANCE-2026-09-05.md).
-The original machine-local execution ledgers have not been supplied to this
-repository. Reconstructed PR heads are historical evidence, not certified
-deletion-time heads; MD-012 in #223 remains partial until that gap is reconciled.
+The original operator execution ledgers are now preserved in this repository and
+reconciled to all 65 retired refs: 64 earlier historical heads match and the one
+previously unknown head is resolved. See the linked provenance for separate
+historical/execution fields, source records and point-in-time validation limits.
 
 ## Historical audit basis
 
