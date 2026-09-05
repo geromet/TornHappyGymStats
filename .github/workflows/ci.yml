@@ -115,6 +115,20 @@ jobs:
       - name: Run non-skippable Postgres integration tier
         run: bash scripts/verify/s07-postgres-integration.sh
 
+  browser-crypto:
+    name: browser crypto regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Reuse the repository-native, user-local Playwright bootstrap. It installs
+      # Python Playwright into .venv and Chromium into the Playwright user cache.
+      - name: Bootstrap browser verifier
+        run: bash scripts/screenshot-board.sh --setup
+
+      - name: Execute Web Crypto in Chromium
+        run: .venv/bin/python scripts/verify/browser-crypto-regression.py
+
   format:
     name: dotnet format
     runs-on: ubuntu-latest
