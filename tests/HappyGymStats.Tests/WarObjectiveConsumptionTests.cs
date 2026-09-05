@@ -90,6 +90,12 @@ public sealed class WarObjectiveConsumptionTests
             return Task.FromResult(effective);
         }
 
+        public Task<FactionWarObjectiveVersion> GetDurableEffectiveAsync(
+            long factionId,
+            long warId,
+            CancellationToken ct)
+            => Task.FromResult(effective);
+
         public Task<FactionWarObjectiveVersion?> GetCurrentAsync(
             long factionId,
             long warId,
