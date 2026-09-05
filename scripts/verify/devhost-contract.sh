@@ -14,7 +14,7 @@ readonly ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "${ROOT_DIR}"
 
 readonly NGINX_DEV="infra/nginx-torndev.conf"
-readonly NGINX_PROD="infra/nginx-torn.conf"
+readonly NGINX_PROD="infra/torn.conf"
 readonly UNIT_API_DEV="infra/happygymstats-api-dev.service"
 readonly UNIT_BLAZOR_DEV="infra/happygymstats-blazor-dev.service"
 readonly UNIT_API_PROD="infra/happygymstats-api.service"

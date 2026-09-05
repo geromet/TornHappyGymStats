@@ -20,7 +20,7 @@ public sealed class WarFinalAssemblyGuardrailTests
     [Fact]
     public void Nginx_routes_war_hub_before_general_api_and_forwards_websocket_headers()
     {
-        var content = ReadRepoFile("infra/nginx-torn.conf");
+        var content = ReadRepoFile("infra/torn.conf");
 
         var hubIndex = content.IndexOf("location /api/hub/war {", StringComparison.Ordinal);
         var apiIndex = content.IndexOf("location /api/ {", StringComparison.Ordinal);
