@@ -14,6 +14,8 @@ w05-scouting-contract	scripts/verify/w05-scouting-contract.sh	offline	required	g
 w06-chain-contract	scripts/verify/w06-chain-contract.sh	offline	required	rg,dotnet	-
 w07-key-vault-contract	scripts/verify/w07-key-vault-contract.sh	offline	required	rg,sed,dotnet	-
 package-version-policy	scripts/verify/package-version-policy.sh	offline	required	rg	-
+remote-transport-policy	scripts/verify/remote-transport-policy.sh	offline	required	bash,dirname,git	-
+remote-exec-pty-integration	scripts/verify/remote-exec-pty-integration.sh	tier3	excluded	bash,python3,ssh,ssh-keygen,ssh-keyscan,sudo,timeout	Privileged disposable sshd/PTTY proof runs in .github/workflows/remote-exec-pty.yml, not the ordinary merge gate.
 hermetic-test-runner	scripts/verify/hermetic-tests.sh	test-runner	excluded	dotnet,env,find,sort,head,cut,sed,mktemp	Invoked after build as the ordinary test runner; it is not a contract verifier.
 devhost-contract	scripts/verify/devhost-contract.sh	operator	excluded	bash	Targets the configured dev-host deployment rather than a clean repository clone.
 devhost-smoke	scripts/verify/devhost-smoke.sh	operator	excluded	bash,curl	Requires a running dev host and network access.
