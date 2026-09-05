@@ -196,11 +196,12 @@ PREAMBLE
   if [[ -e /dev/tty ]] && { : >/dev/tty; } 2>/dev/null; then
     ssh -tt "${opts[@]}" "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}" "${remote_cmd}" < /dev/tty || rc=$?
   else
-    # No controlling terminal (CI, a pipeline). An interactive sudo cannot work
-    # here, so say so rather than echoing a password into a log.
+    # Fail closed before starting SSH. A remote PTY is not a substitute for a
+    # local controlling terminal: sudo could still block on an invisible prompt
+    # that no process can answer, leaving CI/pipelines hung indefinitely.
     echo "remote_exec_script: no controlling terminal; interactive sudo is not possible." >&2
     echo "  Run this from an interactive shell, or configure passwordless sudo on the server." >&2
-    ssh -tt "${opts[@]}" "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}" "${remote_cmd}" </dev/null || rc=$?
+    return 77
   fi
 
   if [[ -n "${tee_file}" ]]; then
