@@ -2,11 +2,11 @@
 
 Live companion to `docs/fleet/BRANCH-INVENTORY-2026-09-05.md` after the 2026-09-05 recovery and branch-retirement pass. The dated inventory remains the historical recovery ledger; **do not use its rows as proof that a remote ref still exists**.
 
-Snapshot baseline: `main@f6d686c9706ac2657d9fe30455a8547211993611`, refreshed 2026-09-05 20:18 Europe/Amsterdam.
+Snapshot baseline: `main@f6d686c9706ac2657d9fe30455a8547211993611`, refreshed 2026-09-05 20:25 Europe/Amsterdam.
 
 ## Retirement reconciliation
 
-The dedicated #193 retirement workflow reports **39 of 41 candidate branches retired**. Its execution log records **40 remote deletions total** during the interval; the remote collection moved from 66 to 27 because a new #220 branch was also created during that period. After the archive rollup branch for #221 was created, the refreshed GitHub branch collection contains **28 remote refs total, including `main`**.
+The dedicated #193 retirement workflow reports **39 of 41 candidate branches retired**. Its execution log records **40 remote deletions total** during the interval; the remote collection moved from 66 to 27 because a new #220 branch was also created during that period. After the archive rollup branch for #221 was created the collection contained 28 refs; creation of this inventory-review branch for #222 makes the current collection **29 remote refs total, including `main`**.
 
 These numbers describe different accounting sets and are not contradictory. #193 remains the source for destructive-retirement decisions and restore-ledger details. This file is read-only inventory; fleet/AUDIT must not delete refs from it.
 
@@ -17,6 +17,7 @@ These numbers describe different accounting sets and are not contradictory. #193
 | `agent/issue-101-home-gym-explorer` | #200 → `main` | **OPEN / ACTIVE**. Head `4403e124c86fc083a175f2349d0ae4763f663e0b`; forward reconciliation is separately owned. Preserve. |
 | `agent/issue-217-security-no-prerender` | #220 → `main` | **OPEN / ACTIVE PROOF**. Head `5df8d04fdf7a659a8966b2ceba5ef7b47826b5bd`; #217 T2/exact-head review is separately owned. Preserve. |
 | `fleet/stable/fleet-archive-20260905-1952` | #221 → `main` | **OPEN / GEROME REVIEW**. Head `bd2be0f7cd7d83e3defddea352ab1fb3b756ac6e`; durable archive rollup. Preserve. |
+| `fleet/stable/branch-inventory-reconcile-20260905` | #222 → `main` | **OPEN / GEROME REVIEW**. This branch owns this live-frontier companion only; its head advances when the inventory is refreshed. Preserve while #222 is open. |
 
 No other currently enumerated remote ref is evidence of stranded work merely because it exists or is ahead of `main`.
 
@@ -26,7 +27,7 @@ No other currently enumerated remote ref is evidence of stranded work merely bec
 
 ## Current remote ref collection
 
-The GitHub branch API returned the following 28 refs at this snapshot. This is an **existence list, not a work queue**. For historical status, landed/superseded ancestry, and recovery provenance, consult the dated inventory and PR history; for destructive cleanup consult #193.
+The GitHub branch API returned 28 refs before this inventory branch existed; adding `fleet/stable/branch-inventory-reconcile-20260905` for #222 makes the current collection 29. This is an **existence list, not a work queue**. For historical status, landed/superseded ancestry, and recovery provenance, consult the dated inventory and PR history; for destructive cleanup consult #193.
 
 ```text
 agent/issue-100-chain-planner
@@ -50,6 +51,7 @@ fleet/b-86-opponent-pressure
 fleet/b-86-readiness-core
 fleet/b-86-travel-availability
 fleet/docs-self-improvement-archive
+fleet/stable/branch-inventory-reconcile-20260905
 fleet/stable/fleet-archive-20260905-1952
 fleet/stable/ux-proof-provenance
 fleet/stable/war-core-simplification
@@ -63,7 +65,7 @@ refactor/gym-trains-pass-through
 
 1. `ahead` or commit-identity divergence after squash/stable/rollup merges is **not** proof of missing work.
 2. A useful pushed branch must be represented directly or transitively by a current default-destined PR, proven incorporated/superseded with that relationship recorded, or explicitly abandoned after unique-work assessment.
-3. The three live review branches above satisfy terminal visibility through open PRs #200/#220/#221.
+3. The four live review branches above satisfy terminal visibility through open PRs #200/#220/#221/#222.
 4. Historical surviving refs must not be re-queued solely because they remain remote. Reconcile against current `main`, the dated inventory, merged/closed PR history, #218 and current LOCK claims first.
 5. Remote deletion remains exclusively the #193 dedicated cleanup/coding-agent workflow after local-worktree, unpushed-work, freshness, open-PR/issue and expected-head checks.
 6. If branch retirement or new review branches change the remote collection again, refresh this companion inventory and #193/#218 before treating branch names as discovery input.
