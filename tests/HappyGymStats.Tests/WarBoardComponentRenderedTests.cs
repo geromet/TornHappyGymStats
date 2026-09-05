@@ -6,15 +6,15 @@ using MudBlazor.Services;
 
 namespace HappyGymStats.Tests;
 
-public sealed class WarBoardComponentRenderedTests : BunitContext
+public sealed class WarBoardComponentRenderedTests
 {
     private const string RawTimerDiagnostic = "operator-only raw timer spacing diagnostic";
 
     [Fact]
-    public void Exact_chain_timer_renders_one_measured_countdown_without_inferred_label()
+    public async Task Exact_chain_timer_renders_one_measured_countdown_without_inferred_label()
     {
-        ConfigureMud();
-        var cut = Render<WarChainCommandPanel>(parameters => parameters
+        await using var context = CreateContext();
+        var cut = context.Render<WarChainCommandPanel>(parameters => parameters
             .Add(component => component.Chain, CreateChain("Exact", timerIsInferred: false, secondsSinceLastHit: null)));
 
         Assert.Contains("Chain lapses in", cut.Markup, StringComparison.Ordinal);
@@ -27,10 +27,10 @@ public sealed class WarBoardComponentRenderedTests : BunitContext
     }
 
     [Fact]
-    public void Inferred_chain_timer_uses_curated_alert_copy_and_single_provenance_label()
+    public async Task Inferred_chain_timer_uses_curated_alert_copy_and_single_provenance_label()
     {
-        ConfigureMud();
-        var cut = Render<WarChainCommandPanel>(parameters => parameters
+        await using var context = CreateContext();
+        var cut = context.Render<WarChainCommandPanel>(parameters => parameters
             .Add(component => component.Chain, CreateChain("Inferred", timerIsInferred: true, secondsSinceLastHit: 280)));
 
         var timerFigures = cut.FindAll(".hgs-figure")
@@ -47,15 +47,15 @@ public sealed class WarBoardComponentRenderedTests : BunitContext
     }
 
     [Fact]
-    public void Hole_panel_distinguishes_empty_and_actionable_states()
+    public async Task Hole_panel_distinguishes_empty_and_actionable_states()
     {
-        ConfigureMud();
-        var empty = Render<WarHoleAlerts>(parameters => parameters
+        await using var context = CreateContext();
+        var empty = context.Render<WarHoleAlerts>(parameters => parameters
             .Add(component => component.Holes, Array.Empty<WarHoleDto>()));
         Assert.Contains("No current hole alerts.", empty.Markup, StringComparison.Ordinal);
         Assert.Empty(empty.FindAll(".war-hole"));
 
-        var populated = Render<WarHoleAlerts>(parameters => parameters
+        var populated = context.Render<WarHoleAlerts>(parameters => parameters
             .Add(component => component.Holes, new[]
             {
                 new WarHoleDto(
@@ -74,11 +74,13 @@ public sealed class WarBoardComponentRenderedTests : BunitContext
         Assert.Single(populated.FindAll(".war-hole-critical"));
     }
 
-    private void ConfigureMud()
+    private static BunitContext CreateContext()
     {
-        JSInterop.Mode = JSRuntimeMode.Loose;
-        Services.AddLogging();
-        Services.AddMudServices(options => options.PopoverOptions.CheckForPopoverProvider = false);
+        var context = new BunitContext();
+        context.JSInterop.Mode = JSRuntimeMode.Loose;
+        context.Services.AddLogging();
+        context.Services.AddMudServices(options => options.PopoverOptions.CheckForPopoverProvider = false);
+        return context;
     }
 
     private static WarChainCommandDto CreateChain(
