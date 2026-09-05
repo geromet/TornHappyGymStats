@@ -89,25 +89,34 @@ public sealed class WarReadinessRepository(HappyGymStatsDbContext db) : IWarRead
         await WithOpenConnectionAsync(async connection =>
         {
             await using var command = connection.CreateCommand();
-            command.CommandText = """
-                INSERT INTO "WarReadinessDeclarations" (
-                    "FactionId", "WarId", "MemberId", "State", "WindowStartUtc", "WindowEndUtc",
-                    "Note", "UpdatedAtUtc", "Revision")
-                VALUES (
-                    @factionId, @warId, @memberId, @state, @windowStartUtc, @windowEndUtc,
-                    @note, @updatedAtUtc, @revision)
-                ON CONFLICT ("FactionId", "WarId", "MemberId") DO UPDATE SET
-                    "State" = EXCLUDED."State",
-                    "WindowStartUtc" = EXCLUDED."WindowStartUtc",
-                    "WindowEndUtc" = EXCLUDED."WindowEndUtc",
-                    "Note" = EXCLUDED."Note",
-                    "UpdatedAtUtc" = EXCLUDED."UpdatedAtUtc",
-                    "Revision" = EXCLUDED."Revision"
-                WHERE "WarReadinessDeclarations"."Revision" = @expectedRevision
-                RETURNING "Revision"
-                """;
+            command.CommandText = expectedRevision == 0
+                ? """
+                    INSERT INTO "WarReadinessDeclarations" (
+                        "FactionId", "WarId", "MemberId", "State", "WindowStartUtc", "WindowEndUtc",
+                        "Note", "UpdatedAtUtc", "Revision")
+                    VALUES (
+                        @factionId, @warId, @memberId, @state, @windowStartUtc, @windowEndUtc,
+                        @note, @updatedAtUtc, @revision)
+                    ON CONFLICT ("FactionId", "WarId", "MemberId") DO NOTHING
+                    RETURNING "Revision"
+                    """
+                : """
+                    UPDATE "WarReadinessDeclarations"
+                    SET "State" = @state,
+                        "WindowStartUtc" = @windowStartUtc,
+                        "WindowEndUtc" = @windowEndUtc,
+                        "Note" = @note,
+                        "UpdatedAtUtc" = @updatedAtUtc,
+                        "Revision" = @revision
+                    WHERE "FactionId" = @factionId
+                      AND "WarId" = @warId
+                      AND "MemberId" = @memberId
+                      AND "Revision" = @expectedRevision
+                    RETURNING "Revision"
+                    """;
             AddDeclarationParameters(command, declaration);
-            AddParameter(command, "expectedRevision", DbType.Int64, expectedRevision);
+            if (expectedRevision > 0)
+                AddParameter(command, "expectedRevision", DbType.Int64, expectedRevision);
 
             var persisted = await command.ExecuteScalarAsync(ct);
             if (persisted is null || persisted is DBNull)
