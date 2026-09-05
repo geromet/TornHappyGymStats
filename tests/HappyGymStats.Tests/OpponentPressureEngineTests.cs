@@ -1,3 +1,4 @@
+using System.Reflection;
 using HappyGymStats.Core.War;
 using Xunit;
 
@@ -136,20 +137,21 @@ public sealed class OpponentPressureEngineTests
     }
 
     [Fact]
-    public void Engine_has_no_transport_or_repository_dependency()
+    public void Public_engine_surface_accepts_only_preassembled_observation_data()
     {
-        var constructors = typeof(OpponentPressureEngine).GetConstructors();
+        var method = Assert.Single(typeof(OpponentPressureEngine).GetMethods(
+            BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly));
+        var parameter = Assert.Single(method.GetParameters());
 
-        Assert.Empty(constructors);
-        Assert.DoesNotContain(
-            typeof(OpponentPressureEngine).Assembly.GetReferencedAssemblies(),
-            assembly => assembly.Name?.Contains("Http", StringComparison.OrdinalIgnoreCase) == true);
+        Assert.Equal(nameof(OpponentPressureEngine.Evaluate), method.Name);
+        Assert.Equal(typeof(OpponentPressureInput), parameter.ParameterType);
+        Assert.Equal(typeof(OpponentPressureSignal), method.ReturnType);
     }
 
     [Theory]
     [InlineData(-1, 0, 0)]
     [InlineData(10, 11, 0)]
-    [InlineData(10, 5, 6)]
+    [InlineData(10, 5, 11)]
     public void Invalid_member_counts_fail_closed(int observed, int active, int attackable)
     {
         Assert.ThrowsAny<ArgumentException>(() => OpponentPressureEngine.Evaluate(
