@@ -1,0 +1,24 @@
+name: Issue 96 shell proof
+
+on:
+  push:
+    branches:
+      - agent/issue-96-app-shell-navigation
+
+permissions:
+  contents: read
+
+jobs:
+  shell-proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Restore
+        run: dotnet restore HappyGymStats.sln
+      - name: Build
+        run: dotnet build HappyGymStats.sln -c Release --no-restore
+      - name: App shell contracts
+        run: dotnet test tests/HappyGymStats.Tests/HappyGymStats.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~AppShellContractTests"
