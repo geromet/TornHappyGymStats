@@ -23,6 +23,7 @@ public sealed class OpponentPressureEngineTests
         var input = Input(active: 8, attackable: 7) with
         {
             FreshestObservationAtUtc = Now.AddMinutes(-16),
+            WindowStartUtc = Now.AddMinutes(-20),
             Provenance = ["faction-members:sample-42"],
         };
 
@@ -123,6 +124,7 @@ public sealed class OpponentPressureEngineTests
         var input = Input(observed: 20, active: 10, attackable: 9) with
         {
             FreshestObservationAtUtc = Now.AddHours(-1),
+            WindowStartUtc = Now.AddHours(-2),
             PriorState = new OpponentPressurePriorState
             {
                 Level = OpponentPressureLevel.Surge,
@@ -156,6 +158,33 @@ public sealed class OpponentPressureEngineTests
     {
         Assert.ThrowsAny<ArgumentException>(() => OpponentPressureEngine.Evaluate(
             Input(observed: observed, active: active, attackable: attackable)));
+    }
+
+    [Fact]
+    public void Observation_before_declared_window_fails_closed()
+    {
+        var input = Input() with
+        {
+            WindowStartUtc = Now.AddMinutes(-5),
+            FreshestObservationAtUtc = Now.AddMinutes(-6),
+        };
+
+        Assert.Throws<ArgumentException>(() => OpponentPressureEngine.Evaluate(input));
+    }
+
+    [Fact]
+    public void Undefined_prior_pressure_level_fails_closed()
+    {
+        var input = Input() with
+        {
+            PriorState = new OpponentPressurePriorState
+            {
+                Level = (OpponentPressureLevel)999,
+                SinceUtc = Now.AddMinutes(-1),
+            },
+        };
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => OpponentPressureEngine.Evaluate(input));
     }
 
     private static OpponentPressureInput Input(
