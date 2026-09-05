@@ -93,46 +93,6 @@ public sealed class UserLogEntryRepository(HappyGymStatsDbContext db) : IUserLog
             .ToListAsync(ct)
             .ContinueWith(t => (IReadOnlyList<GymLogEntry>)t.Result, TaskContinuationOptions.ExecuteSynchronously);
 
-    public async Task<CursorPage<GymTrainDto>> GetGymTrainsPageAsync(int take, PageCursor? cursor, CancellationToken ct)
-    {
-        IQueryable<UserLogEntryEntity> baseQuery;
-        if (cursor is null)
-        {
-            baseQuery = db.UserLogEntries.AsNoTracking().Where(x => x.HappyUsed != null);
-        }
-        else
-        {
-            baseQuery = db.UserLogEntries
-                .FromSqlInterpolated($@"
-SELECT *
-FROM UserLogEntries
-WHERE HappyUsed IS NOT NULL
-  AND (OccurredAtUtc < {cursor.OccurredAtUtc.UtcDateTime}
-   OR (OccurredAtUtc = {cursor.OccurredAtUtc.UtcDateTime} AND LogEntryId < {cursor.Id}))")
-                .AsNoTracking();
-        }
-
-        var rows = await baseQuery
-            .OrderByDescending(row => row.OccurredAtUtc)
-            .ThenByDescending(row => row.LogEntryId)
-            .Take(take + 1)
-            .Select(row => new GymTrainDto(
-                row.LogEntryId,
-                row.OccurredAtUtc,
-                row.HappyBeforeTrain,
-                row.HappyBeforeTrain != null && row.HappyUsed != null ? row.HappyBeforeTrain - row.HappyUsed : null,
-                row.HappyUsed,
-                row.MaxHappyBefore,
-                row.MaxHappyAfter))
-            .ToListAsync(ct);
-
-        var items = rows.Count > take ? rows.Take(take).ToList() : rows;
-        string? nextCursor = rows.Count > take && items.Count > 0
-            ? CursorEncoder.Encode(new PageCursor(items[^1].OccurredAtUtc, items[^1].LogId))
-            : null;
-        return new CursorPage<GymTrainDto>(items, nextCursor);
-    }
-
     public async Task<IReadOnlyDictionary<Guid, GymTrainSummary>> GetGymTrainSummariesAsync(IReadOnlyList<Guid> anonymousIds, CancellationToken ct)
     {
         if (anonymousIds.Count == 0)
