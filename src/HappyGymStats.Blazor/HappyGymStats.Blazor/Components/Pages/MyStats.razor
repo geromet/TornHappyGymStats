@@ -295,15 +295,15 @@ else
 
         for (var i = 0; i < count; i++)
         {
-            var metadata = i < text.Length
+            var (statType, occurredAtUtc) = i < text.Length
                 ? ParsePointMetadata(text[i])
                 : ("unknown", (DateTimeOffset?)null);
             result[i] = new TrainingPoint(
                 cloud.X[i],
                 cloud.Y[i],
                 cloud.Z[i],
-                metadata.StatType,
-                metadata.OccurredAtUtc);
+                statType,
+                occurredAtUtc);
         }
 
         return result;
