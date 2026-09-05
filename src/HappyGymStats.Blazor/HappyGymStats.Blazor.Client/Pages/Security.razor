@@ -1,6 +1,5 @@
 @page "/security"
-@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
-@inject CryptoService Crypto
+@inject IJSRuntime JS
 @inject ISnackbar Snackbar
 
 <PageTitle>Security — Happy Gym Stats</PageTitle>
@@ -161,6 +160,11 @@ else
 }
 
 @code {
+    // Routes.razor owns this page's InteractiveServer render mode. Resolve the stateless
+    // crypto helper from the circuit's IJSRuntime only after the browser is interactive;
+    // direct CryptoService injection makes static endpoint rendering fail before hydration.
+    private CryptoService Crypto => new(JS);
+
     private bool _loading = true;
     private bool _hasKey;
 
