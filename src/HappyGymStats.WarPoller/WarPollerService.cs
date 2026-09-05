@@ -135,89 +135,27 @@ public sealed class WarPollerService
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            var cancelledAtUtc = _timeProvider.GetUtcNow();
-            await PersistHeartbeatAsync(BuildHeartbeat(
-                phase: "cancelled",
-                updatedAtUtc: cancelledAtUtc,
-                pollStartedAtUtc: pollStartedAtUtc,
-                pollCompletedAtUtc: cancelledAtUtc,
-                retryCount: heartbeat?.RetryCount ?? 0,
-                lastError: "poll cancelled",
-                activeWarId: activeWarId,
-                staleAfterUtc: cancelledAtUtc.AddSeconds(_options.PollIntervalSeconds),
-                failureBackoffSeconds: _options.FailureBackoffSeconds));
-
-            _logger.LogInformation("War poller cancelled for scope {ScopeKey}.", _options.ScopeKey);
-            return new WarPollerTickResult("cancelled", activeWarId, TimeSpan.Zero, false);
+            return await CompleteCancellationAsync(
+                pollStartedAtUtc,
+                heartbeat?.RetryCount ?? 0,
+                activeWarId);
         }
         catch (TornApiException ex) when (ex.IsRetryable)
         {
-            var retryCount = (heartbeat?.RetryCount ?? 0) + 1;
-            var backoff = ComputeFailureBackoff(retryCount);
-            var failedAtUtc = _timeProvider.GetUtcNow();
-            var sanitizedMessage = BuildSanitizedErrorMessage(ex);
-
-            await PersistHeartbeatAsync(BuildHeartbeat(
-                phase: "retryable-failure",
-                updatedAtUtc: failedAtUtc,
-                pollStartedAtUtc: pollStartedAtUtc,
-                pollCompletedAtUtc: failedAtUtc,
-                retryCount: retryCount,
-                lastError: sanitizedMessage,
-                activeWarId: activeWarId,
-                staleAfterUtc: failedAtUtc.Add(backoff),
-                failureBackoffSeconds: (int)backoff.TotalSeconds));
-
-            _logger.LogWarning(
-                "War poller hit retryable failure for scope {ScopeKey}; backing off {BackoffSeconds}s. Error={Error}",
-                _options.ScopeKey,
-                (int)backoff.TotalSeconds,
-                sanitizedMessage);
-
-            try
-            {
-                await Task.Delay(backoff, _timeProvider, cancellationToken);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                var cancelledAtUtc = _timeProvider.GetUtcNow();
-                await PersistHeartbeatAsync(BuildHeartbeat(
-                    phase: "cancelled",
-                    updatedAtUtc: cancelledAtUtc,
-                    pollStartedAtUtc: pollStartedAtUtc,
-                    pollCompletedAtUtc: cancelledAtUtc,
-                    retryCount: retryCount,
-                    lastError: "poll cancelled",
-                    activeWarId: activeWarId,
-                    staleAfterUtc: cancelledAtUtc.AddSeconds(_options.PollIntervalSeconds),
-                    failureBackoffSeconds: _options.FailureBackoffSeconds));
-
-                return new WarPollerTickResult("cancelled", activeWarId, TimeSpan.Zero, false);
-            }
-
-            return new WarPollerTickResult("retryable-failure", activeWarId, backoff, false);
+            return await CompleteRetryableFailureAsync(
+                ex,
+                pollStartedAtUtc,
+                heartbeat?.RetryCount ?? 0,
+                activeWarId,
+                cancellationToken);
         }
         catch (Exception ex)
         {
-            var failedAtUtc = _timeProvider.GetUtcNow();
-            var sanitizedMessage = BuildSanitizedErrorMessage(ex);
-
-            await PersistHeartbeatAsync(BuildHeartbeat(
-                phase: "failed",
-                updatedAtUtc: failedAtUtc,
-                pollStartedAtUtc: pollStartedAtUtc,
-                pollCompletedAtUtc: failedAtUtc,
-                retryCount: heartbeat?.RetryCount ?? 0,
-                lastError: sanitizedMessage,
-                activeWarId: activeWarId,
-                staleAfterUtc: failedAtUtc.AddSeconds(_options.PollIntervalSeconds),
-                failureBackoffSeconds: _options.FailureBackoffSeconds));
-            _logger.LogError(
-                "War poller failed for scope {ScopeKey}. ExceptionType={ExceptionType} Error={Error}",
-                _options.ScopeKey,
-                ex.GetType().Name,
-                sanitizedMessage);
-
+            await RecordFatalFailureAsync(
+                ex,
+                pollStartedAtUtc,
+                heartbeat?.RetryCount ?? 0,
+                activeWarId);
             throw;
         }
     }
@@ -297,6 +235,106 @@ public sealed class WarPollerService
 
         _logger.LogInformation("War poller persisted active war {WarId} for scope {ScopeKey}.", resolution.WarId, _options.ScopeKey);
         return new WarPollerTickResult("succeeded", resolution.WarId, TimeSpan.FromSeconds(_options.PollIntervalSeconds), true);
+    }
+
+    private async Task<WarPollerTickResult> CompleteCancellationAsync(
+        DateTimeOffset pollStartedAtUtc,
+        int retryCount,
+        long? activeWarId)
+    {
+        var cancelledAtUtc = _timeProvider.GetUtcNow();
+        await PersistHeartbeatAsync(BuildHeartbeat(
+            phase: "cancelled",
+            updatedAtUtc: cancelledAtUtc,
+            pollStartedAtUtc: pollStartedAtUtc,
+            pollCompletedAtUtc: cancelledAtUtc,
+            retryCount: retryCount,
+            lastError: "poll cancelled",
+            activeWarId: activeWarId,
+            staleAfterUtc: cancelledAtUtc.AddSeconds(_options.PollIntervalSeconds),
+            failureBackoffSeconds: _options.FailureBackoffSeconds));
+
+        _logger.LogInformation("War poller cancelled for scope {ScopeKey}.", _options.ScopeKey);
+        return new WarPollerTickResult("cancelled", activeWarId, TimeSpan.Zero, false);
+    }
+
+    private async Task<WarPollerTickResult> CompleteRetryableFailureAsync(
+        TornApiException exception,
+        DateTimeOffset pollStartedAtUtc,
+        int previousRetryCount,
+        long? activeWarId,
+        CancellationToken cancellationToken)
+    {
+        var retryCount = previousRetryCount + 1;
+        var backoff = ComputeFailureBackoff(retryCount);
+        var failedAtUtc = _timeProvider.GetUtcNow();
+        var sanitizedMessage = BuildSanitizedErrorMessage(exception);
+
+        await PersistHeartbeatAsync(BuildHeartbeat(
+            phase: "retryable-failure",
+            updatedAtUtc: failedAtUtc,
+            pollStartedAtUtc: pollStartedAtUtc,
+            pollCompletedAtUtc: failedAtUtc,
+            retryCount: retryCount,
+            lastError: sanitizedMessage,
+            activeWarId: activeWarId,
+            staleAfterUtc: failedAtUtc.Add(backoff),
+            failureBackoffSeconds: (int)backoff.TotalSeconds));
+
+        _logger.LogWarning(
+            "War poller hit retryable failure for scope {ScopeKey}; backing off {BackoffSeconds}s. Error={Error}",
+            _options.ScopeKey,
+            (int)backoff.TotalSeconds,
+            sanitizedMessage);
+
+        try
+        {
+            await Task.Delay(backoff, _timeProvider, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            var cancelledAtUtc = _timeProvider.GetUtcNow();
+            await PersistHeartbeatAsync(BuildHeartbeat(
+                phase: "cancelled",
+                updatedAtUtc: cancelledAtUtc,
+                pollStartedAtUtc: pollStartedAtUtc,
+                pollCompletedAtUtc: cancelledAtUtc,
+                retryCount: retryCount,
+                lastError: "poll cancelled",
+                activeWarId: activeWarId,
+                staleAfterUtc: cancelledAtUtc.AddSeconds(_options.PollIntervalSeconds),
+                failureBackoffSeconds: _options.FailureBackoffSeconds));
+
+            return new WarPollerTickResult("cancelled", activeWarId, TimeSpan.Zero, false);
+        }
+
+        return new WarPollerTickResult("retryable-failure", activeWarId, backoff, false);
+    }
+
+    private async Task RecordFatalFailureAsync(
+        Exception exception,
+        DateTimeOffset pollStartedAtUtc,
+        int retryCount,
+        long? activeWarId)
+    {
+        var failedAtUtc = _timeProvider.GetUtcNow();
+        var sanitizedMessage = BuildSanitizedErrorMessage(exception);
+
+        await PersistHeartbeatAsync(BuildHeartbeat(
+            phase: "failed",
+            updatedAtUtc: failedAtUtc,
+            pollStartedAtUtc: pollStartedAtUtc,
+            pollCompletedAtUtc: failedAtUtc,
+            retryCount: retryCount,
+            lastError: sanitizedMessage,
+            activeWarId: activeWarId,
+            staleAfterUtc: failedAtUtc.AddSeconds(_options.PollIntervalSeconds),
+            failureBackoffSeconds: _options.FailureBackoffSeconds));
+        _logger.LogError(
+            "War poller failed for scope {ScopeKey}. ExceptionType={ExceptionType} Error={Error}",
+            _options.ScopeKey,
+            exception.GetType().Name,
+            sanitizedMessage);
     }
 
     private async Task<ActiveWarResolution?> ResolveActiveWarAsync(CancellationToken cancellationToken)
