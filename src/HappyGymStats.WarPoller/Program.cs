@@ -50,7 +50,7 @@ public static class Program
             options.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.StopHost;
         });
 
-        builder.Services.AddSingleton<IWarPollerClock, WarPollerClock>();
+        builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<TornRateLimiter>();
         builder.Services.AddHttpClient<TornApiClient>(client =>
         {

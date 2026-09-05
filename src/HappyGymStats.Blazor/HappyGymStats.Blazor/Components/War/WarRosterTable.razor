@@ -1,0 +1,32 @@
+<MudTable Dense="true" Hover="true" Breakpoint="Breakpoint.Md" Items="@Members">
+    <HeaderContent>
+        <MudTh>Member</MudTh>
+        <MudTh>Availability</MudTh>
+        <MudTh>Hospital countdown</MudTh>
+        <MudTh>Score</MudTh>
+        <MudTh>Chain</MudTh>
+        <MudTh>Attacks</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Member">@context.MemberName</MudTd>
+        <MudTd DataLabel="Availability">
+            <MudChip T="string" Size="Size.Small" Color="@(context.IsIdleAttacker ? Color.Warning : Color.Default)">
+                @context.Availability
+            </MudChip>
+        </MudTd>
+        <MudTd DataLabel="Hospital countdown">@FormatHospitalCountdown(context.HospitalCountdownSeconds)</MudTd>
+        <MudTd DataLabel="Score">@context.Score</MudTd>
+        <MudTd DataLabel="Chain">@context.Chain</MudTd>
+        <MudTd DataLabel="Attacks">@context.Attacks</MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<WarMemberDto> Members { get; set; } = Array.Empty<WarMemberDto>();
+
+    private static string FormatHospitalCountdown(int seconds) =>
+        seconds <= 0
+            ? "Ready now"
+            : $"Hospital in {TimeSpan.FromSeconds(seconds):hh\\:mm\\:ss}";
+}

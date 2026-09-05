@@ -1,0 +1,46 @@
+<MudCard Class="war-hole-panel">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">
+                Hole alerts
+                <MudTooltip Text="@FigureKinds.Explanation(FigureKind.Inferred)" Arrow="true" Placement="Placement.Top">
+                    <span class="hgs-figure-marker hgs-figure-marker-inferred"
+                          aria-label="@($"inferred: {FigureKinds.Explanation(FigureKind.Inferred)}")">inferred</span>
+                </MudTooltip>
+            </MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Idle attackers and open targets ranked by severity. Severity is judged from
+                idle time and open slots, not measured energy — a linked key sharpens it.
+            </MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        @if (Holes.Count == 0)
+        {
+            <EmptyState Message="No current hole alerts." Class="mb-0" />
+        }
+        else
+        {
+            <MudList T="string" Dense="true">
+                @foreach (var hole in Holes)
+                {
+                    <MudListItem T="string" Class="@GetHoleClass(hole.Severity)">
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.subtitle2">@hole.Severity · @hole.Kind</MudText>
+                            <MudText Typo="Typo.body2">@hole.MemberName (@hole.FactionName)</MudText>
+                            <MudText Typo="Typo.caption">@hole.Reason</MudText>
+                        </MudStack>
+                    </MudListItem>
+                }
+            </MudList>
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<WarHoleDto> Holes { get; set; } = Array.Empty<WarHoleDto>();
+
+    private static string GetHoleClass(string severity) =>
+        $"war-hole war-hole-{severity.ToLowerInvariant()}";
+}

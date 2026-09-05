@@ -2,328 +2,38 @@
 @attribute [Authorize]
 @rendermode InteractiveServer
 @using Microsoft.AspNetCore.Authorization
+@using HappyGymStats.Blazor.Components.War
 @implements IDisposable
 @inject WarBoardService WarBoard
 
 <PageTitle>War board · Happy Gym Stats</PageTitle>
 
 <MudStack Spacing="3">
-    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-        <div>
-            <MudText Typo="Typo.h4">War board</MudText>
-            <MudText Typo="Typo.body1" Color="Color.Secondary">
-                Live roster, score, chain, coverage ratio, hole alerts, and stale-health visibility from the repository-backed public war state.
-            </MudText>
-        </div>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="RefreshAsync" Disabled="@WarBoard.IsLoading">
-            Refresh
-        </MudButton>
-    </MudStack>
+    <WarBoardHeader IsLoading="@WarBoard.IsLoading" OnRefresh="RefreshAsync" />
 
-    @if (WarBoard.IsLoading && WarBoard.CurrentState is null && WarBoard.CurrentFailure is null)
-    {
-        <LoadingState Message="Loading current war state…" Class="war-board-banner" />
-    }
+    <WarBoardStateBanners IsInitialLoading="@(WarBoard.IsLoading && WarBoard.CurrentState is null && WarBoard.CurrentFailure is null)"
+                          HasFailure="@(WarBoard.CurrentFailure is not null)"
+                          HasStaleData="@WarBoard.HasStaleData"
+                          HasNoActiveWar="@WarBoard.HasNoActiveWar"
+                          OnRetry="RefreshAsync" />
 
-    @if (WarBoard.CurrentFailure is not null)
+    @if (!WarBoard.HasNoActiveWar && WarBoard.CurrentState is { } state)
     {
-        <ErrorState Message="War board unavailable. Refresh to retry."
-                    OnRetry="RefreshAsync"
-                    Dense="true"
-                    Class="war-board-banner" />
-    }
-
-    @if (WarBoard.HasStaleData)
-    {
-        <StaleDataBanner Message="Review heartbeat, warnings, and hub connection status before acting on roster gaps."
-                         Class="war-board-banner" />
-    }
-
-    @if (WarBoard.HasNoActiveWar)
-    {
-        @* Not an error, and must not look like one. Every panel below reads zero
-           when no war is running, which is indistinguishable from a war where
-           nobody has hit anything — so the grid is replaced, not annotated. *@
-        <EmptyState Message="No war in progress. The board fills in automatically when the next ranked war starts. Nothing is wrong."
-                    Class="war-board-banner" />
-    }
-    else if (WarBoard.CurrentState is { } state)
-    {
-        <MudGrid>
-            <MudItem xs="12" md="3">
-                <MudCard Class="war-summary-card">
-                    <MudCardContent>
-                        <MudText Typo="Typo.overline">Participation</MudText>
-                        <MudText Typo="Typo.h5">@FormatPercent(state.CoverageRatio)</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Available members who are swinging</MudText>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-            <MudItem xs="12" md="3">
-                <MudCard Class="war-summary-card">
-                    <MudCardContent>
-                        <MudText Typo="Typo.overline">Open targets</MudText>
-                        <MudText Typo="Typo.h5">@state.OpenTargetCount</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Attackable enemy slots on the board</MudText>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-            <MudItem xs="12" md="3">
-                <MudCard Class="war-summary-card">
-                    <MudCardContent>
-                        <MudText Typo="Typo.overline">Hole alerts</MudText>
-                        <MudText Typo="Typo.h5">@state.HoleCount</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Critical/high/medium/low severity board gaps</MudText>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-            <MudItem xs="12" md="3">
-                <MudCard Class="war-summary-card">
-                    <MudCardContent>
-                        <MudText Typo="Typo.overline">Hub connection</MudText>
-                        <MudText Typo="Typo.h5">@WarBoard.ConnectionState</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Data source: @WarBoard.DataSource</MudText>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-            <MudItem xs="12" md="3">
-                <MudCard Class="war-summary-card">
-                    <MudCardContent>
-                        <MudText Typo="Typo.overline">Heartbeat</MudText>
-                        <MudText Typo="Typo.h5">@(state.Heartbeat.Phase ?? "unknown")</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Updated @FormatTimestamp(state.Heartbeat.UpdatedAtUtc)</MudText>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-        </MudGrid>
+        <WarBoardSummary State="state"
+                         ConnectionState="@WarBoard.ConnectionState"
+                         DataSource="@WarBoard.DataSource" />
 
         <MudGrid>
             <MudItem xs="12" lg="8">
-                <MudGrid>
-                    @foreach (var faction in state.Factions)
-                    {
-                        <MudItem xs="12" xl="6">
-                            <MudCard Class="war-faction-card">
-                                <MudCardHeader>
-                                    <CardHeaderContent>
-                                        <MudText Typo="Typo.h6">@faction.FactionName</MudText>
-                                        <MudText Typo="Typo.body2" Color="Color.Secondary">Faction ID @faction.FactionId</MudText>
-                                    </CardHeaderContent>
-                                </MudCardHeader>
-                                <MudCardContent>
-                                    <MudGrid Class="mb-3">
-                                        <MudItem xs="6">
-                                            <Figure Label="Score" Value="@faction.Score.ToString()"
-                                                    Kind="FigureKind.Measured" ValueTypo="Typo.h5" />
-                                        </MudItem>
-                                        <MudItem xs="6">
-                                            <Figure Label="Chain" Value="@faction.Chain.ToString()"
-                                                    Kind="FigureKind.Measured" ValueTypo="Typo.h5" />
-                                        </MudItem>
-                                        <MudItem xs="6">
-                                            @* Projected, not measured: it runs the recent score rate forward, so it
-                                               moves on its own after a lull with no hits at all. *@
-                                            <Figure Label="ETA" Value="@FormatEta(faction.Eta)"
-                                                    Kind="FigureKind.Projected"
-                                                    Diagnostic="@faction.Eta.Diagnostic" />
-                                        </MudItem>
-                                        <MudItem xs="6">
-                                            <Figure Label="Attacks to finish" Value="@FormatAttacksToFinish(faction.AttacksToFinish)"
-                                                    Kind="FigureKind.Projected"
-                                                    Diagnostic="@faction.AttacksToFinish.Diagnostic" />
-                                        </MudItem>
-                                        <MudItem xs="6">
-                                            <Figure Label="Participation" Value="@FormatPercent(faction.CoverageRatio)"
-                                                    Kind="FigureKind.Measured" />
-                                        </MudItem>
-                                        <MudItem xs="6">
-                                            @* Measured despite being a ratio: both sides are counts Torn reported,
-                                               and polling again gives the same answer. *@
-                                            <Figure Label="Coverage ratio"
-                                                    Value="@($"{faction.OpenTargetCount} open")"
-                                                    Note="@($"{FormatPercent(faction.TargetCoverageRatio)} of available attackers")"
-                                                    Kind="FigureKind.Measured" />
-                                        </MudItem>
-                                        <MudItem xs="6">
-                                            <Figure Label="Availability"
-                                                    Value="@($"{faction.AvailableMemberCount} ready")"
-                                                    Note="@($"{faction.HospitalizedMemberCount} hospital · {faction.UnavailableMemberCount} unavailable")"
-                                                    Kind="FigureKind.Measured" />
-                                        </MudItem>
-                                    </MudGrid>
-
-                                    @if (faction.ChainCommand is { } chain)
-                                    {
-                                        <MudPaper Elevation="0" Outlined="true" Class="pa-3 mb-3 war-chain-panel">
-                                            <MudText Typo="Typo.overline">Chain command</MudText>
-
-                                            @if (chain.Alert == "TimerRunningLow")
-                                            {
-                                                <MudAlert Severity="Severity.Error" Dense="true" Class="my-2">
-                                                    @* Curated copy, not chain.TimerDiagnostic. That string is an operator
-                                                       diagnostic ("Last qualifying hit ~280s ago (inferred from score
-                                                       polls, ±570s)") and it was landing on the loudest surface on the
-                                                       board. The figure below carries the number; this says what to do. *@
-                                                    <strong>Chain about to lapse.</strong>
-                                                    @if (chain.TimerConfidence == "Exact")
-                                                    {
-                                                        <text>@FormatChainTimer(chain) left, from Torn's own deadline.</text>
-                                                    }
-                                                    else
-                                                    {
-                                                        <text>Estimated from score polls — it may already be gone. Hit now if you can.</text>
-                                                    }
-                                                </MudAlert>
-                                            }
-                                            else if (chain.Alert == "ReservationWindow")
-                                            {
-                                                <MudAlert Severity="Severity.Warning" Dense="true" Class="my-2">
-                                                    <strong>Reservation window.</strong> @chain.Advice
-                                                </MudAlert>
-                                            }
-
-                                            <MudGrid>
-                                                <MudItem xs="6">
-                                                    <Figure Label="Multiplier" Value="@($"{chain.CurrentMultiplier:0.00}×")"
-                                                            Kind="FigureKind.Measured" />
-                                                </MudItem>
-                                                <MudItem xs="6">
-                                                    <Figure Label="Next milestone" Value="@FormatNextMilestone(chain)"
-                                                            Kind="FigureKind.Measured" />
-                                                </MudItem>
-                                                <MudItem xs="6">
-                                                    <Figure Label="War targets attackable" Value="@chain.AttackableWarTargetCount.ToString()"
-                                                            Kind="FigureKind.Measured" />
-                                                </MudItem>
-                                                <MudItem xs="6">
-                                                    @* The one figure that was already honest, now saying it in the
-                                                       same vocabulary as the rest: Torn's own deadline is measured,
-                                                       the poll-history estimate is inferred. *@
-                                                    <Figure Label="@ChainTimerLabel(chain)" Value="@FormatChainTimer(chain)"
-                                                            Kind="@ChainTimerKind(chain)"
-                                                            Diagnostic="@chain.TimerDiagnostic" />
-                                                </MudItem>
-                                            </MudGrid>
-
-                                            @if (chain.NextMilestone is int ms && chain.ForfeitedValueIfCrossedOutside > 0)
-                                            {
-                                                <MudText Typo="Typo.caption" Class="d-block mt-2">
-                                                    Landing chain @ms outside costs @chain.ForfeitedValueIfCrossedOutside points.
-                                                </MudText>
-                                            }
-
-                                            @if (chain.Mode == "WarTargetsOnly")
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="mt-2">Outside targets locked</MudChip>
-                                            }
-                                            else if (chain.Mode == "HoldForWarTarget")
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="mt-2">Wait or revive — do not filler</MudChip>
-                                            }
-                                            else if (chain.Mode == "SustainWithFiller")
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="mt-2">Filler OK — scores ~half (war = 1)</MudChip>
-                                            }
-
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">@chain.Advice</MudText>
-                                        </MudPaper>
-                                    }
-
-                                    <MudTable Dense="true" Hover="true" Breakpoint="Breakpoint.Md" Items="@faction.Members">
-                                        <HeaderContent>
-                                            <MudTh>Member</MudTh>
-                                            <MudTh>Availability</MudTh>
-                                            <MudTh>Hospital countdown</MudTh>
-                                            <MudTh>Score</MudTh>
-                                            <MudTh>Chain</MudTh>
-                                            <MudTh>Attacks</MudTh>
-                                        </HeaderContent>
-                                        <RowTemplate>
-                                            <MudTd DataLabel="Member">@context.MemberName</MudTd>
-                                            <MudTd DataLabel="Availability">
-                                                <MudChip T="string" Size="Size.Small" Color="@(context.IsIdleAttacker ? Color.Warning : Color.Default)">
-                                                    @context.Availability
-                                                </MudChip>
-                                            </MudTd>
-                                            <MudTd DataLabel="Hospital countdown">@FormatHospitalCountdown(context.HospitalCountdownSeconds)</MudTd>
-                                            <MudTd DataLabel="Score">@context.Score</MudTd>
-                                            <MudTd DataLabel="Chain">@context.Chain</MudTd>
-                                            <MudTd DataLabel="Attacks">@context.Attacks</MudTd>
-                                        </RowTemplate>
-                                    </MudTable>
-                                </MudCardContent>
-                            </MudCard>
-                        </MudItem>
-                    }
-                </MudGrid>
+                <WarFactionList Factions="state.Factions" />
             </MudItem>
 
             <MudItem xs="12" lg="4">
-                <MudCard Class="war-hole-panel">
-                    <MudCardHeader>
-                        <CardHeaderContent>
-                            <MudText Typo="Typo.h6">
-                                Hole alerts
-                                @* Panel-level rather than per-row: every hole in this list is inferred
-                                   the same way, so marking each row would be noise. Severity leans on
-                                   idle time and open slots because real energy needs a linked key
-                                   (M009) — until then this is a proxy, and says so. *@
-                                <MudTooltip Text="@FigureKinds.Explanation(FigureKind.Inferred)" Arrow="true" Placement="Placement.Top">
-                                    <span class="hgs-figure-marker hgs-figure-marker-inferred"
-                                          aria-label="@($"inferred: {FigureKinds.Explanation(FigureKind.Inferred)}")">inferred</span>
-                                </MudTooltip>
-                            </MudText>
-                            <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                Idle attackers and open targets ranked by severity. Severity is judged from
-                                idle time and open slots, not measured energy — a linked key sharpens it.
-                            </MudText>
-                        </CardHeaderContent>
-                    </MudCardHeader>
-                    <MudCardContent>
-                        @if (state.Holes.Count == 0)
-                        {
-                            <EmptyState Message="No current hole alerts." Class="mb-0" />
-                        }
-                        else
-                        {
-                            <MudList T="string" Dense="true">
-                                @foreach (var hole in state.Holes)
-                                {
-                                    <MudListItem T="string" Class="@GetHoleClass(hole.Severity)">
-                                        <MudStack Spacing="0">
-                                            <MudText Typo="Typo.subtitle2">@hole.Severity · @hole.Kind</MudText>
-                                            <MudText Typo="Typo.body2">@hole.MemberName (@hole.FactionName)</MudText>
-                                            <MudText Typo="Typo.caption">@hole.Reason</MudText>
-                                        </MudStack>
-                                    </MudListItem>
-                                }
-                            </MudList>
-                        }
-                    </MudCardContent>
-                </MudCard>
-
-                @if (state.Warnings.Count > 0)
-                {
-                    <MudCard Class="mt-3">
-                        <MudCardHeader><MudText Typo="Typo.h6">Warnings</MudText></MudCardHeader>
-                        <MudCardContent>
-                            <MudList T="string" Dense="true">
-                                @foreach (var warning in state.Warnings)
-                                {
-                                    <MudListItem T="string">@warning</MudListItem>
-                                }
-                            </MudList>
-                        </MudCardContent>
-                    </MudCard>
-                }
-
-                @if (state.Errors.Count > 0 || !string.IsNullOrWhiteSpace(WarBoard.ConnectionError))
-                {
-                    <ErrorState Message="The war board encountered a connection problem. Refresh to retry."
-                                OnRetry="RefreshAsync"
-                                Dense="true"
-                                Class="mt-3" />
-                }
+                <WarHoleAlerts Holes="state.Holes" />
+                <WarDiagnosticsPanel Warnings="state.Warnings"
+                                     Errors="state.Errors"
+                                     ConnectionError="@WarBoard.ConnectionError"
+                                     OnRetry="RefreshAsync" />
             </MudItem>
         </MudGrid>
     }
@@ -344,76 +54,4 @@
     private Task RefreshAsync() => WarBoard.RefreshAsync();
 
     private void HandleBoardStateChanged() => InvokeAsync(StateHasChanged);
-
-    private static string FormatPercent(decimal value) => $"{value:P1}";
-
-    private static string FormatTimestamp(DateTimeOffset? value) => value?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "unknown";
-
-    private static string FormatHospitalCountdown(int seconds) =>
-        seconds <= 0
-            ? "Ready now"
-            : $"Hospital in {TimeSpan.FromSeconds(seconds):hh\\:mm\\:ss}";
-
-    private static string FormatEta(WarEtaDto eta)
-    {
-        if (!eta.IsAvailable)
-        {
-            return eta.Diagnostic ?? "Unavailable";
-        }
-
-        return eta.SecondsUntilWin is int seconds
-            ? $"ETA {TimeSpan.FromSeconds(seconds):hh\\:mm\\:ss}"
-            : "ETA pending";
-    }
-
-    private static string FormatAttacksToFinish(WarAttacksToFinishDto attacks)
-    {
-        if (!attacks.IsAvailable)
-        {
-            return attacks.Diagnostic ?? "Unavailable";
-        }
-
-        return attacks.RequiredAttacks is int count
-            ? count.ToString()
-            : "Pending";
-    }
-
-    private static string GetHoleClass(string severity) => $"war-hole war-hole-{severity.ToLowerInvariant()}";
-
-    private static string FormatNextMilestone(WarChainCommandDto chain)
-        => chain.NextMilestone is int ms && chain.HitsToNextMilestone is int hits
-            ? $"{ms} · {hits} hit(s), worth {chain.NextMilestoneBonus}"
-            : "past the final milestone";
-
-    // The label changes with the data source, so an exact countdown is never dressed up as a
-    // guess and a guess is never dressed up as a countdown.
-    // Exact deadlines are measured; the poll-history estimate is inferred. This is
-    // the case the whole vocabulary was derived from — the board has carried both
-    // since M008 and this only renames what it already distinguished.
-    private static FigureKind ChainTimerKind(WarChainCommandDto chain)
-        => chain.TimerConfidence == "Exact" ? FigureKind.Measured : FigureKind.Inferred;
-
-    // No "(inferred)" in the label any more: the Figure marker says that, and the
-    // rendered page read "Last hit (inferred) inferred". Caught by looking at the
-    // running board, not the source.
-    private static string ChainTimerLabel(WarChainCommandDto chain)
-        => chain.TimerConfidence == "Exact" ? "Chain lapses in" : "Last hit";
-
-    private static string FormatChainTimer(WarChainCommandDto chain)
-    {
-        if (chain.TimerConfidence == "Exact" && chain.SecondsUntilLapse is int exactLeft)
-        {
-            // No ± and no tilde: this is Torn's own deadline, not a figure derived from poll
-            // spacing. Saying "~" here would understate what we know.
-            return $"{TimeSpan.FromSeconds(exactLeft):mm\\:ss}";
-        }
-
-        if (!chain.TimerIsInferred || chain.SecondsSinceLastHit is not int since)
-        {
-            return chain.TimerDiagnostic ?? "unknown";
-        }
-
-        var untilLapse = chain.SecondsUntilLapse ?? 0;
-        return $"~{TimeSpan.FromSeconds(since):mm\\:ss} ago (±{chain.TimerSpacingSeconds}s) · ~{TimeSpan.FromSeconds(untilLapse):mm\\:ss} to lapse";
-    }
 }

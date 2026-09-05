@@ -1,0 +1,63 @@
+<MudGrid>
+    <MudItem xs="12" md="3">
+        <MudCard Class="war-summary-card">
+            <MudCardContent>
+                <MudText Typo="Typo.overline">Participation</MudText>
+                <MudText Typo="Typo.h5">@FormatPercent(State.CoverageRatio)</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Available members who are swinging</MudText>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" md="3">
+        <MudCard Class="war-summary-card">
+            <MudCardContent>
+                <MudText Typo="Typo.overline">Open targets</MudText>
+                <MudText Typo="Typo.h5">@State.OpenTargetCount</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Attackable enemy slots on the board</MudText>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" md="3">
+        <MudCard Class="war-summary-card">
+            <MudCardContent>
+                <MudText Typo="Typo.overline">Hole alerts</MudText>
+                <MudText Typo="Typo.h5">@State.HoleCount</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Critical/high/medium/low severity board gaps</MudText>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" md="3">
+        <MudCard Class="war-summary-card">
+            <MudCardContent>
+                <MudText Typo="Typo.overline">Hub connection</MudText>
+                <MudText Typo="Typo.h5">@ConnectionState</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Data source: @DataSource</MudText>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" md="3">
+        <MudCard Class="war-summary-card">
+            <MudCardContent>
+                <MudText Typo="Typo.overline">Heartbeat</MudText>
+                <MudText Typo="Typo.h5">@(State.Heartbeat.Phase ?? "unknown")</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Updated @FormatTimestamp(State.Heartbeat.UpdatedAtUtc)</MudText>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter, EditorRequired]
+    public WarStateDto State { get; set; } = default!;
+
+    [Parameter]
+    public string ConnectionState { get; set; } = string.Empty;
+
+    [Parameter]
+    public string DataSource { get; set; } = string.Empty;
+
+    private static string FormatPercent(decimal value) => $"{value:P1}";
+
+    private static string FormatTimestamp(DateTimeOffset? value) =>
+        value?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "unknown";
+}

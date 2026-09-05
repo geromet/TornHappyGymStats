@@ -8,9 +8,8 @@ public enum WarObjectiveMode
 }
 
 /// <summary>
-/// Immutable application-level objective version. Persistence can store these versions later,
-/// but callers already get append-only semantics: changing terms creates a new version instead
-/// of mutating the prior instance.
+/// Immutable application-level objective version. Persistence stores complete versions;
+/// changing terms creates a new version instead of mutating the prior instance.
 /// </summary>
 public sealed class WarObjectiveVersion
 {
@@ -42,6 +41,28 @@ public sealed class WarObjectiveVersion
     public string? Notes { get; }
     public string ChangedBy { get; }
     public DateTimeOffset CreatedAtUtc { get; }
+
+    /// <summary>
+    /// Rehydrates a persisted version through the same validation used for newly-created versions.
+    /// </summary>
+    public static WarObjectiveVersion Restore(
+        long warId,
+        int version,
+        WarObjectiveMode mode,
+        bool isExplicit,
+        int? stopAtFactionScore,
+        string? notes,
+        string changedBy,
+        DateTimeOffset createdAtUtc)
+        => Create(
+            warId,
+            version,
+            mode,
+            isExplicit,
+            stopAtFactionScore,
+            notes,
+            changedBy,
+            createdAtUtc);
 
     public static WarObjectiveVersion CreateDefault(long warId, DateTimeOffset createdAtUtc)
         => Create(
