@@ -6,7 +6,7 @@ verifier-graph-regression	scripts/verify/verifier-graph-regression.sh	offline	re
 verifier-dependency-regression	scripts/verify/verifier-dependency-regression.sh	offline	required	bash,env,mktemp,ln,grep,rm	-
 verifier-manifest-union-regression	scripts/verify/verifier-manifest-union-regression.sh	offline	required	bash,sed,mktemp,rm,grep	-
 privacy-verifier-regression	scripts/verify/privacy-verifier-regression.sh	offline	required	bash,rg,wc,grep,rm,cat	-
-fleet-archive-contract	scripts/verify/fleet-archive-contract.sh	offline	required	bash,awk,grep	-
+fleet-archive-contract	scripts/verify/fleet-archive-contract.sh	offline	required	bash,awk,grep,mktemp,rm,cat	-
 privacy-playerid-logs	scripts/verify/no-raw-playerid-log-templates.sh	offline	required	rg,wc	-
 menu-contract	scripts/verify/menu-contract.sh	offline	required	bash,grep,awk,wc	-
 u001-honest-signal	scripts/verify/u001-honest-signal.sh	offline	required	rg	-
