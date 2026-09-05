@@ -12,10 +12,6 @@
 
     <MudStack Spacing="2" Style="max-width:700px;">
         <MudTextField T="string" Label="API base URL" Placeholder="https://api.happygymstats.dev" Variant="Variant.Outlined" />
-        <MudSelect T="string" Label="Theme" Variant="Variant.Outlined" Value="@("Night Ops")" Disabled="true">
-            <MudSelectItem T="string" Value="@("Night Ops")">Night Ops (default)</MudSelectItem>
-            <MudSelectItem T="string" Value="@("High Contrast")">High Contrast</MudSelectItem>
-        </MudSelect>
         <MudSwitch T="bool" Label="Use compact cards" Color="Color.Primary" Value="false" Disabled="true" />
         <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="true">Save settings</MudButton>
     </MudStack>

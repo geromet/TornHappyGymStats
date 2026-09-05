@@ -4,10 +4,9 @@
 # Numbering follows w06 (see that script's note: every downstream verifier is +1 from the
 # handoff's own numbering).
 #
-# SCOPE. M009 S01 (versioned consent persistence) and S02 (the vault) are built;
-# S03–S09 are not. This script asserts what exists and PRINTS what it cannot yet check,
-# rather than passing silently over unbuilt acceptance criteria — a verifier that goes green
-# on work nobody has done is worse than no verifier.
+# SCOPE. M009 S01 (versioned consent persistence), S02 (the vault), and S03 (consent-gated
+# ciphertext persistence) are built. S04–S09 are not. This script asserts what exists and
+# PRINTS what it cannot yet check rather than passing silently over unbuilt criteria.
 set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
@@ -19,6 +18,11 @@ readonly VAULT_TESTS="${ROOT_DIR}/tests/HappyGymStats.Tests/WarKeyVaultTests.cs"
 readonly CONSENT_SOURCE="${ROOT_DIR}/src/HappyGymStats.Contracts/Entities/ConsentRecordEntity.cs"
 readonly CONSENT_TESTS="${ROOT_DIR}/tests/HappyGymStats.Tests/ConsentRecordPersistenceTests.cs"
 readonly CONSENT_MIGRATION="${ROOT_DIR}/src/HappyGymStats.Data/Migrations/20260904170000_AddConsentRecords.cs"
+readonly STORED_KEY_SOURCE="${ROOT_DIR}/src/HappyGymStats.Contracts/Entities/StoredApiKeyEntity.cs"
+readonly STORED_KEY_STORE="${ROOT_DIR}/src/HappyGymStats.Data/Repositories/StoredApiKeyStore.cs"
+readonly STORED_KEY_TESTS="${ROOT_DIR}/tests/HappyGymStats.Tests/StoredApiKeyPersistenceTests.cs"
+readonly STORED_KEY_POSTGRES_TESTS="${ROOT_DIR}/tests/HappyGymStats.Tests/StoredApiKeyPostgresPersistenceTests.cs"
+readonly STORED_KEY_MIGRATION="${ROOT_DIR}/src/HappyGymStats.Data/Migrations/20260905231500_AddStoredApiKeys.cs"
 readonly MODEL_SNAPSHOT="${ROOT_DIR}/src/HappyGymStats.Data/Migrations/HappyGymStatsDbContextModelSnapshot.cs"
 readonly DB_CONTEXT="${ROOT_DIR}/src/HappyGymStats.Data/HappyGymStatsDbContext.cs"
 readonly TOS_DOC="${ROOT_DIR}/docs/torn-api/terms-of-service.md"
@@ -27,6 +31,7 @@ readonly TOS_VERSION_SOURCE="${ROOT_DIR}/src/HappyGymStats.Contracts/Compliance/
 
 readonly TEST_FILTER="WarKeyVaultTests"
 readonly CONSENT_TEST_FILTER="ConsentRecordPersistenceTests"
+readonly STORED_KEY_TEST_FILTER="StoredApiKeyPersistenceTests"
 
 required_files=(
   "$TEST_PROJECT"
@@ -35,6 +40,11 @@ required_files=(
   "$CONSENT_SOURCE"
   "$CONSENT_TESTS"
   "$CONSENT_MIGRATION"
+  "$STORED_KEY_SOURCE"
+  "$STORED_KEY_STORE"
+  "$STORED_KEY_TESTS"
+  "$STORED_KEY_POSTGRES_TESTS"
+  "$STORED_KEY_MIGRATION"
   "$MODEL_SNAPSHOT"
   "$DB_CONTEXT"
   "$TOS_DOC"
@@ -58,6 +68,13 @@ required_consent_tests=(
   "Consent_records_keep_distinct_versions_as_auditable_history"
 )
 
+required_stored_key_tests=(
+  "Current_consent_and_owner_store_only_vault_ciphertext"
+  "Another_tenants_consent_cannot_authorize_storage"
+  "Revoked_or_stale_consent_cannot_authorize_storage"
+  "Consent_without_an_owning_identity_cannot_authorize_storage"
+)
+
 code_grep() {
   local pattern="$1" file="$2"
   rg -n "$pattern" "$file" | rg -v '^[0-9]+:\s*(///|//|\*)' | rg -q .
@@ -69,7 +86,7 @@ note() { printf 'NOTE: %s\n' "$1"; }
 
 case "${1:-}" in
   -h|--help)
-    printf 'Usage: bash scripts/verify/w07-key-vault-contract.sh\n\nCanonical M009 key-vault verifier: consent/version contract + pinned vault acceptance tests + source rules that no runtime test can prove.\n'
+    printf 'Usage: bash scripts/verify/w07-key-vault-contract.sh\n\nCanonical M009 key-vault verifier: consent/version contract + vault and stored-key persistence acceptance tests + source rules that no runtime test can prove.\n'
     exit 0
     ;;
   "") ;;
@@ -79,7 +96,7 @@ esac
 for path in "${required_files[@]}"; do
   [[ -f "$path" ]] || fail "missing required path ${path#"${ROOT_DIR}/"}"
 done
-pass "required M009 S01/S02 paths present"
+pass "required M009 S01/S02/S03 paths present"
 
 for test_name in "${required_tests[@]}"; do
   rg -n --fixed-strings "$test_name" "$VAULT_TESTS" >/dev/null \
@@ -92,6 +109,12 @@ for test_name in "${required_consent_tests[@]}"; do
     || fail "pinned consent test '$test_name' not found"
 done
 pass "all ${#required_consent_tests[@]} pinned consent persistence tests present"
+
+for test_name in "${required_stored_key_tests[@]}"; do
+  rg -n --fixed-strings "$test_name" "$STORED_KEY_TESTS" >/dev/null \
+    || fail "pinned stored-key test '$test_name' not found"
+done
+pass "all ${#required_stored_key_tests[@]} pinned stored-key persistence tests present"
 
 if code_grep 'TornPlayerId|ApiKey|StoredApiKey|Ciphertext|Plaintext' "$CONSENT_SOURCE"; then
   fail "ConsentRecordEntity contains a raw Torn identity/key-shaped property — consent must stay separate from credential storage"
@@ -160,14 +183,32 @@ for pattern in "${forbidden_patterns[@]}"; do
 done
 pass "vault stays inside the Core boundary"
 
-gate_writers="$(rg -l --glob '!**/bin/**' --glob '!**/obj/**' 'StoredApiKey' "${ROOT_DIR}/src" 2>/dev/null || true)"
-persisting_writer=""
-for candidate in $gate_writers; do
-  if rg -q 'SaveChanges' "$candidate"; then
-    persisting_writer="$candidate"
-    break
-  fi
-done
+rg -q 'DbSet<StoredApiKeyEntity> StoredApiKeys' "$DB_CONTEXT" \
+  || fail "HappyGymStatsDbContext does not expose StoredApiKeys"
+rg -q 'name: "StoredApiKeys"' "$STORED_KEY_MIGRATION" \
+  || fail "stored-key migration does not create StoredApiKeys"
+rg -q 'FK_StoredApiKeys_IdentityMap_AnonymousId' "$STORED_KEY_MIGRATION" \
+  || fail "stored-key migration does not enforce owning AnonymousId"
+rg -q 'ConsentRecordId.*AnonymousId|ConsentRecordId, x.AnonymousId' "$STORED_KEY_MIGRATION" \
+  || fail "stored-key migration does not bind consent to the same AnonymousId"
+if code_grep 'public\s+string\??\s+\w*(ApiKey|Plaintext|KeyValue)' "$STORED_KEY_SOURCE"; then
+  fail "StoredApiKeyEntity exposes a plaintext/key-shaped string property"
+fi
+rg -q 'byte\[\]\s+Ciphertext' "$STORED_KEY_SOURCE" \
+  || fail "StoredApiKeyEntity does not store vault ciphertext"
+rg -q 'IsolationLevel.Serializable' "$STORED_KEY_STORE" \
+  || fail "stored-key writer does not check prerequisites inside a serializable transaction"
+rg -q 'x.AnonymousId == anonymousId' "$STORED_KEY_STORE" \
+  || fail "stored-key writer does not scope prerequisite queries by owning AnonymousId"
+rg -q 'x.Purpose == ConsentPurposes.WarMemberApiKey' "$STORED_KEY_STORE" \
+  || fail "stored-key writer does not require explicit war-member-key consent"
+rg -q 'x.DocumentVersion == TermsDocument.Version' "$STORED_KEY_STORE" \
+  || fail "stored-key writer does not require consent to the current disclosure"
+rg -q 'x.RevokedAtUtc == null' "$STORED_KEY_STORE" \
+  || fail "stored-key writer does not reject revoked consent"
+rg -q '_vault.Protect' "$STORED_KEY_STORE" \
+  || fail "stored-key writer does not encrypt through WarKeyVault"
+pass "stored-key persistence is ciphertext-only and transactionally gated by owner/current consent"
 
 if ! rg -qi 'encrypt' "$TOS_DOC"; then
   fail "terms-of-service.md does not mention encryption — the gate in handoff 07 requires the disclosure to state that war keys are stored encrypted"
@@ -196,10 +237,7 @@ rg -qi 'placeholder' "$TOS_PAGE" \
 pass "the served page carries the disclosure and its version"
 
 if rg -q -- '-draft' "$TOS_DOC"; then
-  if [[ -n "$persisting_writer" ]]; then
-    fail "COMPLIANCE GATE: ${persisting_writer#"${ROOT_DIR}/"} persists a stored key while terms-of-service.md is still a draft. Publish the disclosure and record member consent first — storing a key against the published text is a Torn ToS breach."
-  fi
-  note "terms-of-service.md is a DRAFT and the gate is therefore UNMET — but nothing persists a key yet, so no breach. This check turns into a hard failure the moment a source both names StoredApiKey and calls SaveChanges."
+  fail "COMPLIANCE GATE: stored-key persistence exists while terms-of-service.md is still a draft. Publish the disclosure and record member consent first."
 else
   pass "terms-of-service.md is published (not a draft) and discloses encrypted key storage"
 fi
@@ -210,11 +248,13 @@ pass "pinned key-vault tests passed (${TEST_FILTER})"
 dotnet test "$TEST_PROJECT" --filter "$CONSENT_TEST_FILTER" --nologo
 pass "pinned consent persistence tests passed (${CONSENT_TEST_FILTER})"
 
+dotnet test "$TEST_PROJECT" --filter "$STORED_KEY_TEST_FILTER" --nologo
+pass "pinned stored-key persistence tests passed (${STORED_KEY_TEST_FILTER})"
+
 note "M009 slices not built, therefore NOT verified here:"
-note "  S03 StoredApiKeyEntity + migration + transactional consent/key write gate"
 note "  S04 linking endpoints/page, incl. ownership verification and refusing a Full-access key"
 note "  S05 client methods, S06 poller extension, S07 scoped bearer token, S08 data tiers"
-note "  revocation deleting identifiable readings — needs S03's rows to delete"
+note "  revocation deleting identifiable readings — now has S03 rows to target, but deletion wiring is later"
 note "Extend required tests/source assertions as each slice lands; do not let this script go green on unbuilt criteria."
 
-printf 'PASS: canonical M009 verifier succeeded (S01 consent + S02 vault scope)\n'
+printf 'PASS: canonical M009 verifier succeeded (S01 consent + S02 vault + S03 stored-key persistence)\n'
