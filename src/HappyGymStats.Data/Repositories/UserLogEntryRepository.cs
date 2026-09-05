@@ -112,15 +112,19 @@ public sealed class UserLogEntryRepository(HappyGymStatsDbContext db) : IUserLog
 
     public async Task<CursorPage<GymTrainDto>> GetGymTrainsPageAsync(Guid anonymousId, int take, PageCursor? cursor, CancellationToken ct)
     {
-        var baseQuery = cursor is null
-            ? db.UserLogEntries.AsNoTracking()
-                .Where(x => x.AnonymousId == anonymousId && x.HappyUsed != null)
-            : db.UserLogEntries.AsNoTracking()
-                .Where(x => x.AnonymousId == anonymousId
-                    && x.HappyUsed != null
-                    && (x.OccurredAtUtc < cursor.OccurredAtUtc
-                        || (x.OccurredAtUtc == cursor.OccurredAtUtc
-                            && string.Compare(x.LogEntryId, cursor.Id, StringComparison.Ordinal) < 0)));
+        var baseQuery = db.UserLogEntries.AsNoTracking()
+            .Where(x => x.AnonymousId == anonymousId && x.HappyUsed != null);
+
+        if (cursor is not null)
+        {
+            baseQuery = db.Database.IsNpgsql()
+                ? baseQuery.Where(x => EF.Functions.LessThan(
+                    ValueTuple.Create(x.OccurredAtUtc, x.LogEntryId),
+                    ValueTuple.Create(cursor.OccurredAtUtc, cursor.Id)))
+                : baseQuery.Where(x => x.OccurredAtUtc < cursor.OccurredAtUtc
+                    || (x.OccurredAtUtc == cursor.OccurredAtUtc
+                        && string.Compare(x.LogEntryId, cursor.Id) < 0));
+        }
 
         var rows = await baseQuery
             .OrderByDescending(row => row.OccurredAtUtc)
