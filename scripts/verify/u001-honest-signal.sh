@@ -17,6 +17,10 @@ readonly SCRIPT_DIR="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
 readonly ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 readonly BOARD="${ROOT_DIR}/src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/War.razor"
+readonly WAR_COMPONENTS="${ROOT_DIR}/src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/War"
+readonly FACTION_CARD="${WAR_COMPONENTS}/WarFactionCard.razor"
+readonly CHAIN_PANEL="${WAR_COMPONENTS}/WarChainCommandPanel.razor"
+readonly HOLE_PANEL="${WAR_COMPONENTS}/WarHoleAlerts.razor"
 readonly FIGURE="${ROOT_DIR}/src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Shared/Figure.razor"
 readonly KINDS="${ROOT_DIR}/src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Shared/FigureKind.cs"
 readonly STYLES="${ROOT_DIR}/src/HappyGymStats.Blazor/HappyGymStats.Blazor/wwwroot/app.css"
@@ -30,8 +34,8 @@ case "${1:-}" in
   *) fail "unknown option '${1}'" ;;
 esac
 
-for path in "${BOARD}" "${FIGURE}" "${KINDS}" "${STYLES}"; do
-  [[ -f "${path}" ]] || fail "missing ${path#"${ROOT_DIR}/"}"
+for path in "${BOARD}" "${WAR_COMPONENTS}" "${FACTION_CARD}" "${CHAIN_PANEL}" "${HOLE_PANEL}" "${FIGURE}" "${KINDS}" "${STYLES}"; do
+  [[ -e "${path}" ]] || fail "missing ${path#"${ROOT_DIR}/"}"
 done
 pass "honest-signal files present"
 
@@ -54,21 +58,21 @@ pass "only projected and inferred figures carry a marker"
 
 # The two extrapolations that read as facts on a war night. These are the whole
 # reason for the slice: "ETA 00:12:00" was rendered exactly like a score.
-rg -q 'Label="ETA".*\n?.*FigureKind.Projected' -U "${BOARD}" \
+rg -q 'Label="ETA".*\n?.*FigureKind.Projected' -U "${FACTION_CARD}" \
   || fail "the ETA figure is not marked Projected"
-rg -q 'Label="Attacks to finish".*\n?.*FigureKind.Projected' -U "${BOARD}" \
+rg -q 'Label="Attacks to finish".*\n?.*FigureKind.Projected' -U "${FACTION_CARD}" \
   || fail "the attacks-to-finish figure is not marked Projected"
 pass "ETA and attacks-to-finish declare themselves projected"
 
 # The chain timer is the case the vocabulary was derived from: Torn's own
 # deadline is measured, the poll-history estimate is inferred.
-rg -q 'ChainTimerKind' "${BOARD}" || fail "the chain timer no longer selects its kind"
-rg -q 'TimerConfidence == "Exact" \? FigureKind.Measured : FigureKind.Inferred' "${BOARD}" \
+rg -q 'ChainTimerKind' "${CHAIN_PANEL}" || fail "the chain timer no longer selects its kind"
+rg -q 'TimerConfidence == "Exact" \? FigureKind.Measured : FigureKind.Inferred' "${CHAIN_PANEL}" \
   || fail "the chain timer no longer distinguishes an exact deadline from an inferred one"
 pass "the chain timer keeps its exact/inferred distinction"
 
 # Hole severity is a proxy until a linked key supplies real energy (M009).
-rg -q 'hgs-figure-marker-inferred' "${BOARD}" \
+rg -q 'hgs-figure-marker-inferred' "${HOLE_PANEL}" \
   || fail "the hole-alerts panel no longer declares itself inferred"
 pass "hole severity declares itself inferred"
 
@@ -82,7 +86,7 @@ pass "hole severity declares itself inferred"
 # whole point of the check.
 readonly NON_FIGURE_BINDINGS='faction\.FactionName|faction\.FactionId|chain\.Advice|chain\.TimerDiagnostic'
 
-unrouted="$(rg -n '<MudText[^>]*>@(faction|chain)\.' "${BOARD}" | rg -v "${NON_FIGURE_BINDINGS}" || true)"
+unrouted="$(rg -n --glob '*.razor' '<MudText[^>]*>@(faction|chain)\.' "${BOARD}" "${WAR_COMPONENTS}" | rg -v "${NON_FIGURE_BINDINGS}" || true)"
 if [[ -n "${unrouted}" ]]; then
   printf '%s\n' "${unrouted}"
   fail "a war-board value renders outside <Figure> — route it through the component, or add it to NON_FIGURE_BINDINGS if it carries no numeric claim"

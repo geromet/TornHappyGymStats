@@ -1,0 +1,29 @@
+.war-hole-panel {
+    height: 100%;
+}
+
+.war-hole {
+    border-left: 4px solid transparent;
+    margin-bottom: 0.5rem;
+    border-radius: 8px;
+}
+
+.war-hole-critical {
+    border-left-color: var(--mud-palette-error);
+    background: rgba(239, 83, 80, 0.12);
+}
+
+.war-hole-high {
+    border-left-color: var(--mud-palette-warning);
+    background: rgba(255, 152, 0, 0.12);
+}
+
+.war-hole-medium {
+    border-left-color: #fdd835;
+    background: rgba(253, 216, 53, 0.12);
+}
+
+.war-hole-low {
+    border-left-color: var(--mud-palette-success);
+    background: rgba(102, 187, 106, 0.12);
+}
