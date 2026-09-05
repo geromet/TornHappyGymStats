@@ -147,9 +147,7 @@ else if (_surfaces != null)
 
             if (status is { Outcome: "failed" })
             {
-                _importStatusMessage = string.IsNullOrWhiteSpace(status.ErrorMessage)
-                    ? "Import failed due to backend validation or processing."
-                    : $"Import failed: {status.ErrorMessage}";
+                _importStatusMessage = "Import failed. Please try again.";
                 _importStatusSeverity = Severity.Error;
                 return;
             }
