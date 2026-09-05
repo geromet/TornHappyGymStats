@@ -120,7 +120,7 @@ r=$?; printf '__RC__=%d\n' "$r"; exit 0
 EOF_W
 chmod +x "$W"; ptyrun "$W" none "$O"; has "$O" '__RC__=255' 'ssh auth failure rc'; lacks "$O" SHOULD_NEVER_AUTH 'auth failure blocks payload'
 # three historical broken shapes: stdin collision, captured prompt, filtered prompt
-reset; O="$D/old-stdin.out"; set +e; printf 'echo HISTORICAL_PAYLOAD\n' | ssh -tt -i "$KEY" -p "$PORT" -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$KH" "$U@127.0.0.1" 'sudo -k; sudo -v && bash -s' >"$O" 2>&1; r=$?; set -e; ((r!=0)) && ! grep -Fq HISTORICAL_PAYLOAD "$O" && pass 'historical stdin collision rejected' || fail 'historical stdin collision escaped'
+reset; O="$D/old-stdin.out"; set +e; printf 'echo HISTORICAL_PAYLOAD\n' | timeout 4s ssh -tt -i "$KEY" -p "$PORT" -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$KH" "$U@127.0.0.1" 'sudo -k; sudo -v && bash -s' >"$O" 2>&1; r=$?; set -e; ((r!=0)) && ! grep -Fq HISTORICAL_PAYLOAD "$O" && pass 'historical stdin collision rejected within timeout' || fail "historical stdin collision escaped rc=$r"
 for kind in capture filter; do
   reset; INNER="$D/$kind-inner.sh"; WR="$D/$kind-wrap.sh"; O="$D/$kind.out"
   if [[ "$kind" == capture ]]; then
