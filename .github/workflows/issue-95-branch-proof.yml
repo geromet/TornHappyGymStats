@@ -28,7 +28,7 @@ jobs:
       - name: Build and run hermetic test gate
         run: bash scripts/verify/build-and-test.sh
       - name: Run architecture tier
-        run: dotnet test tests/HappyGymStats.ArchitectureTests/HappyGymStats.ArchitectureTests.csproj --no-restore --nologo
+        run: dotnet test tests/HappyGymStats.ArchitectureTests/HappyGymStats.ArchitectureTests.csproj --nologo
       - name: Check formatting
         run: dotnet format whitespace --verify-no-changes --no-restore
       - name: Verify diff whitespace
