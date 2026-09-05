@@ -48,6 +48,7 @@ public sealed class WarObjectiveConsumptionTests
         var reached = Assert.IsType<WarObjectiveEvaluationDto>(
             Assert.IsType<OkObjectResult>(reachedResult).Value);
         Assert.False(reached.RecommendationsAllowed);
+        Assert.NotNull(reached.StopReason);
         Assert.Contains("2500", reached.StopReason, StringComparison.Ordinal);
     }
 
