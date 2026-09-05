@@ -2,6 +2,38 @@
 
 This document is the coding-agent handoff for the remote branch audit and stranded-work recovery performed on 2026-09-05.
 
+## Post-retirement status — updated 2026-09-05 (after this map was first written)
+
+The retirement this map hands off has since **executed in full**:
+
+- **Wave 1** (`workspace/retire-branches-20260905.sh --execute`, 2026-09-05T17:39–17:40Z):
+  40 remote refs deleted with per-branch `--force-with-lease` CAS; remote frontier 66 → 27.
+  Restore ledger `workspace/retire-branches-20260905.ledger.tsv`. Deleted set = the three
+  `fleet/consolidated/*-20260905` branches, every RECOVERED source/stable ref they absorbed
+  (safe only because coding-agent PRs #213/#214/#215/#194 had merged to `main` with
+  exact-head proof), and the LANDED/SUPERSEDED refs #193 had transcribed into its checkbox list.
+- **Wave 2** (`workspace/retire-branches-20260905-wave2.sh --execute`, 2026-09-05T21:17–21:18Z):
+  25 remaining non-default refs deleted, per-branch `--force-with-lease` CAS, 0 skipped / 0 failed.
+  Restore ledger `workspace/retire-branches-20260905-wave2.ledger.tsv`. Each was already
+  LANDED-MAIN / LANDED-VIA-STABLE / SUPERSEDED in the index below, plus
+  `docs/agent-terminal-handoff-20260905` (PR #216 merged) and `agent/issue-100-chain-planner`
+  (#194 merged) which post-date this map, plus
+  `fleet/stable/branch-inventory-reconcile-20260905` (PR #222 merged into #221's stable branch)
+  and `audit/docs-markdown-accuracy-20260905-2` (identical to `main`). Rollup PRs #176, #180,
+  #185 verified MERGED to `main`.
+- **Preserved** (neither wave): `agent/issue-101-home-gym-explorer` (PR #200),
+  `agent/issue-217-security-no-prerender` (PR #220),
+  `fleet/stable/fleet-archive-20260905-1952` (PR #221),
+  `audit/docs-markdown-accuracy-20260905` (PR #224), and
+  `fix/align-prod-nginx-conf-name` (live local worktree session, pid 415349).
+
+**Live remote frontier is now 6 refs**: `main` + the five preserved branches above.
+Every other row in this document names a ref that **no longer exists on `origin`**
+(deleted in wave 1 or wave 2). A row being LANDED-MAIN / LANDED-VIA-STABLE / RECOVERED /
+SUPERSEDED / CONSOLIDATION means the ref is already retired — not that it is live. Do not
+re-merge or "recover" any of them; `ahead` after a squash/rollup merge is expected.
+Authoritative live coordination: #193 (retirement record) and #140.
+
 ## Audit basis
 
 - Repository: `geromet/TornHappyGymStats`
