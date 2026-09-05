@@ -22,6 +22,18 @@ public sealed class SecurityRenderModeTests
     }
 
     [Fact]
+    public void Security_copy_does_not_claim_server_circuit_passwords_never_reach_the_server()
+    {
+        var security = ReadRepoFile(
+            "src/HappyGymStats.Blazor/HappyGymStats.Blazor.Client/Pages/Security.razor");
+
+        Assert.DoesNotContain("Not sent to any server", security, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("only you can decrypt it", security, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("The password is not stored by HappyGymStats", security, StringComparison.Ordinal);
+        Assert.Contains("the wrapped private key stays in this browser", security, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Player_account_remains_server_rendered_and_does_not_depend_on_browser_crypto()
     {
         var playerAccount = ReadRepoFile(
