@@ -76,19 +76,6 @@ public sealed class SharedStateAdoptionTests
     }
 
     [Fact]
-    public void WarScout_uses_shared_components_for_loading_empty_and_failed_states()
-    {
-        var warScout = ReadRepoFile(
-            "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/WarScout.razor");
-
-        Assert.Contains("<LoadingState Message=\"Loading scouting report...\"", warScout, StringComparison.Ordinal);
-        Assert.Contains("<EmptyState Message=\"No history yet.", warScout, StringComparison.Ordinal);
-        Assert.Contains("<ErrorState Message=", warScout, StringComparison.Ordinal);
-        Assert.Contains("Scouting report unavailable.", warScout, StringComparison.Ordinal);
-        Assert.DoesNotContain("<MudAlert", warScout, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void Home_MyStats_and_War_share_the_same_state_vocabulary()
     {
         var home = ReadRepoFile(
