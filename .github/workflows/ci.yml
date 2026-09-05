@@ -23,6 +23,11 @@ jobs:
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The remote-transport added-line policy compares the tested tree to
+          # its first parent. Keep that parent available instead of silently
+          # degrading the verifier on a depth-1 checkout.
+          fetch-depth: 2
 
       # ripgrep is not guaranteed on the runner and several required verifiers
       # depend on it. Missing verifier tooling must be unavailable/red, not a
