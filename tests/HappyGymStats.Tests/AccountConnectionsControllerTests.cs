@@ -52,7 +52,8 @@ public sealed class AccountConnectionsControllerTests
                 "ownerAnonymousId": "{{attacker}}",
                 "tornPlayerId": 99999
               }
-              """);
+              """,
+            JsonSerializerOptions.Web);
 
         Assert.NotNull(request);
         var action = await controller.Connect(request!, CancellationToken.None);
