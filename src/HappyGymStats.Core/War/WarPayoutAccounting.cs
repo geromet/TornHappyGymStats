@@ -153,7 +153,7 @@ public static class WarPayoutCalculator
         }
         catch (OverflowException ex)
         {
-            throw new ArgumentOutOfRangeException(nameof(policy), "Payout arithmetic overflowed the supported monetary range.", ex);
+            throw new InvalidOperationException("Payout arithmetic overflowed the supported monetary range.", ex);
         }
 
         if (allocated > WarPayoutPolicy.MaximumAmount)
@@ -197,7 +197,7 @@ public static class WarPayoutCalculator
         }
         catch (OverflowException ex)
         {
-            throw new ArgumentOutOfRangeException(nameof(policy), "Payout arithmetic overflowed the supported monetary range.", ex);
+            throw new InvalidOperationException("Payout arithmetic overflowed the supported monetary range.", ex);
         }
     }
 
