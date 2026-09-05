@@ -305,14 +305,27 @@ public static class OpponentPressureEngine
             throw new ArgumentException("Pressure window cannot start after evaluation time.", nameof(input.WindowStartUtc));
         }
 
+        if (freshest < windowStart)
+        {
+            throw new ArgumentException("Freshest observation must fall within the declared pressure window.", nameof(input.FreshestObservationAtUtc));
+        }
+
         if (freshest > asOf + MaximumFutureSkew)
         {
             throw new ArgumentException("Observation timestamp is implausibly ahead of the evaluation clock.", nameof(input.FreshestObservationAtUtc));
         }
 
-        if (input.PriorState is not null && input.PriorState.SinceUtc.ToUniversalTime() > asOf)
+        if (input.PriorState is not null)
         {
-            throw new ArgumentException("Prior pressure state cannot begin in the future.", nameof(input.PriorState));
+            if (!Enum.IsDefined(input.PriorState.Level))
+            {
+                throw new ArgumentOutOfRangeException(nameof(input.PriorState), input.PriorState.Level, "Prior pressure level must be a defined value.");
+            }
+
+            if (input.PriorState.SinceUtc.ToUniversalTime() > asOf)
+            {
+                throw new ArgumentException("Prior pressure state cannot begin in the future.", nameof(input.PriorState));
+            }
         }
     }
 
