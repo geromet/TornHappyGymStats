@@ -1,0 +1,58 @@
+name: Security render proof
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor.Client/Pages/Security.razor'
+      - 'tests/HappyGymStats.ArchitectureTests/SecurityRenderModeTests.cs'
+      - 'scripts/screenshot-board.sh'
+      - 'scripts/ux/shoot.py'
+      - '.github/workflows/security-render.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-render-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    name: 390 / 768 / 1440 screenshots
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install .NET (version from global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install screenshot tooling
+        run: bash scripts/screenshot-board.sh --setup
+
+      - name: Capture Security at phone, tablet and desktop widths
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p workspace/tmp
+          bash scripts/screenshot-board.sh --route /security --out workspace/tmp/screenshots/security 2>&1 | tee workspace/tmp/security-render.log
+          if grep -q '^  ! .*console/page error(s)' workspace/tmp/security-render.log; then
+            echo 'FAIL: /security emitted browser console/page errors during render proof' >&2
+            exit 1
+          fi
+
+      - name: Upload render proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-render-proof
+          path: |
+            workspace/tmp/screenshots/security
+            workspace/tmp/security-render.log
+          if-no-files-found: error
+          retention-days: 7
