@@ -6,18 +6,13 @@ using Xunit;
 
 namespace HappyGymStats.Tests;
 
-public sealed class ChainPlannerRenderedTests : BunitContext
+public sealed class ChainPlannerRenderedTests
 {
-    public ChainPlannerRenderedTests()
-    {
-        Services.AddLogging();
-        Services.AddMudServices();
-    }
-
     [Fact]
-    public void Planner_renders_decisions_then_recommendation_before_advanced_model_controls()
+    public async Task Planner_renders_decisions_then_recommendation_before_advanced_model_controls()
     {
-        var cut = Render<ChainCalculator>();
+        await using var context = CreateContext();
+        var cut = context.Render<ChainCalculator>();
         var markup = cut.Markup;
 
         Assert.Contains("Chain planner", markup, StringComparison.Ordinal);
@@ -41,9 +36,10 @@ public sealed class ChainPlannerRenderedTests : BunitContext
     }
 
     [Fact]
-    public void Exhaustive_combinations_stay_secondary_until_requested()
+    public async Task Exhaustive_combinations_stay_secondary_until_requested()
     {
-        var cut = Render<ChainCalculator>();
+        await using var context = CreateContext();
+        var cut = context.Render<ChainCalculator>();
 
         Assert.Empty(cut.FindAll("[data-testid=chain-all-combinations]"));
 
@@ -56,13 +52,23 @@ public sealed class ChainPlannerRenderedTests : BunitContext
     }
 
     [Fact]
-    public void Budget_presets_recalculate_the_recommendation_without_changing_the_engine_contract()
+    public async Task Budget_presets_recalculate_the_recommendation_without_changing_the_engine_contract()
     {
-        var cut = Render<ChainCalculator>();
+        await using var context = CreateContext();
+        var cut = context.Render<ChainCalculator>();
 
         cut.Find("button[aria-label='Use 250 hits']").Click();
 
         Assert.Contains("250 hits available", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Recommended plan", cut.Markup, StringComparison.Ordinal);
+    }
+
+    private static BunitContext CreateContext()
+    {
+        var context = new BunitContext();
+        context.JSInterop.Mode = JSRuntimeMode.Loose;
+        context.Services.AddLogging();
+        context.Services.AddMudServices();
+        return context;
     }
 }
