@@ -101,6 +101,7 @@ builder.Services.AddScoped<IWarStateRepository, WarStateRepository>();
 builder.Services.AddScoped<IWarHistoryRepository, WarHistoryRepository>();
 builder.Services.AddScoped<ICombatIntelRepository, CombatIntelRepository>();
 builder.Services.AddScoped<IWarObjectiveRepository, WarObjectiveRepository>();
+builder.Services.AddScoped<IWarAccountingRunRepository, WarAccountingRunRepository>();
 
 builder.Services.AddScoped<LogFetcher>();
 builder.Services.AddScoped<PerkLogFetcher>();
