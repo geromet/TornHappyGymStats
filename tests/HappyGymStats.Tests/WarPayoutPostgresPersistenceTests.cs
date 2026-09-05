@@ -14,8 +14,7 @@ public sealed class WarPayoutPostgresPersistenceTests : IAsyncLifetime
     {
         try
         {
-            _postgres = new PostgreSqlBuilder()
-                .WithImage("postgres:16-alpine")
+            _postgres = new PostgreSqlBuilder("postgres:16-alpine")
                 .WithDatabase("happygymstats")
                 .WithUsername("postgres")
                 .WithPassword("postgres")
@@ -196,7 +195,7 @@ public sealed class WarPayoutPostgresPersistenceTests : IAsyncLifetime
         Assert.NotNull(persisted);
         Assert.Single(persisted.Lines);
         Assert.Equal(sourceRun.SourceSnapshotId, persisted.SourceSnapshotId);
-        Assert.Equal(8201, persisted.Lines[0].MemberId);
+        Assert.Equal(8201L, persisted.Lines[0].MemberId);
     }
 
     private static Task<int> InsertReportMemberAsync(
