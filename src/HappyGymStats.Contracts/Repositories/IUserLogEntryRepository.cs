@@ -8,6 +8,9 @@ public interface IUserLogEntryRepository
 {
     Task<HashSet<string>> GetExistingLogIdsAsync(Guid anonymousId, CancellationToken ct);
 
+    // Stages missing global log-type dictionary entries. Caller commits via IUnitOfWork.
+    Task AddLogTypesIfMissingAsync(IEnumerable<LogTypeEntity> types, CancellationToken ct);
+
     // Stages add. Caller commits via IUnitOfWork.
     Task AddRangeAsync(IEnumerable<UserLogEntryEntity> entries, CancellationToken ct);
 
