@@ -41,6 +41,9 @@ public sealed class PlayerAccountMemberSafetyTests
         Assert.Contains("_tornApiKey = null", content, StringComparison.Ordinal);
         Assert.Contains("role=\"status\"", content, StringComparison.Ordinal);
         Assert.Contains("aria-live=\"polite\"", content, StringComparison.Ordinal);
+        Assert.Contains("yyyy-MM-dd HH:mm 'UTC'", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("TimeZoneInfo.Local", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("ToLocalTime()", content, StringComparison.Ordinal);
     }
 
     [Fact]
