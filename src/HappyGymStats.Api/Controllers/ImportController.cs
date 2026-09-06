@@ -133,11 +133,11 @@ public sealed class ImportController : ApiControllerBase
             }
             catch (FormatException)
             {
-                return ValidationError("publicKey must be a valid base64-encoded P-256 SPKI key.", new { field = "publicKey" });
+                return ValidationError("publicKey must be a valid base64 string.", new { field = "publicKey" });
             }
 
             if (!P256PublicKey.IsValidSubjectPublicKeyInfo(publicKey))
-                return ValidationError("publicKey must be a valid base64-encoded P-256 SPKI key.", new { field = "publicKey" });
+                return ValidationError("publicKey must be a valid P-256 SPKI key.", new { field = "publicKey" });
         }
 
         var status = _importService.Enqueue(apiKey, fresh: true, publicKey);
