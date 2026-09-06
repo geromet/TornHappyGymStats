@@ -42,13 +42,19 @@ jobs:
         run: bash scripts/screenshot-board.sh --setup
 
       - name: Capture representative Scout briefing
-        run: bash scripts/screenshot-board.sh --route /war/scout/222 --out workspace/tmp/screenshots/scout
+        run: |
+          bash scripts/screenshot-board.sh \
+            --route /war/scout/222 \
+            --out workspace/tmp/screenshots/scout \
+            --focus-selector 'button[data-testid="scout-refresh"]' \
+            --focus-selector 'input[placeholder="Name or Torn member id"]'
 
-      - name: Require all six viewport/theme frames
+      - name: Require viewport/theme and keyboard-focus evidence
         run: |
           count="$(find workspace/tmp/screenshots/scout -maxdepth 1 -type f -name '*.png' | wc -l)"
           echo "Scout screenshot count: ${count}"
-          test "${count}" -eq 6
+          test "${count}" -eq 18
+          test -s workspace/tmp/screenshots/scout/focus-proof.json
 
       - name: Upload render proof
         if: always()

@@ -6,6 +6,9 @@ namespace HappyGymStats.Tests;
 public sealed class AccessibilityBaselineContractTests
 {
     private const string AppCssPath = "src/HappyGymStats.Blazor/HappyGymStats.Blazor/wwwroot/app.css";
+    private const string ScreenshotDriverPath = "scripts/ux/shoot.py";
+    private const string ScreenshotWrapperPath = "scripts/screenshot-board.sh";
+    private const string ScoutRenderWorkflowPath = ".github/workflows/scout-render.yml";
 
     [Fact]
     public void Global_styles_keep_keyboard_focus_visibly_distinct()
@@ -32,6 +35,25 @@ public sealed class AccessibilityBaselineContractTests
         Assert.Contains("transition-duration: 0.01ms !important", css, StringComparison.Ordinal);
         Assert.Contains("transition-delay: 0ms !important", css, StringComparison.Ordinal);
         Assert.Contains("scroll-behavior: auto !important", css, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Render_harness_proves_real_keyboard_focus_instead_of_relabelling_passive_screenshots()
+    {
+        var driver = ReadRepoFile(ScreenshotDriverPath);
+        var wrapper = ReadRepoFile(ScreenshotWrapperPath);
+        var workflow = ReadRepoFile(ScoutRenderWorkflowPath);
+
+        Assert.Contains("page.keyboard.press(\"Tab\")", driver, StringComparison.Ordinal);
+        Assert.Contains("page.keyboard.press(\"Shift+Tab\")", driver, StringComparison.Ordinal);
+        Assert.Contains("document.activeElement", driver, StringComparison.Ordinal);
+        Assert.Contains("focus traversal cycled", driver, StringComparison.Ordinal);
+        Assert.Contains("focus-proof.json", driver, StringComparison.Ordinal);
+        Assert.Contains("--focus-selector", wrapper, StringComparison.Ordinal);
+
+        Assert.Contains("button[data-testid=\"scout-refresh\"]", workflow, StringComparison.Ordinal);
+        Assert.Contains("input[placeholder=\"Name or Torn member id\"]", workflow, StringComparison.Ordinal);
+        Assert.Contains("test -s workspace/tmp/screenshots/scout/focus-proof.json", workflow, StringComparison.Ordinal);
     }
 
     private static string ReadRepoFile(string relativePath)

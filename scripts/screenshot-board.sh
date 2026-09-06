@@ -35,10 +35,13 @@ usage() {
   cat <<'EOF'
 Usage:
   bash scripts/screenshot-board.sh [--route /war] [--out DIR] [--keep-running]
+      [--focus-selector CSS]... [--focus-max-tabs N]
   bash scripts/screenshot-board.sh --setup     install Playwright + its Chromium
   bash scripts/screenshot-board.sh --check     report whether the tooling is ready
 
 Screenshots the local app at phone/tablet/desktop, light and dark.
+Optional focus selectors add real Tab/Shift+Tab traversal proof, focused PNGs,
+and a focus-proof.json manifest. Selectors are checked in argument order.
 
 Environment:
   SHOT_ROUTE     page to shoot (default /war)
@@ -124,7 +127,7 @@ while (( $# > 0 )); do
     --keep-running) KEEP_RUNNING=1; shift ;;
     --route) SHOT_ROUTE="$2"; shift 2 ;;
     --out) SHOT_OUT_DIR="$2"; shift 2 ;;
-    --viewport|--theme) EXTRA_ARGS+=("$1" "$2"); shift 2 ;;
+    --viewport|--theme|--focus-selector|--focus-max-tabs) EXTRA_ARGS+=("$1" "$2"); shift 2 ;;
     *) echo "Unknown option '$1'. Try --help." >&2; exit 2 ;;
   esac
 done
