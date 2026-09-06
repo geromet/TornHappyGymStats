@@ -9,7 +9,12 @@ namespace HappyGymStats.Identity.Provisional;
 public sealed class ProvisionalTokenService : IProvisionalTokenService
 {
     private const string TokenType = "provisional";
-    private readonly JwtSecurityTokenHandler _handler = new();
+    // These are app-owned tokens whose validation contract uses the registered JWT
+    // claim names below. Keep that policy local so it cannot change Keycloak claims.
+    private readonly JwtSecurityTokenHandler _handler = new()
+    {
+        MapInboundClaims = false,
+    };
     private readonly ProvisionalTokenOptions _options;
 
     public ProvisionalTokenService(IOptions<ProvisionalTokenOptions> options)
