@@ -27,6 +27,7 @@ public sealed class ImportOrchestrator : BackgroundService
     private readonly object _admissionLock = new();
 
     private volatile ImportJobStatus? _latest;
+    private ImportJobRequest? _reservedAnonymousImport;
 
     private readonly ILogger<ImportOrchestrator> _logger;
 
@@ -59,6 +60,77 @@ public sealed class ImportOrchestrator : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Reserves the single import slot without publishing work to the background
+    /// queue. The caller must persist all state required by the worker and then
+    /// call <see cref="PublishReservedAnonymousImport"/>, or release the slot with
+    /// <see cref="CancelReservedAnonymousImport"/> if initialization fails.
+    /// </summary>
+    public ImportJobStatus ReserveAnonymousImport(string apiKey, byte[]? publicKey = null)
+    {
+        lock (_admissionLock)
+        {
+            if (_latest is { IsTerminal: false })
+                return BusyStatus();
+
+            var status = CreateStatus(Guid.NewGuid(), "initializing");
+            _latest = status;
+            _reservedAnonymousImport = new ImportJobRequest(
+                apiKey,
+                Fresh: true,
+                status.Id,
+                status.AnonymousId,
+                publicKey);
+            return status;
+        }
+    }
+
+    /// <summary>
+    /// Publishes a previously reserved anonymous import after its identity state
+    /// has committed. A reservation can be published at most once.
+    /// </summary>
+    public ImportJobStatus PublishReservedAnonymousImport(string jobId)
+    {
+        lock (_admissionLock)
+        {
+            if (_reservedAnonymousImport is not { } request
+                || !string.Equals(request.JobId, jobId, StringComparison.Ordinal)
+                || _latest is not { Outcome: "initializing" } status
+                || !string.Equals(status.Id, jobId, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Anonymous import reservation is no longer active.");
+            }
+
+            var published = status with { Outcome = "queued" };
+            _latest = published;
+            _reservedAnonymousImport = null;
+            _queue.Enqueue(request);
+            return published;
+        }
+    }
+
+    /// <summary>
+    /// Releases an unpublished anonymous reservation. Returns false when the
+    /// reservation has already been published, cancelled, or replaced.
+    /// </summary>
+    public bool CancelReservedAnonymousImport(string jobId)
+    {
+        lock (_admissionLock)
+        {
+            if (_reservedAnonymousImport is not { } request
+                || !string.Equals(request.JobId, jobId, StringComparison.Ordinal)
+                || _latest is not { Outcome: "initializing" } status
+                || !string.Equals(status.Id, jobId, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            _reservedAnonymousImport = null;
+            _latest = null;
+            return true;
+        }
+    }
+
     public ImportJobStatus EnqueueForAnonymousId(string apiKey, Guid anonymousId, bool fresh, byte[]? publicKey = null)
     {
         if (anonymousId == Guid.Empty)
@@ -87,21 +159,24 @@ public sealed class ImportOrchestrator : BackgroundService
 
     private ImportJobStatus EnqueueInternal(string apiKey, bool fresh, Guid anonymousId, byte[]? publicKey)
     {
-        var status = new ImportJobStatus(
+        var status = CreateStatus(anonymousId, "queued");
+
+        _latest = status;
+        _queue.Enqueue(new ImportJobRequest(apiKey, fresh, status.Id, anonymousId, publicKey));
+        return status;
+    }
+
+    private static ImportJobStatus CreateStatus(Guid anonymousId, string outcome)
+        => new(
             Id: Guid.NewGuid().ToString("N"),
             AnonymousId: anonymousId,
-            Outcome: "queued",
+            Outcome: outcome,
             StartedAtUtc: DateTimeOffset.UtcNow,
             CompletedAtUtc: null,
             PagesFetched: 0,
             LogsFetched: 0,
             LogsAppended: 0,
             ErrorMessage: null);
-
-        _latest = status;
-        _queue.Enqueue(new ImportJobRequest(apiKey, fresh, status.Id, anonymousId, publicKey));
-        return status;
-    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

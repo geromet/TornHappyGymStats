@@ -140,28 +140,42 @@ public sealed class ImportController : ApiControllerBase
                 return ValidationError("publicKey must be a valid P-256 SPKI key.", new { field = "publicKey" });
         }
 
-        var status = _importService.Enqueue(apiKey, fresh: true, publicKey);
-        if (IsBusy(status))
+        var reservation = _importService.ReserveAnonymousImport(apiKey, publicKey);
+        if (IsBusy(reservation))
             return BusyImportResponse();
 
-        await _identityMapRepo.CreateAsync(new IdentityMapEntity
+        try
         {
-            AnonymousId = status.AnonymousId,
-            IsProvisional = true,
-            CreatedAtUtc = status.StartedAtUtc,
-            ExpiresAtUtc = status.StartedAtUtc.AddHours(24),
-            PublicKey = publicKey,
-        }, ct);
-        await _unitOfWork.SaveChangesAsync(ct);
+            // Token construction is deliberately before persistence so invalid
+            // signing configuration cannot leave a claimable orphan row.
+            var provisionalToken = _provisionalTokenService.Issue(reservation.AnonymousId);
 
-        var provisionalToken = _provisionalTokenService.Issue(status.AnonymousId);
+            await _identityMapRepo.CreateAsync(new IdentityMapEntity
+            {
+                AnonymousId = reservation.AnonymousId,
+                IsProvisional = true,
+                CreatedAtUtc = reservation.StartedAtUtc,
+                ExpiresAtUtc = reservation.StartedAtUtc.AddHours(24),
+                PublicKey = publicKey,
+            }, ct);
+            await _unitOfWork.SaveChangesAsync(ct);
 
-        return StatusCode(StatusCodes.Status202Accepted, new
+            // This is the publication boundary: the worker cannot observe the
+            // API key/job until the identity transaction above has committed.
+            var status = _importService.PublishReservedAnonymousImport(reservation.Id);
+
+            return StatusCode(StatusCodes.Status202Accepted, new
+            {
+                anonymousId = status.AnonymousId,
+                provisionalToken,
+                job = ToDto(status),
+            });
+        }
+        catch
         {
-            anonymousId = status.AnonymousId,
-            provisionalToken,
-            job = ToDto(status),
-        });
+            _importService.CancelReservedAnonymousImport(reservation.Id);
+            throw;
+        }
     }
 
     private IActionResult BusyImportResponse()

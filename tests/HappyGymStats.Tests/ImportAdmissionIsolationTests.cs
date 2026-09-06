@@ -61,4 +61,51 @@ public sealed class ImportAdmissionIsolationTests
             Assert.Null(result.ErrorMessage);
         });
     }
+
+    [Fact]
+    public void Reserved_anonymous_import_is_busy_but_not_queued_until_published()
+    {
+        var orchestrator = CreateOrchestrator();
+
+        var reserved = orchestrator.ReserveAnonymousImport("reserved-key");
+
+        Assert.Equal("initializing", reserved.Outcome);
+        Assert.Same(reserved, orchestrator.Latest);
+
+        var competing = orchestrator.Enqueue("competing-key", fresh: true);
+        Assert.Equal("busy", competing.Outcome);
+        Assert.Equal(Guid.Empty, competing.AnonymousId);
+        Assert.Equal(string.Empty, competing.Id);
+
+        var published = orchestrator.PublishReservedAnonymousImport(reserved.Id);
+        Assert.Equal("queued", published.Outcome);
+        Assert.Equal(reserved.Id, published.Id);
+        Assert.Equal(reserved.AnonymousId, published.AnonymousId);
+        Assert.Same(published, orchestrator.Latest);
+
+        Assert.False(orchestrator.CancelReservedAnonymousImport(reserved.Id));
+        Assert.Throws<InvalidOperationException>(() =>
+            orchestrator.PublishReservedAnonymousImport(reserved.Id));
+    }
+
+    [Fact]
+    public void Cancelled_anonymous_reservation_releases_capacity_without_publication()
+    {
+        var orchestrator = CreateOrchestrator();
+        var reserved = orchestrator.ReserveAnonymousImport("must-not-run");
+
+        Assert.True(orchestrator.CancelReservedAnonymousImport(reserved.Id));
+        Assert.Null(orchestrator.Latest);
+        Assert.False(orchestrator.CancelReservedAnonymousImport(reserved.Id));
+
+        var replacement = orchestrator.Enqueue("replacement-key", fresh: true);
+        Assert.Equal("queued", replacement.Outcome);
+        Assert.NotEqual(reserved.Id, replacement.Id);
+    }
+
+    private static ImportOrchestrator CreateOrchestrator()
+        => new(
+            scopeFactory: null!,
+            surfacesCacheWriter: null!,
+            NullLogger<ImportOrchestrator>.Instance);
 }
