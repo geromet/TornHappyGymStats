@@ -12,7 +12,10 @@ public sealed class LoginMemberSafetyTests
             "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/Login.razor");
 
         Assert.Contains("Sign in to Happy Gym Stats.", content, StringComparison.Ordinal);
-        Assert.Contains("Sign-in failed. Please try again.", content, StringComparison.Ordinal);
+        Assert.Contains("<ErrorState Message=\"Sign-in failed. Please try again.\"", content, StringComparison.Ordinal);
+        Assert.Contains("<SetupRequiredState Message=\"You are currently signed out.", content, StringComparison.Ordinal);
+        Assert.Contains("aria-busy=\"@_redirecting\"", content, StringComparison.Ordinal);
+        Assert.Contains("role=\"status\" aria-live=\"polite\"", content, StringComparison.Ordinal);
         Assert.Contains("LocalRedirectPolicy.Normalize(ReturnUrl)", content, StringComparison.Ordinal);
         Assert.Contains("Uri.EscapeDataString(_resolvedReturnUrl)", content, StringComparison.Ordinal);
 
