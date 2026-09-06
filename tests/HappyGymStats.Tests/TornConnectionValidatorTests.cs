@@ -9,6 +9,82 @@ public sealed class TornConnectionValidatorTests
 {
     private const string FixtureKey = "validator-fixture-key";
 
+    [Fact]
+    public async Task Limited_access_key_is_validated_before_identity_without_secret_in_uri()
+    {
+        var requestedPaths = new List<string>();
+        var validator = CreateValidator((request, _) =>
+        {
+            AssertCredentialTransport(request);
+            requestedPaths.Add(request.RequestUri!.PathAndQuery);
+
+            return Task.FromResult(request.RequestUri.AbsolutePath switch
+            {
+                "/v2/key/info" => JsonResponse(KeyInfoJson("Limited Access")),
+                "/v2/user/basic" => JsonResponse("{\"player_id\":123}"),
+                _ => throw new InvalidOperationException($"Unexpected Torn request: {request.RequestUri.AbsolutePath}"),
+            });
+        });
+
+        var playerId = await validator.GetPlayerIdAsync(FixtureKey);
+
+        Assert.Equal(123, playerId);
+        Assert.Equal(
+            ["/v2/key/info", "/v2/user/basic?selections=basic"],
+            requestedPaths);
+    }
+
+    [Theory]
+    [InlineData("Full Access")]
+    [InlineData("Custom")]
+    [InlineData("Minimal Access")]
+    [InlineData("Public Only")]
+    public async Task Non_limited_key_is_rejected_before_identity_lookup(string accessType)
+    {
+        var requests = 0;
+        var validator = CreateValidator((request, _) =>
+        {
+            requests++;
+            AssertCredentialTransport(request);
+            Assert.Equal("/v2/key/info", request.RequestUri!.AbsolutePath);
+            return Task.FromResult(JsonResponse(KeyInfoJson(accessType)));
+        });
+
+        var failure = await Assert.ThrowsAsync<TornConnectionValidationException>(
+            () => validator.GetPlayerIdAsync(FixtureKey));
+
+        Assert.False(failure.IsTransient);
+        Assert.Equal(1, requests);
+        Assert.DoesNotContain(FixtureKey, failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(accessType, failure.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("{\"info\":{}}")]
+    [InlineData("{\"info\":{\"access\":null}}")]
+    [InlineData("{\"info\":{\"access\":{}}}")]
+    [InlineData("{\"info\":{\"access\":{\"type\":4}}}")]
+    [InlineData("{\"info\":{\"access\":{\"type\":\"\"}}}")]
+    public async Task Malformed_key_access_contract_fails_closed_without_identity_lookup(string payload)
+    {
+        var requests = 0;
+        var validator = CreateValidator((request, _) =>
+        {
+            requests++;
+            AssertCredentialTransport(request);
+            Assert.Equal("/v2/key/info", request.RequestUri!.AbsolutePath);
+            return Task.FromResult(JsonResponse(payload));
+        });
+
+        var failure = await Assert.ThrowsAsync<TornConnectionValidationException>(
+            () => validator.GetPlayerIdAsync(FixtureKey));
+
+        Assert.True(failure.IsTransient);
+        Assert.Equal(1, requests);
+        Assert.DoesNotContain(payload, failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(FixtureKey, failure.Message, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("[]")]
     [InlineData("\"unexpected\"")]
@@ -63,6 +139,31 @@ public sealed class TornConnectionValidatorTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => cancelledValidator.GetPlayerIdAsync(FixtureKey, callerCancellation.Token));
     }
+
+    private static void AssertCredentialTransport(HttpRequestMessage request)
+    {
+        Assert.NotNull(request.RequestUri);
+        Assert.DoesNotContain(FixtureKey, request.RequestUri.AbsoluteUri, StringComparison.Ordinal);
+        Assert.Equal("ApiKey", request.Headers.Authorization?.Scheme);
+        Assert.Equal(FixtureKey, request.Headers.Authorization?.Parameter);
+    }
+
+    private static HttpResponseMessage JsonResponse(string payload)
+        => new(HttpStatusCode.OK)
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json"),
+        };
+
+    private static string KeyInfoJson(string accessType)
+        => $$"""
+        {
+          "info": {
+            "access": {
+              "type": "{{accessType}}"
+            }
+          }
+        }
+        """;
 
     private static TornConnectionValidator CreateValidator(
         Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler)
