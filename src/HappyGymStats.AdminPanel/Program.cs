@@ -1,5 +1,6 @@
 using HappyGymStats.AdminPanel.Infrastructure;
 using HappyGymStats.Data;
+using HappyGymStats.Data.Security;
 using HappyGymStats.Identity.Authentication;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
@@ -25,6 +26,8 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddControllers();
 
 var connectionString = AdminAppConfiguration.ResolveConnectionString(builder.Configuration);
+if (builder.Environment.IsProduction())
+    PostgresConnectionSecurityPolicy.RequireEncryptedTransport(connectionString);
 
 // Read-only: no change tracking needed.
 builder.Services.AddDbContext<HappyGymStatsDbContext>(options =>
