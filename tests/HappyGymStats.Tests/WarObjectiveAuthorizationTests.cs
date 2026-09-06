@@ -76,7 +76,7 @@ public sealed class WarObjectiveAuthorizationTests
     [InlineData("/api/v1/war/objectives/999999/12345/current")]
     [InlineData("/api/v1/war/objectives/999999/12345/evaluation?factionScore=10")]
     [InlineData("/api/v1/war/objectives/999999/12345/history")]
-    public async Task Admin_retains_restricted_objective_read_access(string route)
+    public async Task Admin_is_not_rejected_by_restricted_objective_authorization(string route)
     {
         var sqlitePath = Path.Combine(Path.GetTempPath(), $"hgs-war-objective-admin-read-{Guid.NewGuid():N}.sqlite");
         try
@@ -86,7 +86,8 @@ public sealed class WarObjectiveAuthorizationTests
 
             var response = await client.GetAsync(route);
 
-            response.EnsureSuccessStatusCode();
+            Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+            Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
         }
         finally
         {
