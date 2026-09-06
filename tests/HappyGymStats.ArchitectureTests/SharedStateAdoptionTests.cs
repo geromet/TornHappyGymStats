@@ -37,6 +37,26 @@ public sealed class SharedStateAdoptionTests
     }
 
     [Fact]
+    public void Home_keeps_retained_data_visible_and_marks_refresh_failure_stale()
+    {
+        var home = ReadRepoFile(
+            "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/Home.razor");
+
+        Assert.Contains("else if (_loadError != null && _surfaces is null)", home, StringComparison.Ordinal);
+        Assert.Contains(
+            "<StaleDataBanner Message=\"Could not refresh training data. Showing the last successfully loaded data.\"",
+            home,
+            StringComparison.Ordinal);
+        Assert.Contains("Retry refresh", home, StringComparison.Ordinal);
+        Assert.Contains("@if (!_loading && _surfaces != null && _gymPointCloudEnabled)", home, StringComparison.Ordinal);
+        Assert.Contains("else if (!_loading && _surfaces != null && !_gymPointCloudEnabled)", home, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "@if (!_loading && _loadError == null && _surfaces != null && _gymPointCloudEnabled)",
+            home,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Home_keeps_transient_import_feedback_separate_from_page_state_components()
     {
         var home = ReadRepoFile(
@@ -45,6 +65,12 @@ public sealed class SharedStateAdoptionTests
         Assert.Contains("@if (!string.IsNullOrEmpty(_statusMessage))", home, StringComparison.Ordinal);
         Assert.Contains("<MudAlert Severity=\"@_statusSeverity\"", home, StringComparison.Ordinal);
         Assert.Contains("_statusMessage = \"Import failed. Please try again.\";", home, StringComparison.Ordinal);
+        Assert.Contains("if (_loadError is null)", home, StringComparison.Ordinal);
+        Assert.Contains(
+            "_statusMessage = \"Import was queued, but the latest training data could not be loaded. Showing the previous data.\";",
+            home,
+            StringComparison.Ordinal);
+        Assert.Contains("_statusSeverity = Severity.Warning;", home, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -88,6 +114,8 @@ public sealed class SharedStateAdoptionTests
 
         Assert.Contains("<LoadingState", home, StringComparison.Ordinal);
         Assert.Contains("<ErrorState", home, StringComparison.Ordinal);
+        Assert.Contains("<EmptyState", home, StringComparison.Ordinal);
+        Assert.Contains("<StaleDataBanner", home, StringComparison.Ordinal);
         Assert.Contains("<LoadingState", myStats, StringComparison.Ordinal);
         Assert.Contains("<ErrorState", myStats, StringComparison.Ordinal);
         Assert.Contains("<EmptyState", myStats, StringComparison.Ordinal);
