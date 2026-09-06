@@ -220,7 +220,7 @@ public sealed class Program
             var safeReturnUrl = LocalRedirectPolicy.Normalize(returnUrl);
             var properties = new AuthenticationProperties { RedirectUri = safeReturnUrl };
             await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            await httpContext.SignOutAsync(OpenIdConnectDefaults.AuthenticationDefaults.AuthenticationScheme, properties);
+            await httpContext.SignOutAsync(OpenIdConnectDefaults.AuthenticationScheme, properties);
         });
 
         app.MapRazorComponents<App>()
