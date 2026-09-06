@@ -145,7 +145,7 @@ public sealed class WarScoutRenderedProvenanceTests
             .Add(component => component.FactionId, profile.FactionId));
         cut.WaitForAssertion(() => Assert.Contains(profile.FactionName, cut.Markup, StringComparison.Ordinal));
 
-        cut.SetParametersAndRender(parameters => parameters
+        cut.Render(parameters => parameters
             .Add(component => component.FactionId, profile.FactionId + 1));
 
         cut.WaitForAssertion(() =>
