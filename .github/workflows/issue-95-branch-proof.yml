@@ -3,7 +3,7 @@ name: Issue 95 branch proof
 on:
   push:
     branches:
-      - agent/issue-95-security-delete-confirmation
+      - ux/issue-95-shared-states
 
 permissions:
   contents: read
