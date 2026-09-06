@@ -48,7 +48,7 @@ public sealed class AccountConnectionsBlazorServiceTests
             requestBody = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult();
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent("{\"state\":\"connected\",\"tornPlayerId\":7,\"storedAtUtc\":null,\"consent\":null}", Encoding.UTF8, "application/json")
+                Content = new StringContent("{\"state\":\"connected\",\"tornPlayerId\":7,\"storedAtUtc\":\"2026-09-05T20:00:00Z\",\"consent\":{\"documentVersion\":\"v2\",\"purpose\":\"Personal Torn data\",\"acceptedAtUtc\":\"2026-09-05T19:00:00Z\"}}", Encoding.UTF8, "application/json")
             };
         });
         var sut = new AccountConnectionsService(http);
@@ -60,6 +60,43 @@ public sealed class AccountConnectionsBlazorServiceTests
         Assert.DoesNotContain(secret, requestUri!, StringComparison.Ordinal);
         Assert.Contains(secret, requestBody!, StringComparison.Ordinal);
         Assert.Contains("ConsentAccepted", requestBody!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"state\":\"unknown\",\"tornPlayerId\":7}")]
+    [InlineData("{\"state\":\"connected\",\"tornPlayerId\":7,\"storedAtUtc\":null,\"consent\":null}")]
+    [InlineData("{\"state\":\"not_connected\",\"tornPlayerId\":7,\"storedAtUtc\":null,\"consent\":null}")]
+    public async Task Semantically_incomplete_status_payloads_fail_closed(string payload)
+    {
+        using var http = CreateHttpClient(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json")
+        });
+        var sut = new AccountConnectionsService(http);
+
+        var failure = await Assert.ThrowsAsync<AccountConnectionFailure>(() => sut.GetAsync());
+
+        Assert.Equal("invalid_response", failure.Code);
+        Assert.Equal(HttpStatusCode.BadGateway, failure.StatusCode);
+    }
+
+    [Fact]
+    public async Task Not_connected_status_accepts_only_the_empty_connection_shape()
+    {
+        using var http = CreateHttpClient(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"state\":\"not_connected\",\"tornPlayerId\":null,\"storedAtUtc\":null,\"consent\":null}",
+                Encoding.UTF8,
+                "application/json")
+        });
+        var sut = new AccountConnectionsService(http);
+
+        var status = await sut.GetAsync();
+
+        Assert.Equal("not_connected", status.State);
+        Assert.Null(status.TornPlayerId);
     }
 
     [Theory]
