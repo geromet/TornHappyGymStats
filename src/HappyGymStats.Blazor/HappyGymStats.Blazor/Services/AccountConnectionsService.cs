@@ -101,11 +101,9 @@ public sealed class AccountConnectionsService(HttpClient http)
             "connected" => status.TornPlayerId is > 0
                 && status.StoredAtUtc is { } storedAt
                 && storedAt != default
-                && status.Consent is
-                {
-                    DocumentVersion.Length: > 0,
-                    Purpose.Length: > 0
-                } consent
+                && status.Consent is { } consent
+                && !string.IsNullOrWhiteSpace(consent.DocumentVersion)
+                && !string.IsNullOrWhiteSpace(consent.Purpose)
                 && consent.AcceptedAtUtc != default,
             _ => false
         };

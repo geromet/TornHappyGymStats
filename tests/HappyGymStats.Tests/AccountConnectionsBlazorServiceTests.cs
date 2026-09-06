@@ -67,6 +67,7 @@ public sealed class AccountConnectionsBlazorServiceTests
     [InlineData("{\"state\":\"unknown\",\"tornPlayerId\":7}")]
     [InlineData("{\"state\":\"connected\",\"tornPlayerId\":7,\"storedAtUtc\":null,\"consent\":null}")]
     [InlineData("{\"state\":\"connected\",\"tornPlayerId\":7,\"storedAtUtc\":\"2026-09-05T20:00:00Z\",\"consent\":{\"documentVersion\":\"v2\",\"purpose\":\"Personal Torn data\"}}")]
+    [InlineData("{\"state\":\"connected\",\"tornPlayerId\":7,\"storedAtUtc\":\"2026-09-05T20:00:00Z\",\"consent\":{\"documentVersion\":\" \",\"purpose\":\"  \",\"acceptedAtUtc\":\"2026-09-05T19:00:00Z\"}}")]
     [InlineData("{\"state\":\"connected\",\"tornPlayerId\":7,\"storedAtUtc\":\"0001-01-01T00:00:00Z\",\"consent\":{\"documentVersion\":\"v2\",\"purpose\":\"Personal Torn data\",\"acceptedAtUtc\":\"2026-09-05T19:00:00Z\"}}")]
     [InlineData("{\"state\":\"not_connected\",\"tornPlayerId\":7,\"storedAtUtc\":null,\"consent\":null}")]
     public async Task Semantically_incomplete_status_payloads_fail_closed(string payload)
