@@ -75,27 +75,40 @@ public sealed class TornConnectionValidator : ITornConnectionValidator
         }
 
         using var responseScope = response;
-        await using var stream = await response.Content
-            .ReadAsStreamAsync(cancellationToken)
-            .ConfigureAwait(false);
-
         JsonDocument document;
         try
         {
+            await using var stream = await response.Content
+                .ReadAsStreamAsync(cancellationToken)
+                .ConfigureAwait(false);
             document = await JsonDocument
                 .ParseAsync(stream, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch (JsonException)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new TornConnectionValidationException(IsTransientStatus(response.StatusCode));
+            throw new TornConnectionValidationException(isTransient: true);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException)
+        {
+            throw new TornConnectionValidationException(isTransient: true);
         }
 
         using (document)
         {
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                throw new TornConnectionValidationException(isTransient: true);
+            }
+
             if (TryGetTornError(document.RootElement, out var tornErrorCode))
             {
-                var transient = tornErrorCode == 5 || IsTransientStatus(response.StatusCode);
+                if (tornErrorCode is null)
+                {
+                    throw new TornConnectionValidationException(isTransient: true);
+                }
+
+                var transient = tornErrorCode.Value == 5 || IsTransientStatus(response.StatusCode);
                 if (transient)
                 {
                     _rateLimiter.ReportThrottled(keyIdentity);
@@ -116,10 +129,11 @@ public sealed class TornConnectionValidator : ITornConnectionValidator
             }
 
             if (!document.RootElement.TryGetProperty("player_id", out var playerIdElement)
+                || playerIdElement.ValueKind != JsonValueKind.Number
                 || !playerIdElement.TryGetInt32(out var playerId)
                 || playerId <= 0)
             {
-                throw new TornConnectionValidationException(isTransient: false);
+                throw new TornConnectionValidationException(isTransient: true);
             }
 
             _rateLimiter.ReportSuccess(keyIdentity);
@@ -127,18 +141,20 @@ public sealed class TornConnectionValidator : ITornConnectionValidator
         }
     }
 
-    private static bool TryGetTornError(JsonElement root, out int code)
+    private static bool TryGetTornError(JsonElement root, out int? code)
     {
-        code = 0;
-        if (!root.TryGetProperty("error", out var error)
-            || error.ValueKind != JsonValueKind.Object)
+        code = null;
+        if (!root.TryGetProperty("error", out var error))
         {
             return false;
         }
 
-        if (error.TryGetProperty("code", out var codeElement))
+        if (error.ValueKind == JsonValueKind.Object
+            && error.TryGetProperty("code", out var codeElement)
+            && codeElement.ValueKind == JsonValueKind.Number
+            && codeElement.TryGetInt32(out var parsedCode))
         {
-            codeElement.TryGetInt32(out code);
+            code = parsedCode;
         }
 
         return true;

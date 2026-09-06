@@ -106,6 +106,40 @@ public sealed class AccountConnectionServiceTests
     }
 
     [Fact]
+    public async Task Malformed_upstream_response_preserves_existing_connection_and_consent()
+    {
+        await using var fixture = await SqliteFixture.CreateAsync();
+        var owner = Guid.NewGuid();
+        fixture.Db.IdentityMap.Add(new IdentityMapEntity { AnonymousId = owner, CreatedAtUtc = fixture.Now.AddDays(-1) });
+        await fixture.Db.SaveChangesAsync();
+
+        var vault = new WarKeyVault(Enumerable.Repeat((byte)0x35, 32).ToArray());
+        var store = new StoredApiKeyStore(fixture.Db, vault, fixture.Clock);
+        Assert.Equal(StoredApiKeyWriteStatus.Stored, await store.StoreWithConsentAsync(owner, 10101, "existing-key"));
+
+        fixture.Db.ChangeTracker.Clear();
+        var before = await fixture.Db.StoredApiKeys.AsNoTracking().SingleAsync(x => x.AnonymousId == owner);
+        var consentCount = await fixture.Db.ConsentRecords.AsNoTracking().CountAsync(x => x.AnonymousId == owner);
+        var validator = new TornConnectionValidator(
+            new HttpClient(new RecordingHandler((_, _) => Task.FromResult(JsonResponse("""{"player_id":"wrong-shape"}"""))))
+            {
+                BaseAddress = new Uri("https://api.torn.com/"),
+            },
+            new TornRateLimiter());
+        var sut = new AccountConnectionService(store, validator);
+
+        var result = await sut.ConnectAsync(owner, FixtureKey, consentAccepted: true);
+
+        Assert.Equal(AccountConnectionOperationStatus.TornUnavailable, result.Status);
+        fixture.Db.ChangeTracker.Clear();
+        var after = await fixture.Db.StoredApiKeys.AsNoTracking().SingleAsync(x => x.AnonymousId == owner);
+        Assert.Equal(before.TornPlayerId, after.TornPlayerId);
+        Assert.Equal(before.Ciphertext, after.Ciphertext);
+        Assert.Equal(consentCount, await fixture.Db.ConsentRecords.AsNoTracking().CountAsync(x => x.AnonymousId == owner));
+        Assert.Equal("existing-key", vault.UseKey(after.Ciphertext, after.TornPlayerId, ConsentPurposes.WarMemberApiKey, key => key));
+    }
+
+    [Fact]
     public async Task Vault_unavailable_leaves_no_consent_or_key_and_returns_safe_status()
     {
         await using var fixture = await SqliteFixture.CreateAsync();
