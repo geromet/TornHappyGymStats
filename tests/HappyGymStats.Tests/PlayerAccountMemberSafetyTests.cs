@@ -42,6 +42,11 @@ public sealed class PlayerAccountMemberSafetyTests
         Assert.Contains("role=\"status\"", content, StringComparison.Ordinal);
         Assert.Contains("aria-live=\"polite\"", content, StringComparison.Ordinal);
         Assert.Contains("yyyy-MM-dd HH:mm 'UTC'", content, StringComparison.Ordinal);
+        Assert.Contains("_connection = await Connections.RevokeAsync()", content, StringComparison.Ordinal);
+        Assert.Contains("ReconcileUnknownMutationAsync", content, StringComparison.Ordinal);
+        Assert.Contains("connection outcome is unknown", content, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("new TornConnectionStatusDto(\"not_connected\"", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("Your connection was not changed.", content, StringComparison.Ordinal);
         Assert.DoesNotContain("TimeZoneInfo.Local", content, StringComparison.Ordinal);
         Assert.DoesNotContain("ToLocalTime()", content, StringComparison.Ordinal);
     }

@@ -66,6 +66,8 @@ public sealed class AccountConnectionsBlazorServiceTests
     [InlineData("{}")]
     [InlineData("{\"state\":\"unknown\",\"tornPlayerId\":7}")]
     [InlineData("{\"state\":\"connected\",\"tornPlayerId\":7,\"storedAtUtc\":null,\"consent\":null}")]
+    [InlineData("{\"state\":\"connected\",\"tornPlayerId\":7,\"storedAtUtc\":\"2026-09-05T20:00:00Z\",\"consent\":{\"documentVersion\":\"v2\",\"purpose\":\"Personal Torn data\"}}")]
+    [InlineData("{\"state\":\"connected\",\"tornPlayerId\":7,\"storedAtUtc\":\"0001-01-01T00:00:00Z\",\"consent\":{\"documentVersion\":\"v2\",\"purpose\":\"Personal Torn data\",\"acceptedAtUtc\":\"2026-09-05T19:00:00Z\"}}")]
     [InlineData("{\"state\":\"not_connected\",\"tornPlayerId\":7,\"storedAtUtc\":null,\"consent\":null}")]
     public async Task Semantically_incomplete_status_payloads_fail_closed(string payload)
     {
@@ -181,7 +183,8 @@ public sealed class AccountConnectionsBlazorServiceTests
 
         Assert.Equal("connection_timeout", failure.Code);
         Assert.Equal(HttpStatusCode.RequestTimeout, failure.StatusCode);
-        Assert.Contains("was not changed", failure.SafeMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("outcome is unknown", failure.SafeMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("was not changed", failure.SafeMessage, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("never-render-timeout-secret", failure.SafeMessage, StringComparison.Ordinal);
     }
 
@@ -200,7 +203,7 @@ public sealed class AccountConnectionsBlazorServiceTests
     }
 
     [Fact]
-    public async Task RevokeAsync_posts_to_owner_scoped_revoke_endpoint()
+    public async Task RevokeAsync_returns_the_authoritative_owner_scoped_status()
     {
         HttpMethod? method = null;
         string? requestUri = null;
@@ -208,14 +211,22 @@ public sealed class AccountConnectionsBlazorServiceTests
         {
             method = request.Method;
             requestUri = request.RequestUri?.AbsolutePath;
-            return new HttpResponseMessage(HttpStatusCode.NoContent);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "{\"state\":\"connected\",\"tornPlayerId\":7,\"storedAtUtc\":\"2026-09-05T20:00:00Z\",\"consent\":{\"documentVersion\":\"v2\",\"purpose\":\"Personal Torn data\",\"acceptedAtUtc\":\"2026-09-05T19:00:00Z\"}}",
+                    Encoding.UTF8,
+                    "application/json")
+            };
         });
         var sut = new AccountConnectionsService(http);
 
-        await sut.RevokeAsync();
+        var status = await sut.RevokeAsync();
 
         Assert.Equal(HttpMethod.Post, method);
         Assert.Equal("/api/v1/account/connections/torn/revoke", requestUri);
+        Assert.Equal("connected", status.State);
+        Assert.Equal(7, status.TornPlayerId);
     }
 
     private static HttpClient CreateHttpClient(Func<HttpRequestMessage, HttpResponseMessage> handler)

@@ -290,6 +290,10 @@
             _showCredentialForm = false;
             _consentAccepted = false;
         }
+        catch (AccountConnectionFailure failure) when (failure.Code == "connection_timeout")
+        {
+            await ReconcileUnknownMutationAsync(failure.SafeMessage);
+        }
         catch (AccountConnectionFailure failure)
         {
             _operationSeverity = Severity.Warning;
@@ -297,8 +301,8 @@
         }
         catch (HttpRequestException)
         {
-            _operationSeverity = Severity.Warning;
-            _operationMessage = "The connection service is temporarily unreachable. Your connection was not changed.";
+            await ReconcileUnknownMutationAsync(
+                "The connection service became unreachable before the result was confirmed, so the connection outcome is unknown.");
         }
         finally
         {
@@ -324,11 +328,16 @@
         _operationMessage = null;
         try
         {
-            await Connections.RevokeAsync();
-            _connection = new TornConnectionStatusDto("not_connected", null, null, null);
+            _connection = await Connections.RevokeAsync();
             _confirmRevoke = false;
-            _operationSeverity = Severity.Success;
-            _operationMessage = "Torn connection revoked. The stored Torn credential is no longer connected to this account.";
+            _operationSeverity = IsConnected ? Severity.Warning : Severity.Success;
+            _operationMessage = IsConnected
+                ? "The revoke request completed, but a Torn connection is still active. Review the current connection before trying again."
+                : "Torn connection revoked. The stored Torn credential is no longer connected to this account.";
+        }
+        catch (AccountConnectionFailure failure) when (failure.Code == "connection_timeout")
+        {
+            await ReconcileUnknownMutationAsync(failure.SafeMessage);
         }
         catch (AccountConnectionFailure failure)
         {
@@ -337,13 +346,40 @@
         }
         catch (HttpRequestException)
         {
-            _operationSeverity = Severity.Warning;
-            _operationMessage = "The connection service is temporarily unreachable. Your connection was not changed.";
+            await ReconcileUnknownMutationAsync(
+                "The connection service became unreachable before the result was confirmed, so the connection outcome is unknown.");
         }
         finally
         {
             _savingConnection = false;
         }
+    }
+
+    private async Task ReconcileUnknownMutationAsync(string reason)
+    {
+        _operationSeverity = Severity.Warning;
+        _operationMessage = reason;
+
+        try
+        {
+            _connection = await Connections.GetAsync();
+            _loadError = null;
+            _operationMessage = $"{reason} The current status was refreshed; review it before retrying.";
+        }
+        catch (AccountConnectionFailure)
+        {
+            MarkStatusUnknown();
+        }
+        catch (HttpRequestException)
+        {
+            MarkStatusUnknown();
+        }
+    }
+
+    private void MarkStatusUnknown()
+    {
+        _connection = null;
+        _loadError = "The request outcome is unknown, and the current connection status could not be refreshed. Retry status before taking another action.";
     }
 
     private void SignOut() => Navigation.NavigateTo("/auth/logout?returnUrl=%2F", forceLoad: true);

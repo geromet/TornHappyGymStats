@@ -35,12 +35,13 @@ public sealed class AccountConnectionsService(HttpClient http)
         }
     }
 
-    public async Task RevokeAsync(CancellationToken ct = default)
+    public async Task<TornConnectionStatusDto> RevokeAsync(CancellationToken ct = default)
     {
         try
         {
             using var response = await http.PostAsync($"{Endpoint}/revoke", content: null, ct);
             await EnsureSuccessAsync(response, ct);
+            return await ReadStatusAsync(response, ct);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -74,12 +75,14 @@ public sealed class AccountConnectionsService(HttpClient http)
                 && status.StoredAtUtc is null
                 && status.Consent is null,
             "connected" => status.TornPlayerId is > 0
-                && status.StoredAtUtc is not null
+                && status.StoredAtUtc is { } storedAt
+                && storedAt != default
                 && status.Consent is
                 {
                     DocumentVersion.Length: > 0,
                     Purpose.Length: > 0
-                },
+                } consent
+                && consent.AcceptedAtUtc != default,
             _ => false
         };
 
@@ -93,7 +96,7 @@ public sealed class AccountConnectionsService(HttpClient http)
         => new(
             "connection_timeout",
             HttpStatusCode.RequestTimeout,
-            "The Torn connection service took too long to respond. Your connection was not changed; please try again.");
+            "The Torn connection service took too long to respond, so the connection outcome is unknown. Refresh the current status before retrying.");
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken ct)
     {
