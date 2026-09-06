@@ -17,7 +17,8 @@ agent's memory of a previous run.
 The coordination states are:
 
 - 🟢 **OPEN** — default/unowned;
-- 🟡 **ASSIGNING** — phase-1 assignment request / SYN;
+- 🟡 **ASSIGNING** — phase-1 assignment request / SYN; active only when admitted
+  by the deterministic capacity election;
 - 🔵 **ASSIGNED** — phase-2 acknowledged ownership / ACK;
 - 🛠️ **WORKING @ branch** — active mutation at an exact branch/head;
 - 🧪 **WAITING ON PR CR** — coherent package waiting on Codex code/final review;
@@ -26,10 +27,11 @@ The coordination states are:
 - ✅ **FINISHED** — issue/package is actually completed.
 
 Active ownership has no TTL. Before admitting mutable work, paginate **all** #140
-protocol comments (or use a mechanically complete durable index proven equivalent),
-validate each run's sequence/prev/ACK chain, and reconstruct every run's latest
-valid state. A recent-comment window is never authoritative for ownership or lease
-counting.
+comments and recognize both the new protocol and legacy CLAIM/RELEASE records, or
+use a mechanically maintained durable index proven equivalent for **all recognized
+protocol and legacy records**. Validate each new-protocol run's sequence/prev/ACK
+chain and reconstruct every run's latest valid state. A recent-comment window is
+never authoritative for ownership or lease counting.
 
 Before mutation, use the append-only ASSIGNING → ASSIGNED handshake in #140. A
 run is not allowed to mutate merely because it posted ASSIGNING. After posting,
@@ -37,11 +39,13 @@ reconstruct complete state again. If any materially overlapping run is already
 ASSIGNED or WORKING, the newcomer must back off. Among overlapping ASSIGNING
 requests, the earlier GitHub comment ID wins.
 
-Admission is also globally capacity-ordered. Count incumbent ASSIGNED/WORKING
-leases, compute the remaining slots up to five, then sort every otherwise-eligible
-latest ASSIGNING record by GitHub comment ID ascending. Only the earliest records
-that fit those slots may ACK; every later candidate appends OPEN/backoff. This
-prevents non-overlapping claims from racing the fleet above five active leases.
+Admission is globally capacity-ordered. Count incumbent ASSIGNED/WORKING leases,
+compute remaining slots up to five, then sort every otherwise-eligible latest
+ASSIGNING record by GitHub comment ID ascending. Only the earliest records that fit
+those slots are **admitted ASSIGNING leases** and may ACK. Later SYN comments are
+durably unadmitted, consume no lease, and must not mutate; they should append OPEN
+when able, but correctness never depends on cleanup. This prevents a worker cutoff
+after a losing SYN from leaving a persistent sixth active lease.
 
 Every state transition is a **new** #140 comment with a unique `run=`, monotonic
 `seq=`, exact issue/package, branch, head, PR, previous state/comment, timestamp,
@@ -56,9 +60,9 @@ another WORKING transition with the new head. Treat the observed head as a CAS
 token: unexpected movement stops mutation until reconciled. Never force-push
 through a race.
 
-Only ASSIGNING, ASSIGNED, and WORKING consume the five active fleet leases.
-Waiting/open/finished states do not. Do not silently reclaim stale active state
-just because an automation may have been cut off.
+Only admitted ASSIGNING, ASSIGNED, and WORKING states consume the five active
+fleet leases. Waiting/open/finished and unadmitted SYN records do not. Do not
+silently reclaim active state just because an automation may have been cut off.
 
 ### 🆘 Codex advisor safety valve
 
@@ -79,12 +83,16 @@ is true:
    confidently reconciled.
 
 At five already-active leases, advisor dispatch is an explicit **lease-free
-control-plane exception**: after complete read-only reconstruction and fingerprint
-deduplication, an unassigned recovery run may append WAITING ON ADVISOR directly
-as `seq=1`/`prev=none` and post the single matching `@codex` request without first
-creating ASSIGNING/ASSIGNED. That exception permits only the #140 advisor control-
-plane comments; branch, PR, issue-body, code, review, merge, or other repository
-mutation still requires the normal handshake once capacity is available.
+control-plane exception**. After complete read-only reconstruction and initial
+fingerprint deduplication, an unassigned recovery run may append WAITING ON ADVISOR
+directly as `seq=1`/`prev=none`. It must then reconstruct complete state again and
+compare every unresolved WAITING record with the identical fingerprint. Only the
+earliest GitHub comment ID may post the matching `@codex` request; later candidates
+stay non-leases and do not dispatch. That closes concurrent advisor duplication.
+
+The exception permits only the #140 advisor control-plane comments; branch, PR,
+issue-body, code, review, merge, or other repository mutation still requires the
+normal handshake once capacity is available.
 
 Fingerprint and deduplicate advisor requests as documented in
 `docs/AGENT-COORDINATION-PROTOCOL.md`. Codex is asked to investigate **and repair**
