@@ -24,6 +24,12 @@ protocol run's sequence/prev/ACK chain and reconstruct every run's latest valid
 state. A recent-comment window is never authoritative for ownership or lease
 counting.
 
+Bind each run to the GitHub author of its first valid transition. Later ordinary
+transitions from another author are invalid; recovery uses a new run token rather
+than advancing/releasing another actor's lease. Only the narrowly scoped,
+ownership-neutral advisor dispatch-candidate PATCH below may be completed by a
+different actor.
+
 Before materially conflicting mutation, refresh:
 
 1. complete reconstructed #140 protocol + legacy state and the current issue body;
@@ -61,13 +67,12 @@ new ASSIGNING record never supersedes an active owner. Among overlapping
 ASSIGNING requests, the earlier GitHub comment ID wins.
 
 Capacity admission is global, deterministic, and cleanup-independent. Count
-incumbent ASSIGNED/WORKING leases, compute remaining slots up to five, then sort
-every otherwise-eligible latest ASSIGNING record by GitHub comment ID ascending.
-Only the earliest records that fit those slots are **admitted ASSIGNING leases**
-and may ACK. Every later SYN is durably unadmitted, consumes no lease, and must not
-mutate; it should append OPEN/backoff when able, but correctness does not depend on
-that cleanup. Thus concurrent pre-admission comments cannot leave a persistent
-sixth active lease if a losing worker is cut off.
+incumbent ASSIGNED/WORKING leases and classify each otherwise-eligible ASSIGNING
+against the immutable GitHub history prefix ending at that SYN comment. Admission
+or loss is permanent for that SYN: an admitted SYN remains a lease until its run
+advances, while a losing SYN cannot enter a slot freed later. Only a fresh run/SYN
+may compete for newly available capacity. An unadmitted SYN consumes no lease and
+may append OPEN/backoff, but correctness does not depend on cleanup.
 
 A winning candidate appends a **new** ASSIGNED record with `seq=2`, repeats the
 exact scope/branch/expected heads, and references the ASSIGNING comment ID as

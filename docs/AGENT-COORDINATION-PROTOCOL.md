@@ -61,10 +61,16 @@ Then:
 1. group new-protocol records by `run`;
 2. order each run by `seq` and validate `prev`/ACK references;
 3. reject duplicate conflicting `run+seq`, sequence gaps, and contradictory state;
-4. select the highest valid transition for every run;
-5. apply the legacy migration rules in §11 to all legacy records;
-6. compute the active lease set using §1 and §4 admission semantics;
-7. verify recorded WORKING branches/heads against live GitHub state when relevant.
+4. bind the run to the GitHub author of its first valid transition and reject
+   later normal transitions by any other author;
+5. select the highest valid transition for every run;
+6. apply the legacy migration rules in §11 to all legacy records;
+7. compute the active lease set using §1 and §4 admission semantics;
+8. verify recorded WORKING branches/heads against live GitHub state when relevant.
+
+Another actor never releases, advances, or repairs a run by forging its next
+sequence; recovery uses a new run token. The only cross-actor operation is the
+ownership-neutral, idempotent advisor dispatch-candidate PATCH in §7.
 
 Recent comments may be used as a fast view only after complete reconstruction. Before retrying an ambiguous write, reread enough of #140 to prove whether the exact `run+seq` already exists; if it does, do not duplicate it.
 
@@ -109,10 +115,16 @@ If multiple otherwise-eligible ASSIGNING records overlap each other, only the ea
 
 Capacity arbitration is global, not scope-local.
 
-1. Count incumbent latest `ASSIGNED` + `WORKING` runs. Call this `I`.
-2. Compute `slots = max(0, 5 - I)`.
-3. Take every latest ASSIGNING record that survived Gate A, sort them by GitHub comment ID ascending, and define the earliest `slots` candidates as the **admitted ASSIGNING prefix**.
-4. Only candidates in that prefix consume an ASSIGNING lease and may append ACK. Every later candidate is an unadmitted SYN: it must not mutate and should append 🟢 OPEN/backoff when able.
+1. For each otherwise-eligible SYN in GitHub comment-ID order, evaluate only the
+   immutable valid-history prefix ending at that comment.
+2. Count incumbent admitted ASSIGNING plus latest `ASSIGNED` + `WORKING` runs in
+   that prefix. If the count is below five, classify the new SYN as permanently
+   admitted; otherwise classify it as permanently unadmitted.
+3. Persist that classification by derivation from the immutable prefix. Never
+   recompute an old losing SYN against a newer, lower incumbent count.
+4. Only permanently admitted SYNs consume an ASSIGNING lease and may ACK. A losing
+   SYN must not mutate and may append OPEN/backoff; newly freed capacity requires a
+   fresh run/SYN.
 
 This makes capacity derivable from durable GitHub order even if losing workers disappear. At four incumbent leases, two simultaneous non-overlapping SYNs can both exist as comments, but only the earlier eligible SYN is an active fifth lease; the other is durably unadmitted rather than creating a persistent sixth lease.
 
@@ -173,9 +185,12 @@ Serialize it deterministically:
 - `stable-identifiers` is the bytewise-ascending, comma-joined set of lowercase
   issue/PR/ref/run tokens, with no whitespace or duplicates;
 - `relevant-head-or-state` is an exact lowercase 40-hex head when one head defines
-  the incident, otherwise `sha256-<hex>` over UTF-8/LF lines for every relevant
-  latest record, sorted by `run`, formatted
-  `run|seq|state|issue/package|branch|head|pr`, with no trailing newline.
+  the incident. Otherwise it is `sha256-<hex>` over the exact complete set of
+  latest valid records for **every** new-protocol run plus every active legacy
+  record—not a caller-selected subset. Encode new records as
+  `run|seq|state|issue/package|branch|head|pr|author` and legacy records as
+  `legacy|comment-id|state|issue/package|branch|head|pr|author`; sort all UTF-8/LF
+  lines bytewise ascending and hash them with no trailing newline.
 
 Do not invent aliases, reorder identifiers, or use an unspecified `<state-hash>`.
 

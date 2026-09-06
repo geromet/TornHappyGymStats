@@ -33,6 +33,12 @@ protocol and legacy records**. Validate each new-protocol run's sequence/prev/AC
 chain and reconstruct every run's latest valid state. A recent-comment window is
 never authoritative for ownership or lease counting.
 
+The GitHub author of a run's first valid transition is its protocol actor. Reject
+later normal transitions for that run from any other author; another worker uses a
+new run token rather than releasing or advancing someone else's lease. The sole
+cross-actor exception is idempotent PATCH completion of the elected advisor
+dispatch-candidate comment described below, which cannot change fleet ownership.
+
 Also refresh the target issue's current dependencies and stop gates before
 ASSIGNING. A scope with an unresolved dependency or active stop gate is ineligible
 for admission and must not append an ASSIGNING request merely because ownership
@@ -47,12 +53,13 @@ overlapping run is already ASSIGNED or WORKING, the newcomer must also back off.
 Among overlapping ASSIGNING requests, the earlier GitHub comment ID wins.
 
 Admission is globally capacity-ordered. Count incumbent ASSIGNED/WORKING leases,
-compute remaining slots up to five, then sort every otherwise-eligible latest
-ASSIGNING record by GitHub comment ID ascending. Only the earliest records that fit
-those slots are **admitted ASSIGNING leases** and may ACK. Later SYN comments are
-durably unadmitted, consume no lease, and must not mutate; they should append OPEN
-when able, but correctness never depends on cleanup. This prevents a worker cutoff
-after a losing SYN from leaving a persistent sixth active lease.
+compute remaining slots up to five, then classify otherwise-eligible ASSIGNING
+records by GitHub comment ID using only the immutable history prefix ending at
+each SYN. A SYN admitted in that historical prefix remains admitted until its own
+run advances; a SYN that lost collision/capacity is permanently unadmitted and
+cannot enter a later freed slot. Only a fresh run/SYN may compete for new capacity.
+Unadmitted SYNs consume no lease and may append OPEN, but correctness never depends
+on cleanup.
 
 Every state transition is a **new** #140 comment with a unique `run=`, monotonic
 `seq=`, exact issue/package, branch, head, PR, previous state/comment, timestamp,
