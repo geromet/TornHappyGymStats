@@ -16,6 +16,7 @@ public static class DevelopmentAuthenticationExtensions
     public const string EnabledKey = "HAPPYGYMSTATS_DEV_AUTH";
     public const string UserHeaderName = "X-Hgs-Dev-User";
     public const string RoleHeaderName = "X-Hgs-Dev-Roles";
+    public const string DefaultUserName = "dev-war-planner";
 
     public static bool IsEnabled(IConfiguration configuration)
         => string.Equals(configuration[EnabledKey], "1", StringComparison.OrdinalIgnoreCase)
@@ -58,7 +59,7 @@ public sealed class DevelopmentHeaderAuthenticationHandler(
         var userName = Request.Headers[DevelopmentAuthenticationExtensions.UserHeaderName].FirstOrDefault();
         if (string.IsNullOrWhiteSpace(userName))
         {
-            userName = "dev-war-planner";
+            userName = DevelopmentAuthenticationExtensions.DefaultUserName;
         }
 
         var claims = new List<Claim>

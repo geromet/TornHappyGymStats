@@ -23,7 +23,7 @@ public sealed class AccountConnectionsController : ApiControllerBase
     {
         if (!TryResolveOwner(out var anonymousId))
         {
-            return ApiError(StatusCodes.Status401Unauthorized, "unauthorized", "Could not resolve caller identity.");
+            return MissingOwnerResult();
         }
 
         var result = await _connections.GetStatusAsync(anonymousId, cancellationToken).ConfigureAwait(false);
@@ -35,7 +35,7 @@ public sealed class AccountConnectionsController : ApiControllerBase
     {
         if (!TryResolveOwner(out var anonymousId))
         {
-            return ApiError(StatusCodes.Status401Unauthorized, "unauthorized", "Could not resolve caller identity.");
+            return MissingOwnerResult();
         }
 
         var result = await _connections
@@ -49,7 +49,7 @@ public sealed class AccountConnectionsController : ApiControllerBase
     {
         if (!TryResolveOwner(out var anonymousId))
         {
-            return ApiError(StatusCodes.Status401Unauthorized, "unauthorized", "Could not resolve caller identity.");
+            return MissingOwnerResult();
         }
 
         var result = await _connections.RevokeAsync(anonymousId, cancellationToken).ConfigureAwait(false);
@@ -61,6 +61,11 @@ public sealed class AccountConnectionsController : ApiControllerBase
         var raw = User.FindFirstValue(Claims.AnonymousId);
         return Guid.TryParse(raw, out anonymousId) && anonymousId != Guid.Empty;
     }
+
+    private IActionResult MissingOwnerResult()
+        => string.IsNullOrWhiteSpace(User.FindFirstValue(Claims.AnonymousId))
+            ? ApiError(StatusCodes.Status409Conflict, "identity_setup_required", "The signed-in account is not ready for a Torn connection yet.")
+            : ApiError(StatusCodes.Status401Unauthorized, "unauthorized", "Could not resolve caller identity.");
 
     private IActionResult MapResult(AccountConnectionOperationResult result)
         => result.Status switch

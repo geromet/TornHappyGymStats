@@ -167,6 +167,8 @@ using (var scope = app.Services.CreateScope())
         || string.Equals(skipWarSeedRaw, "true", StringComparison.OrdinalIgnoreCase);
     if (developmentAuthEnabled)
     {
+        await DevelopmentIdentitySeed.SeedAsync(db, app.Logger);
+
         if (skipWarSeed)
         {
             await DevelopmentWarSeed.ClearAsync(db, app.Logger);
