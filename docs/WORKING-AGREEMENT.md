@@ -39,8 +39,12 @@ state machine below.
 - ✅ **FINISHED** — issue/package is actually completed.
 
 Before mutation, append ASSIGNING with a unique `run=`, `seq=1`, exact
-issue/package/seam, intended branch and observed heads. Reread #140 immediately;
-earlier materially overlapping ASSIGNING GitHub comment ID wins.
+issue/package/seam, intended branch and observed heads. Reread #140 immediately
+and reconstruct the latest valid state for relevant runs. If any materially
+overlapping run is already ASSIGNED or WORKING, the newcomer must back off; a new
+ASSIGNING record never supersedes an active owner. Only when no active owner
+overlaps do competing ASSIGNING requests race, and then the earlier materially
+overlapping ASSIGNING GitHub comment ID wins.
 
 The winner appends a **new** ASSIGNED record with `seq=2`, repeats the exact
 scope/branch/expected heads, and references the ASSIGNING comment ID as `ack=`.
@@ -82,6 +86,15 @@ when any of these applies:
 4. stale/contradictory/cut-off state, hidden useful work, a missing PR/review path,
    supersession ambiguity, or branch/LOCK disagreement cannot be cheaply and
    confidently reconciled.
+
+At five already-active leases, advisor dispatch uses an explicit **lease-free
+control-plane exception**. After read-only state reconstruction and stable-
+fingerprint deduplication, an otherwise unassigned recovery run may append
+WAITING ON ADVISOR directly as its first `seq=1`, `prev=none` transition and post
+the one matching `@codex` request. This exception authorizes only those #140
+control-plane comments; branch, PR, issue-body, code, review, merge, or any other
+repository mutation still requires the normal ASSIGNING → ASSIGNED handshake
+after capacity is available.
 
 Use the stable advisor fingerprint format from the protocol doc and search #140
 before posting. An unresolved identical fingerprint suppresses another request.
