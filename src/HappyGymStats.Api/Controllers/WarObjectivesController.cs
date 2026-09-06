@@ -7,14 +7,19 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace HappyGymStats.Api.Controllers;
 
-[Authorize(Roles = Roles.User)]
 [Route("api/v1/war/objectives")]
 public sealed class WarObjectivesController(IWarObjectiveRepository objectives) : ApiControllerBase
 {
+    // Objective configuration/history includes faction-owned notes and actor provenance.
+    // The current identity model has no authoritative caller -> Torn faction binding,
+    // so a global User role cannot safely authorize factionId-selected reads. Keep the
+    // restricted projection admin-only until a server-owned faction scope exists.
+    [Authorize(Roles = Roles.Admin)]
     [HttpGet("{factionId:long}/{warId:long}/current")]
     public async Task<IActionResult> GetCurrent(long factionId, long warId, CancellationToken ct)
         => Ok(ToDto(await objectives.GetEffectiveAsync(factionId, warId, ct)));
 
+    [Authorize(Roles = Roles.Admin)]
     [HttpGet("{factionId:long}/{warId:long}/evaluation")]
     public async Task<IActionResult> GetEvaluation(
         long factionId,
@@ -39,6 +44,7 @@ public sealed class WarObjectivesController(IWarObjectiveRepository objectives) 
             evaluation.StopReason));
     }
 
+    [Authorize(Roles = Roles.Admin)]
     [HttpGet("{factionId:long}/{warId:long}/history")]
     public async Task<IActionResult> GetHistory(long factionId, long warId, CancellationToken ct)
         => Ok((await objectives.GetHistoryAsync(factionId, warId, ct)).Select(ToDto));
