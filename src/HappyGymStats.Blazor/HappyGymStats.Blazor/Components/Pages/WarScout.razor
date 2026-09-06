@@ -15,24 +15,30 @@
                 Historical ranked-war evidence only. No live activity inference or tactical prediction.
             </MudText>
         </div>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="@_isLoading">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="@_isLoading" data-testid="scout-refresh">
             Refresh
         </MudButton>
     </MudStack>
 
     @if (_isLoading && _profile is null && _failure is null)
     {
-        <MudAlert Severity="Severity.Info" Dense="true">Loading scouting report...</MudAlert>
+        <LoadingState Message="Loading scouting report…" />
     }
 
     @if (_failure is not null)
     {
-        <MudAlert Severity="@(_failure.Category == ApiFailureCategory.NotFound ? Severity.Warning : Severity.Error)" Dense="true" Variant="Variant.Filled">
-            <strong>@(_failure.Category == ApiFailureCategory.NotFound ? "No history yet." : "Scouting report unavailable.")</strong>
-            @(_failure.Category == ApiFailureCategory.NotFound
-                ? "No captured ranked-war history exists yet for this faction. Backfill may still be in progress."
-                : _failure.SafeMessage)
-        </MudAlert>
+        @if (_profile is not null)
+        {
+            <StaleDataBanner Message="Refresh failed. Showing the last loaded scouting report; use Refresh to try again." />
+        }
+        else if (_failure.Category == ApiFailureCategory.NotFound)
+        {
+            <EmptyState Message="No captured ranked-war history exists yet for this faction. Backfill may still be in progress." />
+        }
+        else
+        {
+            <ErrorState Message="@BuildFailureMessage(_failure)" OnRetry="LoadAsync" />
+        }
     }
 
     @if (_profile is { } profile)
@@ -303,17 +309,22 @@
 
     private async Task LoadAsync()
     {
+        var isSameFaction = _profile?.FactionId == FactionId;
         _isLoading = true;
-        _profile = null;
         _failure = null;
-        _memberSearch = string.Empty;
-        _idleOnly = false;
+        if (!isSameFaction)
+        {
+            _profile = null;
+            _memberSearch = string.Empty;
+            _idleOnly = false;
+        }
         StateHasChanged();
 
         try
         {
             var (profile, failure) = await ScoutService.GetProfileAsync(FactionId);
-            _profile = profile;
+            if (profile is not null)
+                _profile = profile;
             _failure = failure;
         }
         finally
@@ -322,6 +333,9 @@
             StateHasChanged();
         }
     }
+
+    private static string BuildFailureMessage(ApiFailure failure) =>
+        $"Scouting report unavailable. {failure.SafeMessage}";
 
     private static IReadOnlyList<ScoutConclusion> BuildConclusions(FactionScoutDto profile)
     {

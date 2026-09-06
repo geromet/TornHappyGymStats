@@ -77,6 +77,113 @@ public sealed class WarScoutRenderedProvenanceTests
         });
     }
 
+    [Fact]
+    public async Task Missing_history_is_a_successful_empty_state_not_a_failure()
+    {
+        await using var context = CreateContext();
+        using var http = new HttpClient(new StatusHandler(HttpStatusCode.NotFound))
+        {
+            BaseAddress = new Uri("http://localhost")
+        };
+        context.Services.AddSingleton<WarScoutService>(provider =>
+            new WarScoutService(http, provider.GetRequiredService<ILogger<WarScoutService>>()));
+
+        var cut = context.Render<WarScout>(parameters => parameters
+            .Add(component => component.FactionId, 123456));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(
+                "No captured ranked-war history exists yet",
+                cut.Find("[role='status']").TextContent,
+                StringComparison.Ordinal);
+            Assert.Empty(cut.FindAll("[role='alert']"));
+            Assert.DoesNotContain("Scouting report unavailable", cut.Markup, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task Initial_failure_uses_shared_alert_and_keyboard_native_retry()
+    {
+        await using var context = CreateContext();
+        using var http = new HttpClient(new StatusHandler(HttpStatusCode.ServiceUnavailable))
+        {
+            BaseAddress = new Uri("http://localhost")
+        };
+        context.Services.AddSingleton<WarScoutService>(provider =>
+            new WarScoutService(http, provider.GetRequiredService<ILogger<WarScoutService>>()));
+
+        var cut = context.Render<WarScout>(parameters => parameters
+            .Add(component => component.FactionId, 123456));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(
+                "Scouting report unavailable",
+                cut.Find("[role='alert']").TextContent,
+                StringComparison.Ordinal);
+            var retry = cut.FindAll("button")
+                .Single(button => button.TextContent.Contains("Retry", StringComparison.Ordinal));
+            Assert.Equal("button", retry.TagName.ToLowerInvariant());
+            Assert.DoesNotContain("No captured ranked-war history", cut.Markup, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task Failed_route_change_never_retains_another_factions_report_as_stale()
+    {
+        await using var context = CreateContext();
+        var profile = CreateProfile();
+        using var http = new HttpClient(new SuccessThenFailureHandler(profile))
+        {
+            BaseAddress = new Uri("http://localhost")
+        };
+        context.Services.AddSingleton<WarScoutService>(provider =>
+            new WarScoutService(http, provider.GetRequiredService<ILogger<WarScoutService>>()));
+
+        var cut = context.Render<WarScout>(parameters => parameters
+            .Add(component => component.FactionId, profile.FactionId));
+        cut.WaitForAssertion(() => Assert.Contains(profile.FactionName, cut.Markup, StringComparison.Ordinal));
+
+        cut.SetParametersAndRender(parameters => parameters
+            .Add(component => component.FactionId, profile.FactionId + 1));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.DoesNotContain(profile.FactionName, cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Scouting report unavailable", cut.Find("[role='alert']").TextContent, StringComparison.Ordinal);
+            Assert.DoesNotContain("Stale data", cut.Markup, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task Failed_refresh_keeps_same_faction_report_and_marks_it_stale()
+    {
+        await using var context = CreateContext();
+        var profile = CreateProfile();
+        using var http = new HttpClient(new SuccessThenFailureHandler(profile))
+        {
+            BaseAddress = new Uri("http://localhost")
+        };
+        context.Services.AddSingleton<WarScoutService>(provider =>
+            new WarScoutService(http, provider.GetRequiredService<ILogger<WarScoutService>>()));
+
+        var cut = context.Render<WarScout>(parameters => parameters
+            .Add(component => component.FactionId, profile.FactionId));
+        cut.WaitForAssertion(() => Assert.Contains(profile.FactionName, cut.Markup, StringComparison.Ordinal));
+
+        cut.Find("[data-testid='scout-refresh']").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var status = cut.Find("[role='status']");
+            Assert.Contains("Stale data", status.TextContent, StringComparison.Ordinal);
+            Assert.Contains("Showing the last loaded scouting report", status.TextContent, StringComparison.Ordinal);
+            Assert.Contains(profile.FactionName, cut.Markup, StringComparison.Ordinal);
+            Assert.Empty(cut.FindAll("[role='alert']"));
+        });
+    }
+
     private static BunitContext CreateContext()
     {
         var context = new BunitContext();
@@ -147,6 +254,29 @@ public sealed class WarScoutRenderedProvenanceTests
             {
                 Content = JsonContent.Create(profile)
             });
+        }
+    }
+
+    private sealed class StatusHandler(HttpStatusCode statusCode) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(statusCode));
+    }
+
+    private sealed class SuccessThenFailureHandler(FactionScoutDto profile) : HttpMessageHandler
+    {
+        private int _requests;
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            _requests++;
+            return Task.FromResult(_requests == 1
+                ? new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(profile) }
+                : new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
         }
     }
 }
