@@ -52,8 +52,10 @@ public sealed class AccountConnectionsService(HttpClient http)
     {
         try
         {
-            return await response.Content.ReadFromJsonAsync<TornConnectionStatusDto>(ct)
+            var status = await response.Content.ReadFromJsonAsync<TornConnectionStatusDto>(ct)
                 ?? throw InvalidResponse();
+
+            return IsValidStatus(status) ? status : throw InvalidResponse();
         }
         catch (JsonException)
         {
@@ -64,6 +66,22 @@ public sealed class AccountConnectionsService(HttpClient http)
             throw InvalidResponse();
         }
     }
+
+    private static bool IsValidStatus(TornConnectionStatusDto status)
+        => status.State switch
+        {
+            "not_connected" => status.TornPlayerId is null
+                && status.StoredAtUtc is null
+                && status.Consent is null,
+            "connected" => status.TornPlayerId is > 0
+                && status.StoredAtUtc is not null
+                && status.Consent is
+                {
+                    DocumentVersion.Length: > 0,
+                    Purpose.Length: > 0
+                },
+            _ => false
+        };
 
     private static AccountConnectionFailure InvalidResponse()
         => new(
