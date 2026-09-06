@@ -327,7 +327,7 @@ public sealed class TornApiClient
         }
 
         Uri? nextUrl = null;
-        var next = page.Metadata?.Links?.Next;
+        var next = StripApiKeyFromUrl(page.Metadata?.Links?.Next);
         if (!string.IsNullOrWhiteSpace(next) && Uri.TryCreate(next, UriKind.Absolute, out var abs))
         {
             nextUrl = abs;
@@ -356,6 +356,50 @@ public sealed class TornApiClient
         }
 
         return new Uri(TornApiBaseUri, pathAndQuery);
+    }
+
+    /// <summary>
+    /// Removes request authentication material from a Torn pagination URL before the
+    /// continuation cursor leaves the API-client boundary. The active request key is
+    /// reattached by <see cref="BuildUrlWithApiKey"/> when the cursor is followed.
+    /// </summary>
+    public static string? StripApiKeyFromUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return url;
+        }
+
+        var queryStart = url.IndexOf('?');
+        if (queryStart < 0)
+        {
+            return url;
+        }
+
+        var prefix = url[..queryStart];
+        var query = url[(queryStart + 1)..];
+
+        var fragment = string.Empty;
+        var fragmentStart = query.IndexOf('#');
+        if (fragmentStart >= 0)
+        {
+            fragment = query[fragmentStart..];
+            query = query[..fragmentStart];
+        }
+
+        var kept = new List<string>();
+        foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var name = pair.Split('=', 2)[0];
+            if (!name.Equals("key", StringComparison.OrdinalIgnoreCase))
+            {
+                kept.Add(pair);
+            }
+        }
+
+        return kept.Count == 0
+            ? prefix + fragment
+            : prefix + "?" + string.Join('&', kept) + fragment;
     }
 
     private static Uri BuildUrlWithApiKey(Uri baseUrl, string apiKey)

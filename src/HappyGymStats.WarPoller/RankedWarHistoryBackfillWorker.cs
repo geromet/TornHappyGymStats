@@ -113,7 +113,7 @@ public sealed class RankedWarHistoryBackfillWorker(
                 }
 
                 state.PagesProcessed++;
-                state.NextHistoryPageUrl = page.Metadata?.Links?.Next;
+                state.NextHistoryPageUrl = TornApiClient.StripApiKeyFromUrl(page.Metadata?.Links?.Next);
                 pagesThisIteration++;
 
                 if (string.IsNullOrWhiteSpace(state.NextHistoryPageUrl))
