@@ -9,14 +9,14 @@ The protocol is designed for abrupt worker termination. Active ownership has no 
 | State | Meaning | Active fleet lease? |
 |---|---|---:|
 | 🟢 **OPEN** | default/unowned; or unfinished work deliberately released | No |
-| 🟡 **ASSIGNING** | phase-1 assignment request / SYN | Yes |
+| 🟡 **ASSIGNING** | phase-1 assignment request / SYN; consumes a lease only if admitted by §4's deterministic prefix | Conditional |
 | 🔵 **ASSIGNED** | phase-2 assignment acknowledgement / ACK | Yes |
 | 🛠️ **WORKING @ branch** | mutation is in progress on an exact branch/head | Yes |
 | 🧪 **WAITING ON PR CR** | coherent package is waiting on Codex code/final review | No |
 | 🆘 **WAITING ON ADVISOR** | fleet needs Codex to investigate/repair coordination or topology | No |
 | ✅ **FINISHED** | issue/package is truly completed and disposition/default incorporation is verified | No |
 
-Only ASSIGNING, ASSIGNED and WORKING consume the five-work fleet ceiling.
+For capacity accounting, the active set is: every latest ASSIGNED/WORKING record plus only those latest ASSIGNING records that are in the deterministic admitted prefix defined in §4. A losing/unadmitted SYN is never an active lease even if its worker is cut off before it can append OPEN. This preserves the five-work ceiling without requiring cleanup to run.
 
 ## 2. Wire record
 
@@ -53,17 +53,17 @@ Active records have no TTL, so an arbitrary recent-comment window is never autho
 
 Before admitting mutable work, resolving a collision, declaring no work, or dispatching an advisor, do one of the following:
 
-1. paginate **all** #140 comments and parse all recognized protocol/legacy records; or
-2. consult a mechanically maintained durable index that is proven complete with respect to all #140 protocol comments.
+1. paginate **all** #140 comments and parse every recognized new-protocol transition **and every recognized legacy CLAIM/RELEASE record**; or
+2. consult a mechanically maintained durable index proven complete and equivalent with respect to **all recognized protocol and legacy records** in #140.
 
 Then:
 
-1. group records by `run`;
+1. group new-protocol records by `run`;
 2. order each run by `seq` and validate `prev`/ACK references;
 3. reject duplicate conflicting `run+seq`, sequence gaps, and contradictory state;
 4. select the highest valid transition for every run;
-5. apply the legacy migration rules in §11;
-6. count active leases from latest ASSIGNING/ASSIGNED/WORKING states;
+5. apply the legacy migration rules in §11 to all legacy records;
+6. compute the active lease set using §1 and §4 admission semantics;
 7. verify recorded WORKING branches/heads against live GitHub state when relevant.
 
 Recent comments may be used as a fast view only after complete reconstruction. Before retrying an ambiguous write, reread enough of #140 to prove whether the exact `run+seq` already exists; if it does, do not duplicate it.
@@ -72,7 +72,7 @@ Recent comments may be used as a fast view only after complete reconstruction. B
 
 ### Phase 1 — 🟡 ASSIGNING / SYN
 
-Before any mutation:
+Before any repository mutation:
 
 - reconstruct complete #140 state as defined in §3;
 - refresh the target issue/PR and dependencies;
@@ -81,30 +81,32 @@ Before any mutation:
 - choose the exact intended branch name;
 - append ASSIGNING with exact issue/package/seam and observed heads.
 
+ASSIGNING is a durable SYN request, but it becomes an **active lease only if it wins both admission gates below**. This distinction is necessary because comment creation itself is not an atomic capacity reservation and a losing worker may be cut off before cleanup.
+
 Immediately reconstruct complete state again. Admission has two independent gates.
 
 ### Gate A — ownership collision
 
-If any materially overlapping run is already `🔵 ASSIGNED` or `🛠️ WORKING`, the newcomer loses and must append 🟢 OPEN for its own run/scope. A new ASSIGNING record never supersedes an active owner.
+If any materially overlapping run is already `🔵 ASSIGNED` or `🛠️ WORKING`, the newcomer loses and must not mutate. It should append 🟢 OPEN when able, but correctness does not depend on that cleanup because the losing SYN is not admitted.
 
 If multiple otherwise-eligible ASSIGNING records overlap each other, only the earliest GitHub comment ID remains eligible; later overlapping candidates lose.
 
 ### Gate B — global five-lease capacity
 
-Capacity arbitration is global, not scope-local. This prevents two non-overlapping candidates from concurrently observing four active leases and both becoming a sixth lease.
+Capacity arbitration is global, not scope-local.
 
 1. Count incumbent latest `ASSIGNED` + `WORKING` runs. Call this `I`.
 2. Compute `slots = max(0, 5 - I)`.
-3. Take every latest ASSIGNING record that survived Gate A, sort them by GitHub comment ID ascending, and admit only the earliest `slots` candidates.
-4. An ASSIGNING candidate may append ACK only if it is in that admitted prefix. Every later candidate appends 🟢 OPEN/backoff and must not mutate.
+3. Take every latest ASSIGNING record that survived Gate A, sort them by GitHub comment ID ascending, and define the earliest `slots` candidates as the **admitted ASSIGNING prefix**.
+4. Only candidates in that prefix consume an ASSIGNING lease and may append ACK. Every later candidate is an unadmitted SYN: it must not mutate and should append 🟢 OPEN/backoff when able.
 
-Because all contenders use the same durable comment-ID ordering and complete state, non-overlapping admission races resolve deterministically at the five-lease ceiling.
+This makes capacity derivable from durable GitHub order even if losing workers disappear. At four incumbent leases, two simultaneous non-overlapping SYNs can both exist as comments, but only the earlier eligible SYN is an active fifth lease; the other is durably unadmitted rather than creating a persistent sixth lease.
 
 ### Phase 2 — 🔵 ASSIGNED / ACK
 
 Only a candidate that passed both gates appends ASSIGNED referencing the ASSIGNING comment ID. Only then may repository mutation begin.
 
-The loser appends 🟢 OPEN for its run/scope and chooses independent work. Do not repeatedly compete for the same unchanged scope.
+A loser should append 🟢 OPEN for observability, but its unadmitted SYN already has no lease authority. Do not repeatedly compete for the same unchanged scope.
 
 ## 5. Branch crash-recovery record
 
@@ -130,7 +132,7 @@ Do not keep an implementation lease merely because Codex review is pending.
 
 ### 🆘 WAITING ON ADVISOR
 
-Use when the fleet should stop trying to self-heal a coordination/topology problem and ask Codex to investigate and repair it. Construct a stable fingerprint and search complete #140 state first; an unresolved identical fingerprint suppresses another request.
+Use when the fleet should stop trying to self-heal a coordination/topology problem and ask Codex to investigate and repair it. Construct a stable fingerprint and reconstruct complete #140 state first; an unresolved identical fingerprint suppresses another request.
 
 ## 7. Codex advisor safety valve
 
@@ -149,7 +151,9 @@ Fingerprint format:
 advisor:<repo>:<reason>:<stable-identifiers>:<relevant-head-or-state>
 ```
 
-When five active leases already exist, advisor dispatch uses a **lease-free #140-only control-plane exception**. After complete read-only reconstruction and fingerprint deduplication, an otherwise unassigned recovery run may append `🆘 WAITING ON ADVISOR` directly as its first transition (`seq=1`, `prev=none`) and post the single matching `@codex` advisor request. This exception authorizes only those #140 control-plane comments; branch, PR, issue-body, code, review, merge, or other repository mutation still requires the normal ASSIGNING → ASSIGNED admission once capacity is available.
+When five active leases already exist, advisor dispatch uses a **lease-free #140-only control-plane exception**. After complete read-only reconstruction and initial fingerprint deduplication, an otherwise unassigned recovery run may append `🆘 WAITING ON ADVISOR` directly as its first transition (`seq=1`, `prev=none`). It must then reconstruct complete state **again**, collect all unresolved WAITING ON ADVISOR records with the identical fingerprint, and allow only the earliest GitHub comment ID to post the matching `@codex` request. Later identical-fingerprint WAITING records remain non-leases and do not dispatch. This post-write election closes the concurrent pre-search race.
+
+The exception authorizes only those #140 control-plane comments; branch, PR, issue-body, code, review, merge, or other repository mutation still requires normal admission once capacity is available.
 
 Do not repeatedly dispatch the same unresolved fingerprint.
 
@@ -172,7 +176,7 @@ Use FINISHED only when completion semantics are satisfied and either required de
 
 ## 10. Recovery algorithm
 
-A recovery/advisor agent should reconstruct complete state per §3, verify every active WORKING branch/head, correlate PR bases/heads/state, preserve unique useful commits, and repair or escalate contradictions instead of guessing ownership.
+A recovery/advisor agent should reconstruct complete state per §3, recompute admitted ASSIGNING prefixes per §4, verify every active WORKING branch/head, correlate PR bases/heads/state, preserve unique useful commits, and repair or escalate contradictions instead of guessing ownership.
 
 ## 11. Legacy migration
 
@@ -181,6 +185,7 @@ Do not rewrite historical comments.
 - unreleased old `🔒 CLAIM` with an exact branch is legacy 🛠️ WORKING;
 - unreleased old `🔒 CLAIM` without an exact branch is legacy 🔵 ASSIGNED;
 - old `🔓 RELEASED` is non-active;
+- legacy records are part of complete-state reconstruction and any durable-index completeness proof;
 - convert legacy state into the new protocol only when that scope is touched or reconciled.
 
 ## 12. Examples
@@ -216,7 +221,7 @@ ts=... | note=coherent package complete; exact-head evidence recorded
 issue/package=coordination | branch=none | head=none | pr=none |
 base=none | base_sha=none | prev=none | ts=... |
 fingerprint=advisor:geromet/TornHappyGymStats:active-leases:5:<state-hash> |
-note=@codex lease-free saturated-control-plane escalation; inspect and repair state/topology
+note=lease-free saturated-control-plane candidate; earliest identical-fingerprint WAITING comment dispatches @codex after post-write reconstruction
 ```
 
 The goal is not ceremony. The goal is that an interrupted worker leaves enough durable, ordered evidence for the next worker or Codex advisor to recover safely without inventing state.
