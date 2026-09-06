@@ -23,6 +23,10 @@ public sealed class AccountConnectionsService(HttpClient http)
         {
             throw StatusReadInterrupted();
         }
+        catch (HttpRequestException)
+        {
+            throw StatusReadInterrupted();
+        }
     }
 
     public async Task<TornConnectionStatusDto> ConnectAsync(string tornApiKey, bool consentAccepted, CancellationToken ct = default)
@@ -41,6 +45,10 @@ public sealed class AccountConnectionsService(HttpClient http)
         {
             throw MutationResponseInterrupted();
         }
+        catch (HttpRequestException)
+        {
+            throw MutationResponseInterrupted();
+        }
     }
 
     public async Task<TornConnectionStatusDto> RevokeAsync(CancellationToken ct = default)
@@ -56,6 +64,10 @@ public sealed class AccountConnectionsService(HttpClient http)
             throw TimedOut();
         }
         catch (IOException)
+        {
+            throw MutationResponseInterrupted();
+        }
+        catch (HttpRequestException)
         {
             throw MutationResponseInterrupted();
         }
