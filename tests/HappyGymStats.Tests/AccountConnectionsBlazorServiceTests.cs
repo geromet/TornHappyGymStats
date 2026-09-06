@@ -189,6 +189,24 @@ public sealed class AccountConnectionsBlazorServiceTests
     }
 
     [Fact]
+    public async Task Mutation_response_body_io_failure_is_reconciled_as_an_unknown_outcome()
+    {
+        using var http = CreateHttpClient(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new ThrowingContent()
+        });
+        var sut = new AccountConnectionsService(http);
+
+        var failure = await Assert.ThrowsAsync<AccountConnectionFailure>(
+            () => sut.ConnectAsync("never-render-io-secret", consentAccepted: true));
+
+        Assert.Equal("connection_interrupted", failure.Code);
+        Assert.Equal(HttpStatusCode.BadGateway, failure.StatusCode);
+        Assert.Contains("outcome is unknown", failure.SafeMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("never-render-io-secret", failure.SafeMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Explicit_caller_cancellation_is_not_reclassified_as_a_timeout()
     {
         using var http = new HttpClient(new TimeoutHandler())
@@ -241,6 +259,23 @@ public sealed class AccountConnectionsBlazorServiceTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             => Task.FromResult(callback(request));
+    }
+
+    private sealed class ThrowingContent : HttpContent
+    {
+        public ThrowingContent()
+        {
+            Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+        }
+
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+            => Task.FromException(new IOException("simulated response-body interruption"));
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
     }
 
     private sealed class TimeoutHandler : HttpMessageHandler

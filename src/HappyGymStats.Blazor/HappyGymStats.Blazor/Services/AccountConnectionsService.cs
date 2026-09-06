@@ -19,6 +19,10 @@ public sealed class AccountConnectionsService(HttpClient http)
         {
             throw TimedOut();
         }
+        catch (IOException)
+        {
+            throw StatusReadInterrupted();
+        }
     }
 
     public async Task<TornConnectionStatusDto> ConnectAsync(string tornApiKey, bool consentAccepted, CancellationToken ct = default)
@@ -33,6 +37,10 @@ public sealed class AccountConnectionsService(HttpClient http)
         {
             throw TimedOut();
         }
+        catch (IOException)
+        {
+            throw MutationResponseInterrupted();
+        }
     }
 
     public async Task<TornConnectionStatusDto> RevokeAsync(CancellationToken ct = default)
@@ -46,6 +54,10 @@ public sealed class AccountConnectionsService(HttpClient http)
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             throw TimedOut();
+        }
+        catch (IOException)
+        {
+            throw MutationResponseInterrupted();
         }
     }
 
@@ -97,6 +109,18 @@ public sealed class AccountConnectionsService(HttpClient http)
             "connection_timeout",
             HttpStatusCode.RequestTimeout,
             "The Torn connection service took too long to respond, so the connection outcome is unknown. Refresh the current status before retrying.");
+
+    private static AccountConnectionFailure MutationResponseInterrupted()
+        => new(
+            "connection_interrupted",
+            HttpStatusCode.BadGateway,
+            "The Torn connection service response was interrupted, so the connection outcome is unknown. Refresh the current status before retrying.");
+
+    private static AccountConnectionFailure StatusReadInterrupted()
+        => new(
+            "connection_interrupted",
+            HttpStatusCode.BadGateway,
+            "The Torn connection service response was interrupted before the current status could be read. Please retry.");
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken ct)
     {

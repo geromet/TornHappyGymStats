@@ -290,7 +290,7 @@
             _showCredentialForm = false;
             _consentAccepted = false;
         }
-        catch (AccountConnectionFailure failure) when (failure.Code == "connection_timeout")
+        catch (AccountConnectionFailure failure) when (failure.Code is "connection_timeout" or "connection_interrupted")
         {
             await ReconcileUnknownMutationAsync(failure.SafeMessage);
         }
@@ -335,7 +335,7 @@
                 ? "The revoke request completed, but a Torn connection is still active. Review the current connection before trying again."
                 : "Torn connection revoked. The stored Torn credential is no longer connected to this account.";
         }
-        catch (AccountConnectionFailure failure) when (failure.Code == "connection_timeout")
+        catch (AccountConnectionFailure failure) when (failure.Code is "connection_timeout" or "connection_interrupted")
         {
             await ReconcileUnknownMutationAsync(failure.SafeMessage);
         }
