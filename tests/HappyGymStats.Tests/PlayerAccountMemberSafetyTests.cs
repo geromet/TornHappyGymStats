@@ -25,6 +25,36 @@ public sealed class PlayerAccountMemberSafetyTests
         Assert.DoesNotContain("@claim.Value", content, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Player_account_is_the_member_connection_management_surface()
+    {
+        var content = ReadRepoFile(
+            "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/PlayerAccount.razor");
+
+        Assert.Contains("@rendermode InteractiveServer", content, StringComparison.Ordinal);
+        Assert.Contains("Torn connection", content, StringComparison.Ordinal);
+        Assert.Contains("Connect Torn", content, StringComparison.Ordinal);
+        Assert.Contains("Replace Torn API key", content, StringComparison.Ordinal);
+        Assert.Contains("Confirm revoke", content, StringComparison.Ordinal);
+        Assert.Contains("Consent &amp; privacy", content, StringComparison.Ordinal);
+        Assert.Contains("InputType.Password", content, StringComparison.Ordinal);
+        Assert.Contains("_tornApiKey = null", content, StringComparison.Ordinal);
+        Assert.Contains("role=\"status\"", content, StringComparison.Ordinal);
+        Assert.Contains("aria-live=\"polite\"", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Settings_does_not_expose_placeholder_developer_controls()
+    {
+        var content = ReadRepoFile(
+            "src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/Settings.razor");
+
+        Assert.DoesNotContain("API base URL", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("Use compact cards", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("Save settings", content, StringComparison.Ordinal);
+        Assert.Contains("/player-account", content, StringComparison.Ordinal);
+    }
+
     private static string ReadRepoFile(string relativePath)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
