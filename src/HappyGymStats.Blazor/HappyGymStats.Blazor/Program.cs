@@ -153,6 +153,10 @@ public sealed class Program
                 client.BaseAddress = new Uri(apiBaseUrl))
             .AddHttpMessageHandler<AccessTokenForwardingHandler>();
 
+        builder.Services.AddHttpClient<AccountConnectionsService>(client =>
+                client.BaseAddress = new Uri(apiBaseUrl))
+            .AddHttpMessageHandler<AccessTokenForwardingHandler>();
+
         builder.Services.Configure<ForwardedHeadersOptions>(options =>
         {
             options.ForwardedHeaders =
@@ -216,7 +220,7 @@ public sealed class Program
             var safeReturnUrl = LocalRedirectPolicy.Normalize(returnUrl);
             var properties = new AuthenticationProperties { RedirectUri = safeReturnUrl };
             await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            await httpContext.SignOutAsync(OpenIdConnectDefaults.AuthenticationScheme, properties);
+            await httpContext.SignOutAsync(OpenIdConnectDefaults.AuthenticationDefaults.AuthenticationScheme, properties);
         });
 
         app.MapRazorComponents<App>()
