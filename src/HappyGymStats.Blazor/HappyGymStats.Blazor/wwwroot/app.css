@@ -33,6 +33,25 @@ html, body {
     }
 }
 
+/* MainLayout is CSS-isolated, but MudBlazor renders the app-bar children from
+   component boundaries that do not reliably inherit the layout scope marker.
+   Keep the narrowest responsive containment rule global so a 390px top bar
+   cannot wrap its page title/account identity while still leaving the mobile
+   drawer trigger, HGS brand and explicit sign-out action available. */
+@media (max-width: 520px) {
+    .app-topbar .topbar-context,
+    .app-topbar .account-summary .mud-icon-root,
+    .app-topbar .account-summary .mud-typography-root,
+    .app-topbar .account-summary a {
+        display: none !important;
+    }
+
+    .app-topbar .account-summary {
+        flex: 0 0 auto;
+        min-width: 0;
+    }
+}
+
 .gym-fullscreen {
     position: fixed;
     inset: 0;
