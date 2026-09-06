@@ -209,9 +209,6 @@ public sealed class ImportOrchestrator : BackgroundService
         {
             using var scope = _scopeFactory.CreateScope();
             var tornClient = scope.ServiceProvider.GetRequiredService<TornApiClient>();
-            var logFetcher = scope.ServiceProvider.GetRequiredService<LogFetcher>();
-            var perkFetcher = scope.ServiceProvider.GetRequiredService<PerkLogFetcher>();
-            var reconstructionRunner = scope.ServiceProvider.GetRequiredService<ReconstructionRunner>();
             var identityMapRepo = scope.ServiceProvider.GetRequiredService<IIdentityMapRepository>();
             var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
@@ -229,6 +226,12 @@ public sealed class ImportOrchestrator : BackgroundService
                 await unitOfWork.SaveChangesAsync(stoppingToken).ConfigureAwait(false);
                 _logger.LogInformation("Import job {JobId} encrypted TornPlayerId stored.", request.JobId);
             }
+
+            // The requested owner identity is part of initialization, so make
+            // it durable before activating any downstream fetch dependency.
+            var logFetcher = scope.ServiceProvider.GetRequiredService<LogFetcher>();
+            var perkFetcher = scope.ServiceProvider.GetRequiredService<PerkLogFetcher>();
+            var reconstructionRunner = scope.ServiceProvider.GetRequiredService<ReconstructionRunner>();
 
             var options = FetchOptions.Default(
                 new Uri("https://api.torn.com/v2/user/log?cat=25"),
