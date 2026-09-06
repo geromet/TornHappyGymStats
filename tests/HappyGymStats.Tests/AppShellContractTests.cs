@@ -75,6 +75,23 @@ public sealed class AppShellContractTests
     }
 
     [Fact]
+    public void Global_footer_links_to_disclosure_without_promising_local_only_storage()
+    {
+        var layout = ReadRepoFile(LayoutPath);
+        var footerStart = layout.IndexOf("<footer class=\"app-footer\">", StringComparison.Ordinal);
+        var footerEnd = layout.IndexOf("</footer>", footerStart, StringComparison.Ordinal);
+
+        Assert.True(footerStart >= 0);
+        Assert.True(footerEnd > footerStart);
+
+        var footer = layout[footerStart..footerEnd];
+        Assert.Contains("href=\"/terms\"", footer, StringComparison.Ordinal);
+        Assert.Contains("account and Torn connection data", footer, StringComparison.Ordinal);
+        Assert.DoesNotContain("stored locally", footer, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("never shared externally", footer, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Mobile_navigation_has_a_separate_task_priority_order()
     {
         var layout = ReadRepoFile(LayoutPath);
