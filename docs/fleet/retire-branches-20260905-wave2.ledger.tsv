@@ -1,0 +1,26 @@
+# deleted_at	branch	sha	restore_cmd
+2026-09-05T21:17:45Z	agent/issue-100-chain-planner	651c44e0cdca883a3a9bb2eeeda12b7d2786cfc9	git push origin 651c44e0cdca883a3a9bb2eeeda12b7d2786cfc9:refs/heads/agent/issue-100-chain-planner
+2026-09-05T21:17:47Z	docs/agent-terminal-handoff-20260905	df46635554074cf175c7854e76342c8b0e843d71	git push origin df46635554074cf175c7854e76342c8b0e843d71:refs/heads/docs/agent-terminal-handoff-20260905
+2026-09-05T21:17:49Z	feat/p0-95-shared-state-components	03b9e5cad07769e992335f0221fcde63c41df9f4	git push origin 03b9e5cad07769e992335f0221fcde63c41df9f4:refs/heads/feat/p0-95-shared-state-components
+2026-09-05T21:17:52Z	feat/p0-95-theme-centralization	97154a57daa7184757d9bd676b34227e248f3164	git push origin 97154a57daa7184757d9bd676b34227e248f3164:refs/heads/feat/p0-95-theme-centralization
+2026-09-05T21:17:54Z	feat/shared-member-state-adoption	7d6371d1c7c7f3dcb23d3318f0ae2e4878796d4d	git push origin 7d6371d1c7c7f3dcb23d3318f0ae2e4878796d4d:refs/heads/feat/shared-member-state-adoption
+2026-09-05T21:17:57Z	feat/war-objective-persistence-auth	1cda4ea402d59faa3255849452ff1e3161d66da7	git push origin 1cda4ea402d59faa3255849452ff1e3161d66da7:refs/heads/feat/war-objective-persistence-auth
+2026-09-05T21:17:59Z	feat/war-scout-provenance	7b8eaae3c7a6de48553722a631881b27a93903d5	git push origin 7b8eaae3c7a6de48553722a631881b27a93903d5:refs/heads/feat/war-scout-provenance
+2026-09-05T21:18:01Z	fix/p0-95-remove-fake-theme-selector	3c817f25457287dfe9203ddc2f79e38142ee8dcb	git push origin 3c817f25457287dfe9203ddc2f79e38142ee8dcb:refs/heads/fix/p0-95-remove-fake-theme-selector
+2026-09-05T21:18:04Z	fix/p1-103-home-import-error-member-safe	3ca4008c5a03a7caa12b3e591d8ad6ac910d0f49	git push origin 3ca4008c5a03a7caa12b3e591d8ad6ac910d0f49:refs/heads/fix/p1-103-home-import-error-member-safe
+2026-09-05T21:18:06Z	fix/p1-103-login-member-safe	4b15c911b5ff7b177169095a80a530b86888dd0d	git push origin 4b15c911b5ff7b177169095a80a530b86888dd0d:refs/heads/fix/p1-103-login-member-safe
+2026-09-05T21:18:09Z	fix/p1-103-mystats-import-error-member-safe	053c396763188b89e756fc36ccc7d6b3b58d95e4	git push origin 053c396763188b89e756fc36ccc7d6b3b58d95e4:refs/heads/fix/p1-103-mystats-import-error-member-safe
+2026-09-05T21:18:11Z	fix/p1-103-player-account-member-safe	3883c3ee5981f437e4e0130ab0b5e083854f3c43	git push origin 3883c3ee5981f437e4e0130ab0b5e083854f3c43:refs/heads/fix/p1-103-player-account-member-safe
+2026-09-05T21:18:13Z	fleet/b-86-opponent-pressure	4fe2e7375e79dfb7ef2d32b538e71498ab95a7d8	git push origin 4fe2e7375e79dfb7ef2d32b538e71498ab95a7d8:refs/heads/fleet/b-86-opponent-pressure
+2026-09-05T21:18:15Z	fleet/b-86-readiness-core	e64ddcdff24c19a7fc589c31b78ae8ff15ad3bd0	git push origin e64ddcdff24c19a7fc589c31b78ae8ff15ad3bd0:refs/heads/fleet/b-86-readiness-core
+2026-09-05T21:18:17Z	fleet/b-86-travel-availability	a0e9dabd595f6aba11756a2610dd42cc0840d27c	git push origin a0e9dabd595f6aba11756a2610dd42cc0840d27c:refs/heads/fleet/b-86-travel-availability
+2026-09-05T21:18:20Z	fleet/b/72-warpoller-timeprovider	27ce5918bb532652dc4188f35adb611cce8cd0d8	git push origin 27ce5918bb532652dc4188f35adb611cce8cd0d8:refs/heads/fleet/b/72-warpoller-timeprovider
+2026-09-05T21:18:22Z	fleet/b/89-objective-consumption	973c015e604258622532f2f74988c47060985464	git push origin 973c015e604258622532f2f74988c47060985464:refs/heads/fleet/b/89-objective-consumption
+2026-09-05T21:18:25Z	fleet/docs-self-improvement-archive	60ae0b5114e79b6cc0522b78c4753baa821ae7d2	git push origin 60ae0b5114e79b6cc0522b78c4753baa821ae7d2:refs/heads/fleet/docs-self-improvement-archive
+2026-09-05T21:18:27Z	fleet/stable/ux-proof-provenance	7cd6e7f4e23d6d8371178ab8e7e5da22ee2071b3	git push origin 7cd6e7f4e23d6d8371178ab8e7e5da22ee2071b3:refs/heads/fleet/stable/ux-proof-provenance
+2026-09-05T21:18:29Z	fleet/stable/war-core-simplification	b8cd5cc57ec8c595c83ef8f82d40145bc2663280	git push origin b8cd5cc57ec8c595c83ef8f82d40145bc2663280:refs/heads/fleet/stable/war-core-simplification
+2026-09-05T21:18:32Z	fleet/stable/war-objectives	f0f13cf2ab626eebae11bb45f0c038273735ee03	git push origin f0f13cf2ab626eebae11bb45f0c038273735ee03:refs/heads/fleet/stable/war-objectives
+2026-09-05T21:18:34Z	proof/shared-state-rendered-t2	a317aaf4f187eab621eb4d8a6b644d05aeaf484e	git push origin a317aaf4f187eab621eb4d8a6b644d05aeaf484e:refs/heads/proof/shared-state-rendered-t2
+2026-09-05T21:18:37Z	refactor/gym-trains-pass-through	3724cad2b0f9b9236b1bdf78ac05539c1cbd5fee	git push origin 3724cad2b0f9b9236b1bdf78ac05539c1cbd5fee:refs/heads/refactor/gym-trains-pass-through
+2026-09-05T21:18:38Z	fleet/stable/branch-inventory-reconcile-20260905	60df32674844df55adafcee45886b0d0998b91f6	git push origin 60df32674844df55adafcee45886b0d0998b91f6:refs/heads/fleet/stable/branch-inventory-reconcile-20260905
+2026-09-05T21:18:41Z	audit/docs-markdown-accuracy-20260905-2	f6d686c9706ac2657d9fe30455a8547211993611	git push origin f6d686c9706ac2657d9fe30455a8547211993611:refs/heads/audit/docs-markdown-accuracy-20260905-2

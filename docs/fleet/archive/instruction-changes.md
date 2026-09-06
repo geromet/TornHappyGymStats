@@ -41,3 +41,23 @@ expected-effect: diffable/versioned fleet history, easier rollback/audit, cleane
 rollback: return #170/#171 to primary archive role while retaining the Git files as historical seed; do not delete prior Git history
 
 evaluation: pending
+
+## 2026-09-05T22:50+02:00 — documentation and agent-instruction truth loop
+
+FLEET-PROMPT-CHANGE | timestamp=2026-09-05T22:50+02:00
+
+automation: Hourly Fleet Audit, Discovery, Archive & Steward; Hourly PR Rescue, Stable Integration & Proof Lane A; Hourly Security Boundary Scout; Hourly UX Evidence Scout; Hourly PR Acceptance Validator
+
+evidence: Torn exhaustive Markdown audit #223/#224 reviewed all 33 tracked Markdown files at exact default head and found 10 verified stale/inaccurate/contradictory items across 9 files, including a verifier-writing skill that contradicted the executable manifest-routing contract, `MILESTONES.md` reasserting gitignored `workspace/V2/` as authority, and a human queue that still described already-completed branch-protection work
+
+problem: fleet had a truthful-evidence invariant but no continuous mechanism ensuring current documentation, runbooks, tracker prose and agent instructions remain truthful as code/issues/workflows evolve; agents can therefore follow stale commands, routes, statuses or authority pointers even while implementation evidence itself is honest
+
+change: add a continuous documentation/instruction truth loop. Every enabled lane must verify any current doc/instruction claim it relies on or changes against live default code, executable contracts, current issues/PRs and the repository LOCK; historical/archive/research snapshots must be preserved and clearly classified rather than rewritten merely for age. The Steward periodically rotates bounded repo-wide tracked-Markdown/agent-instruction audits, maintains one canonical drift inventory/tracker instead of issue spam, and re-enumerates after remediation. Time-sensitive statuses should be removed, generated, or unmistakably snapshot-dated. Contradictory agent/workflow authority is high priority.
+
+invariants: preserved
+
+expected-effect: fewer stale-command and stale-authority failures, less contradictory agent behavior, lower rediscovery/rework, clearer distinction between live guidance and historical provenance, and a durable audit trail for documentation truth
+
+rollback: remove the per-lane DOC/INSTRUCTION TRUTH rules and Steward periodic truth-audit section while preserving #223/#224 as historical evidence; retain all coordination, evidence, merge-authority, archive and safety invariants
+
+evaluation: pending
