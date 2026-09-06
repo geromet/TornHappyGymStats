@@ -201,7 +201,7 @@ public sealed class ChainOperationsPostgresPersistenceTests : IAsyncLifetime
         if (includeSecondCheckIn)
             checkIns.Add(new WatcherCheckIn(SecondShiftId, Now.AddHours(1).AddMinutes(1)));
 
-        var operationalEvents = includeOperationalEvent
+        ChainOperationalEvent[] operationalEvents = includeOperationalEvent
             ? new[]
             {
                 new ChainOperationalEvent(
