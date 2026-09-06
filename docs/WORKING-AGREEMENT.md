@@ -102,7 +102,31 @@ or return a submitted Torn key.
 
 ## 4. Proof must match where the change can fail
 
-The canonical source/build gate is:
+Local agent verification is **change-directed**, not an automatic reproduction of
+the complete GitHub CI matrix. Start with the smallest deterministic proof that
+can meaningfully falsify the affected behavior: a focused test, relevant verifier,
+affected-project build, render check, integration fixture, or other proof at the
+actual failure boundary.
+
+Do **not** automatically run every repository test, every verifier, PostgreSQL,
+browser proof, formatting, or the complete canonical gate merely because a task
+changed code. Broaden local verification when:
+
+- the changed seam has wide or uncertain impact;
+- the issue/acceptance criteria explicitly require broader or higher-tier proof;
+- focused proof fails or exposes adjacent uncertainty;
+- verifier, test-routing, build, or CI infrastructure itself changed; or
+- current-head GitHub CI reports a deterministic failure that needs local
+  reproduction and repair.
+
+GitHub Actions is the broad regression suite for PR heads. Before declaring work
+ready, inspect the required checks on the exact current head. Deterministic CI
+failures are agent work, not human blockers. Pending, unavailable, failed, or
+old-head checks are not proof, and never describe a command or evidence tier as
+observed unless it actually ran.
+
+The complete local source/build gate remains available when broad local proof is
+warranted:
 
 ```bash
 bash scripts/verify/build-and-test.sh
@@ -111,12 +135,15 @@ bash scripts/verify/build-and-test.sh
 Verifier routing is owned by `scripts/verify/manifest.tsv`; do not add a second
 handwritten verifier list. A new verifier must be registered there, and an
 excluded verifier needs a concrete reason. Missing verifier dependencies are an
-unavailable proof and must fail closed.
+unavailable proof and must fail closed when that verifier is required.
 
 Evidence tiers are about the environment capable of falsifying the change:
 
-- **T1 — source/contracts/tests:** canonical gate plus a regression or negative
-  control that fails without the change.
+- **T1 — source/contracts/tests:** focused deterministic source/build/test proof
+  appropriate to the changed behavior, with a regression or negative control
+  where practical. Use the complete canonical gate when the change has broad
+  impact or the work package explicitly requires it; otherwise GitHub CI may
+  supply the broad regression pass.
 - **T2 — rendered UI:** T1 plus actual rendering/browser evidence. Use
   `scripts/screenshot-board.sh` where applicable and inspect the relevant 390,
   768, and desktop output; source inspection alone is not UI proof.
