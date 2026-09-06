@@ -4,62 +4,129 @@ Read [`docs/WORKING-AGREEMENT.md`](docs/WORKING-AGREEMENT.md) before changing th
 repository. It is the cross-agent source of truth for safety, live task ownership,
 evidence tiers, remote/operator boundaries, data provenance, and handoff rules.
 
-## Live coordination before mutation
+Read [`docs/AGENT-COORDINATION-PROTOCOL.md`](docs/AGENT-COORDINATION-PROTOCOL.md)
+for the machine-readable coordination/state protocol. GitHub issue **#140** is the
+canonical live state log.
 
-GitHub issue **#140** is the canonical Agent work coordination LOCK for this
-repository. Before selecting mutable work, read its current body and recent
-comments. Immediately before a conflicting mutation, refresh #140, the target,
-the actual default branch, and any branch/PR heads involved.
+## 🚦 Live coordination before mutation
 
-Acquire ownership with the repository's two-phase claim protocol: claim the exact
-issue/PR/branch/work-package/seam with a unique run token, reread #140 immediately
-after posting, and let the earlier GitHub comment ID win any overlap. Refresh once
-more before the first mutation. Treat the exact observed branch head as a CAS
-token: if it moves unexpectedly, stop and reconcile instead of blindly pushing or
-force-pushing.
+Current repository/PR/issue state and the latest valid #140 protocol transitions
+win over stale issue prose, old PR descriptions, historical handoffs, or an
+agent's memory of a previous run.
 
-Current repository/PR state wins over stale issue prose, old PR descriptions, or
-historical handoff notes. Obey the live LOCK's WIP gates, queue/drain ordering,
-branch ownership, dependencies, and outside-contributor boundaries—not only claim
-collisions.
+The coordination states are:
+
+- 🟢 **OPEN** — default/unowned;
+- 🟡 **ASSIGNING** — phase-1 assignment request / SYN;
+- 🔵 **ASSIGNED** — phase-2 acknowledged ownership / ACK;
+- 🛠️ **WORKING @ branch** — active mutation at an exact branch/head;
+- 🧪 **WAITING ON PR CR** — coherent package waiting on Codex code/final review;
+- 🆘 **WAITING ON ADVISOR** — Codex must investigate/repair coordination or
+  branch/PR topology;
+- ✅ **FINISHED** — issue/package is actually completed.
+
+Before mutation, use the append-only ASSIGNING → ASSIGNED handshake in #140. A
+run is not allowed to mutate merely because it posted ASSIGNING. Earlier
+materially overlapping ASSIGNING GitHub comment ID wins.
+
+Every state transition is a **new** #140 comment with a unique `run=`, monotonic
+`seq=`, exact issue/package, branch, head, PR, previous state/comment, timestamp,
+and short result. Do not edit an old state comment into a new state. Ambiguous
+writes are retried only after rereading and suppressing an already-present same
+`run+seq` record.
+
+Immediately after a branch is selected/created and before useful mutation, append
+🛠️ WORKING with the exact branch/head. After every remote head change, append
+another WORKING transition with the new head. Treat the observed head as a CAS
+token: unexpected movement stops mutation until reconciled. Never force-push
+through a race.
+
+Only ASSIGNING, ASSIGNED, and WORKING consume the five active fleet leases.
+Waiting/open/finished states do not. Do not silently reclaim stale active state
+just because an automation may have been cut off.
+
+### 🆘 Codex advisor safety valve
+
+Before concluding there is no work, before repeating unchanged investigation, and
+before acquiring a sixth active lease, reconstruct latest #140 state per run and
+inspect current branches/PRs/open issues.
+
+Use 🆘 WAITING ON ADVISOR plus one deduplicated `@codex` request when any of these
+is true:
+
+1. open **non-documentation** issues remain but no safe runnable implementation,
+   rescue, or integration work can be found;
+2. the same issue/branch/PR/anomaly would be attempted again without material
+   head/state/evidence change;
+3. active leases exceed or would exceed five;
+4. stale/contradictory/cut-off state, hidden useful work, a missing PR path,
+   supersession ambiguity, or branch/LOCK disagreement cannot be cheaply and
+   confidently reconciled.
+
+Fingerprint and deduplicate advisor requests as documented in
+`docs/AGENT-COORDINATION-PROTOCOL.md`. Codex is asked to investigate **and repair**
+live state/topology/work, not merely write another status report.
+
+## 📦 Review-unit economy
+
+Reviewer cost is a real resource. Prefer fewer, larger, coherent review units over
+hourly micro-PRs.
+
+For Torn, **three open fleet-owned default-destined PRs is the normal operating
+cap; five is the emergency ceiling**. At or above three, do not create another
+default-destined PR except an urgent independently reviewable stop-line,
+default-regression, or security repair.
+
+Prefer persistent feature/work-package/integration branches and existing
+draft/open PRs across multiple runs. A new default-destined PR should normally be
+a complete meaningful feature/work-package, multiple tightly related acceptance
+slices/issues, or a coherent integration rollup. Parallel child branches are only
+for useful isolation and should feed a claimed non-default integration branch when
+compatible.
+
+Normally make at most one new Codex final-review/merge handoff per repository per
+hour, preferably less. A changed head on an accumulating package is not by itself
+a reason to re-handoff.
 
 ## Default-branch authority and durable handoff
 
 Fleet/manual agents **must never merge into `main` or any repository default
-branch**. Final default-branch review and merge belong only to Gerome's explicitly
-invoked coding-agent/human workflow.
+branch**. Final default-branch review and merge belong to Gerome's designated
+Codex/human workflow.
 
-A pushed branch or a child PR merged into a non-default stable/integration branch
-is not, by itself, a completed handoff. Useful work must end in one recorded
-terminal state:
+🧪 WAITING ON PR CR is the normal state after a coherent package is ready for
+Codex review. ✅ FINISHED is reserved for actual issue/package completion after
+required default incorporation or an explicit completed/not-planned terminal
+disposition is verified.
 
-1. directly or transitively represented by an **open PR ultimately targeting the
-   default branch**;
-2. proven incorporated or superseded by a current default-destined review surface,
-   with that relationship recorded; or
-3. explicitly abandoned after assessing its unique commits and recording why.
-
-Do not use `ahead` alone as proof that an old branch contains missing work; account
-for squash merges, rollups, replacement PRs, and explicit supersession. A coherent
-stable branch that still contains useful work absent from default needs a live
-stable-to-default review surface for Gerome rather than being left hidden merely
+A child merged only into a non-default integration branch is not default
+incorporation. Preserve a current review path for useful work; do not hide it merely
 to reduce PR count.
 
 ## Verification economy
 
-Use **change-directed local verification**. Do not automatically reproduce the
-full GitHub Actions matrix or run the complete canonical gate merely because a
-task changed code. Start with the smallest deterministic proof that can
-meaningfully falsify the affected behavior, then broaden only when the change has
-wide impact, the acceptance criteria require a higher evidence tier, focused proof
-fails or exposes adjacent uncertainty, verifier/CI infrastructure changed, or
-current-head GitHub CI reports a deterministic failure that needs reproduction.
+Use **change-directed local verification**. Start with the smallest deterministic
+proof that can meaningfully falsify the affected behavior; broaden when risk,
+acceptance criteria, focused-proof failure, verifier/CI changes, or deterministic
+CI failures require it.
 
-GitHub Actions is the broad regression surface for PR heads. Inspect required
-current-head checks before declaring work ready, and fix deterministic CI failures
-rather than treating them as human blockers. Pending or failed checks are not
-proof, and never claim a command or evidence tier was observed unless it actually
-ran. See `docs/WORKING-AGREEMENT.md` §4 for the full policy.
+For **default-targeting PR heads that actually receive the repository's broad CI
+workflow**, GitHub Actions may supply the broad regression pass. Inspect required
+checks on the exact current head and fix deterministic failures.
+
+Do **not** assume every PR head receives broad CI. Child PRs targeting non-default
+feature/stable/integration branches may not trigger the broad workflow. When the
+exact head has no broad CI coverage, run the canonical local source/build gate
+before declaring the child review-ready unless the work package explicitly
+requires an even stronger proof tier:
+
+```bash
+bash scripts/verify/build-and-test.sh
+```
+
+Pending, unavailable, failed, or old-head checks are not proof. Never claim a
+command or evidence tier was observed unless it actually ran. See
+`docs/WORKING-AGREEMENT.md` §4.
 
 Then use:
 
@@ -67,8 +134,6 @@ Then use:
 - [`docs/OVERVIEW.md`](docs/OVERVIEW.md) for architecture;
 - GitHub issues for authoritative planned work and dependency/stop-gate state;
 - `scripts/verify/manifest.tsv` for the canonical verifier graph;
-- `bash scripts/verify/build-and-test.sh` for the source/build/test gate when broad
-  local proof is warranted;
 - `docs/OPERATIONS-PITFALLS.md` before touching deploy/SSH/remote-exec code.
 
 Do not treat gitignored `workspace/` material as required project state. A clean
