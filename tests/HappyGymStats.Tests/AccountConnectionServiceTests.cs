@@ -189,7 +189,18 @@ public sealed class AccountConnectionServiceTests
 
     private sealed class RecordingHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler) : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => handler(request, cancellationToken);
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri?.AbsolutePath == "/v2/key/info")
+            {
+                Assert.Equal("ApiKey", request.Headers.Authorization?.Scheme);
+                Assert.Equal(FixtureKey, request.Headers.Authorization?.Parameter);
+                Assert.DoesNotContain(FixtureKey, request.RequestUri.AbsoluteUri, StringComparison.Ordinal);
+                return Task.FromResult(JsonResponse("""{"info":{"access":{"type":"Limited Access"}}}"""));
+            }
+
+            return handler(request, cancellationToken);
+        }
     }
 
     private sealed class DelegateValidator(Func<string, CancellationToken, Task<int>> validate) : ITornConnectionValidator
