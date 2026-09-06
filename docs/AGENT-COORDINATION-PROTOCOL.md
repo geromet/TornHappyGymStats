@@ -36,8 +36,11 @@ For non-PR states, `base=none` and `base_sha=none` are valid. PR-facing WAITING/
 Assignment ACK records also include:
 
 ```text
-ack=<ASSIGNING-comment-id>
+ack=<ASSIGNING-comment-id> | eligibility=clear |
+gate_snapshot=<sha256-of-current-gate-input>
 ```
+
+ASSIGNING records include `gate_snapshot=<sha256-of-pre-SYN-gate-input>`.
 
 Advisor records also include:
 
@@ -93,6 +96,11 @@ capacity are available; it must not append ASSIGNING or enter Gate A/Gate B. Fai
 closed until the dependency is satisfied or the authoritative issue disposition
 explicitly removes the gate.
 
+Canonicalize the gate input as UTF-8/LF lines formatted
+`number|state|updated_at|dependency-status|stop-gate-status`: target line first,
+then dependency lines sorted by numeric issue number, with no trailing newline.
+Record its lowercase SHA-256 as `gate_snapshot=` on the SYN.
+
 Only an eligible scope appends ASSIGNING with exact issue/package/seam and
 observed heads.
 
@@ -103,7 +111,11 @@ Immediately reconstruct complete state again. Admission has two independent gate
 Refresh the target issue/PR and its authoritative dependencies/stop gates again
 after the SYN and immediately before evaluating admission. If the scope became
 blocked, it is no longer eligible, must not ACK, and should append OPEN/backoff
-when able.
+when able. If the canonical gate input differs from the SYN snapshot for any
+reason, that SYN is permanently ineligible even if the gate later returns to a
+clear state. A winner's ASSIGNED/ACK durably records `eligibility=clear` and the
+fresh matching `gate_snapshot=`; absence of that ACK is never interpreted as a
+successful post-SYN decision.
 
 ### Gate A — ownership collision
 
@@ -186,8 +198,10 @@ Serialize it deterministically:
   issue/PR/ref/run tokens, with no whitespace or duplicates;
 - `relevant-head-or-state` is an exact lowercase 40-hex head when one head defines
   the incident. Otherwise it is `sha256-<hex>` over the exact complete set of
-  latest valid records for **every** new-protocol run plus every active legacy
-  record—not a caller-selected subset. Encode new records as
+  latest valid records for every **non-advisor** new-protocol run plus every active
+  legacy record—not a caller-selected subset. Exclude all WAITING ON ADVISOR runs
+  and advisor dispatch-candidate/request comments so recovery cannot change its
+  own incident hash. Encode included new records as
   `run|seq|state|issue/package|branch|head|pr|author` and legacy records as
   `legacy|comment-id|state|issue/package|branch|head|pr|author`; sort all UTF-8/LF
   lines bytewise ascending and hash them with no trailing newline.
@@ -251,13 +265,15 @@ Do not rewrite historical comments.
 ```text
 🟡 ASSIGNING | seq=1 | run=ux-abc123 | lane=UX | issue/package=#98 |
 branch=feature/account-privacy | head=<main-sha> | pr=none |
-base=none | base_sha=none | prev=none | ts=... | note=account privacy seam
+base=none | base_sha=none | prev=none |
+gate_snapshot=<pre-SYN-sha256> | ts=... | note=account privacy seam
 ```
 
 ```text
 🔵 ASSIGNED | seq=2 | run=ux-abc123 | lane=UX | issue/package=#98 |
 branch=feature/account-privacy | head=<main-sha> | pr=none |
 base=none | base_sha=none | prev=ASSIGNING/<comment-id> | ack=<comment-id> |
+eligibility=clear | gate_snapshot=<post-SYN-sha256> |
 ts=... | note=collision and global-capacity admission won
 ```
 

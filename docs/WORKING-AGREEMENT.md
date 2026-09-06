@@ -43,6 +43,12 @@ is not eligible to append ASSIGNING or enter the ownership/capacity elections.
 Fail closed until the dependency is satisfied or the authoritative issue state
 explicitly removes the gate.
 
+ASSIGNING records a deterministic `gate_snapshot=<sha256>` over the target and
+every declared dependency's issue number, state, updated-at and stop-gate fields.
+ASSIGNED records a fresh post-SYN `eligibility=clear` plus `gate_snapshot=`. Before
+ACK, any live mismatch from the SYN snapshot permanently invalidates that SYN,
+even if the gate later clears, so cutoff cannot strand an unknowable reservation.
+
 Read-only inspection does not require ownership. Mutable work uses the append-only
 state machine below.
 
@@ -132,6 +138,10 @@ canonical `@codex` request with
 `advisor-dispatch:<fingerprint>:<elected-WAITING-comment-id>`. Concurrent PATCHes
 converge on one comment; losing candidates remain inert. Ambiguous creates or
 PATCHes require reread-before-retry.
+
+The incident-state hash excludes all WAITING ON ADVISOR runs and advisor dispatch-
+candidate/request comments. Recovery records therefore cannot perturb the
+fingerprint they are deduplicating.
 
 The exception authorizes only those #140 control-plane comments; branch, PR,
 issue-body, code, review, merge, or any other repository mutation still requires

@@ -45,6 +45,13 @@ for admission and must not append an ASSIGNING request merely because ownership
 and capacity are available. Fail closed until the blocking state is satisfied or
 the authoritative issue disposition changes.
 
+Record `gate_snapshot=<sha256>` on ASSIGNING over the target plus every declared
+dependency's canonical number/state/updated-at and stop-gate fields. ASSIGNED must
+record a freshly recomputed `eligibility=clear` and `gate_snapshot=`. Until ACK, an
+ASSIGNING reservation is valid only while the live snapshot exactly matches its
+SYN snapshot; any mismatch permanently invalidates that SYN, even if the issue is
+later cleared. This makes a post-SYN block cleanup-independent after worker cutoff.
+
 Before mutation, use the append-only ASSIGNING → ASSIGNED handshake in #140. A
 run is not allowed to mutate merely because it posted ASSIGNING. After posting,
 reconstruct complete state and refresh the target issue's dependencies/stop gates
@@ -110,6 +117,10 @@ idempotently PATCH that single winning comment to the canonical `@codex` body an
 `advisor-dispatch:<fingerprint>:<elected-WAITING-comment-id>` marker. Competing
 PATCHes converge on one comment; losing candidates are never mentioned or edited
 into requests. Reconcile ambiguous creates/PATCHes by rereading before retrying.
+
+State-hash fingerprints exclude WAITING ON ADVISOR runs and advisor dispatch-
+candidate/request comments so creating the recovery record cannot change its own
+incident identity.
 
 The exception permits only the #140 advisor control-plane comments; branch, PR,
 issue-body, code, review, merge, or other repository mutation still requires the
