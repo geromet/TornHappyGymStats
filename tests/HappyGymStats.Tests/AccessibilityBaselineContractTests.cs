@@ -38,6 +38,21 @@ public sealed class AccessibilityBaselineContractTests
     }
 
     [Fact]
+    public void Phone_topbar_prioritizes_navigation_brand_and_sign_out_without_wrapping_account_detail()
+    {
+        var css = ReadRepoFile(AppCssPath);
+
+        Assert.Contains("@media (max-width: 520px)", css, StringComparison.Ordinal);
+        Assert.Contains(".app-topbar .topbar-context", css, StringComparison.Ordinal);
+        Assert.Contains(".app-topbar .account-summary .mud-icon-root", css, StringComparison.Ordinal);
+        Assert.Contains(".app-topbar .account-summary .mud-typography-root", css, StringComparison.Ordinal);
+        Assert.Contains(".app-topbar .account-summary a", css, StringComparison.Ordinal);
+        Assert.Contains("display: none !important", css, StringComparison.Ordinal);
+        Assert.Contains(".app-topbar .account-summary {", css, StringComparison.Ordinal);
+        Assert.Contains("flex: 0 0 auto", css, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Render_harness_proves_real_keyboard_focus_instead_of_relabelling_passive_screenshots()
     {
         var driver = ReadRepoFile(ScreenshotDriverPath);
