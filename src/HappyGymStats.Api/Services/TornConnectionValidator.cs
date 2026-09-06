@@ -26,9 +26,12 @@ public sealed class TornConnectionValidationException : Exception
 /// <summary>
 /// Minimal server-side validation path for member-submitted Torn API keys.
 /// The credential is carried only in Torn's Authorization header and never in the request URI.
+/// Stored member keys must be Limited Access before identity validation can succeed.
 /// </summary>
 public sealed class TornConnectionValidator : ITornConnectionValidator
 {
+    private const string RequiredStoredMemberAccessType = "Limited Access";
+
     private readonly HttpClient _http;
     private readonly TornRateLimiter _rateLimiter;
 
@@ -48,13 +51,45 @@ public sealed class TornConnectionValidator : ITornConnectionValidator
         }
 
         var keyIdentity = TornRateLimiter.KeyIdentity(apiKey);
+
+        using (var keyInfo = await SendJsonAsync(
+            "v2/key/info",
+            apiKey,
+            keyIdentity,
+            cancellationToken).ConfigureAwait(false))
+        {
+            EnsureStoredMemberAccess(keyInfo.RootElement);
+        }
+
+        using var userBasic = await SendJsonAsync(
+            "v2/user/basic?selections=basic",
+            apiKey,
+            keyIdentity,
+            cancellationToken).ConfigureAwait(false);
+
+        if (!userBasic.RootElement.TryGetProperty("player_id", out var playerIdElement)
+            || playerIdElement.ValueKind != JsonValueKind.Number
+            || !playerIdElement.TryGetInt32(out var playerId)
+            || playerId <= 0)
+        {
+            throw new TornConnectionValidationException(isTransient: true);
+        }
+
+        _rateLimiter.ReportSuccess(keyIdentity);
+        return playerId;
+    }
+
+    private async Task<JsonDocument> SendJsonAsync(
+        string path,
+        string apiKey,
+        string keyIdentity,
+        CancellationToken cancellationToken)
+    {
         await _rateLimiter
             .AcquireAsync(keyIdentity, TornRequestPriority.Other, cancellationToken)
             .ConfigureAwait(false);
 
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            "v2/user/basic?selections=basic");
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         request.Headers.Authorization = new AuthenticationHeaderValue("ApiKey", apiKey);
 
@@ -74,35 +109,36 @@ public sealed class TornConnectionValidator : ITornConnectionValidator
             throw new TornConnectionValidationException(isTransient: true);
         }
 
-        using var responseScope = response;
-        JsonDocument document;
-        try
+        using (response)
         {
-            await using var stream = await response.Content
-                .ReadAsStreamAsync(cancellationToken)
-                .ConfigureAwait(false);
-            document = await JsonDocument
-                .ParseAsync(stream, cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            throw new TornConnectionValidationException(isTransient: true);
-        }
-        catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException)
-        {
-            throw new TornConnectionValidationException(isTransient: true);
-        }
+            JsonDocument document;
+            try
+            {
+                await using var stream = await response.Content
+                    .ReadAsStreamAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                document = await JsonDocument
+                    .ParseAsync(stream, cancellationToken: cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new TornConnectionValidationException(isTransient: true);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException)
+            {
+                throw new TornConnectionValidationException(isTransient: true);
+            }
 
-        using (document)
-        {
             if (document.RootElement.ValueKind != JsonValueKind.Object)
             {
+                document.Dispose();
                 throw new TornConnectionValidationException(isTransient: true);
             }
 
             if (TryGetTornError(document.RootElement, out var tornErrorCode))
             {
+                document.Dispose();
                 if (tornErrorCode is null)
                 {
                     throw new TornConnectionValidationException(isTransient: true);
@@ -119,6 +155,7 @@ public sealed class TornConnectionValidator : ITornConnectionValidator
 
             if (!response.IsSuccessStatusCode)
             {
+                document.Dispose();
                 var transient = IsTransientStatus(response.StatusCode);
                 if (response.StatusCode == HttpStatusCode.TooManyRequests)
                 {
@@ -128,16 +165,29 @@ public sealed class TornConnectionValidator : ITornConnectionValidator
                 throw new TornConnectionValidationException(transient);
             }
 
-            if (!document.RootElement.TryGetProperty("player_id", out var playerIdElement)
-                || playerIdElement.ValueKind != JsonValueKind.Number
-                || !playerIdElement.TryGetInt32(out var playerId)
-                || playerId <= 0)
-            {
-                throw new TornConnectionValidationException(isTransient: true);
-            }
+            return document;
+        }
+    }
 
-            _rateLimiter.ReportSuccess(keyIdentity);
-            return playerId;
+    private static void EnsureStoredMemberAccess(JsonElement root)
+    {
+        if (!root.TryGetProperty("info", out var info)
+            || info.ValueKind != JsonValueKind.Object
+            || !info.TryGetProperty("access", out var access)
+            || access.ValueKind != JsonValueKind.Object
+            || !access.TryGetProperty("type", out var accessTypeElement)
+            || accessTypeElement.ValueKind != JsonValueKind.String
+            || string.IsNullOrWhiteSpace(accessTypeElement.GetString()))
+        {
+            throw new TornConnectionValidationException(isTransient: true);
+        }
+
+        if (!string.Equals(
+            accessTypeElement.GetString(),
+            RequiredStoredMemberAccessType,
+            StringComparison.Ordinal))
+        {
+            throw new TornConnectionValidationException(isTransient: false);
         }
     }
 
