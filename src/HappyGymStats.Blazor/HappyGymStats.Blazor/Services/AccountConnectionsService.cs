@@ -9,22 +9,43 @@ public sealed class AccountConnectionsService(HttpClient http)
 
     public async Task<TornConnectionStatusDto> GetAsync(CancellationToken ct = default)
     {
-        using var response = await http.GetAsync(Endpoint, ct);
-        await EnsureSuccessAsync(response, ct);
-        return await ReadStatusAsync(response, ct);
+        try
+        {
+            using var response = await http.GetAsync(Endpoint, ct);
+            await EnsureSuccessAsync(response, ct);
+            return await ReadStatusAsync(response, ct);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw TimedOut();
+        }
     }
 
     public async Task<TornConnectionStatusDto> ConnectAsync(string tornApiKey, bool consentAccepted, CancellationToken ct = default)
     {
-        using var response = await http.PostAsJsonAsync(Endpoint, new { TornApiKey = tornApiKey, ConsentAccepted = consentAccepted }, ct);
-        await EnsureSuccessAsync(response, ct);
-        return await ReadStatusAsync(response, ct);
+        try
+        {
+            using var response = await http.PostAsJsonAsync(Endpoint, new { TornApiKey = tornApiKey, ConsentAccepted = consentAccepted }, ct);
+            await EnsureSuccessAsync(response, ct);
+            return await ReadStatusAsync(response, ct);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw TimedOut();
+        }
     }
 
     public async Task RevokeAsync(CancellationToken ct = default)
     {
-        using var response = await http.PostAsync($"{Endpoint}/revoke", content: null, ct);
-        await EnsureSuccessAsync(response, ct);
+        try
+        {
+            using var response = await http.PostAsync($"{Endpoint}/revoke", content: null, ct);
+            await EnsureSuccessAsync(response, ct);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw TimedOut();
+        }
     }
 
     private static async Task<TornConnectionStatusDto> ReadStatusAsync(HttpResponseMessage response, CancellationToken ct)
@@ -49,6 +70,12 @@ public sealed class AccountConnectionsService(HttpClient http)
             "invalid_response",
             HttpStatusCode.BadGateway,
             "The Torn connection service returned an unexpected response. Please try again.");
+
+    private static AccountConnectionFailure TimedOut()
+        => new(
+            "connection_timeout",
+            HttpStatusCode.RequestTimeout,
+            "The Torn connection service took too long to respond. Your connection was not changed; please try again.");
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken ct)
     {

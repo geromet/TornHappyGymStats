@@ -131,6 +131,38 @@ public sealed class AccountConnectionsBlazorServiceTests
     }
 
     [Fact]
+    public async Task Transport_timeout_becomes_a_bounded_failure_without_leaking_operation_state()
+    {
+        using var http = new HttpClient(new TimeoutHandler())
+        {
+            BaseAddress = new Uri("https://localhost:7047")
+        };
+        var sut = new AccountConnectionsService(http);
+
+        var failure = await Assert.ThrowsAsync<AccountConnectionFailure>(
+            () => sut.ConnectAsync("never-render-timeout-secret", consentAccepted: true));
+
+        Assert.Equal("connection_timeout", failure.Code);
+        Assert.Equal(HttpStatusCode.RequestTimeout, failure.StatusCode);
+        Assert.Contains("was not changed", failure.SafeMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("never-render-timeout-secret", failure.SafeMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Explicit_caller_cancellation_is_not_reclassified_as_a_timeout()
+    {
+        using var http = new HttpClient(new TimeoutHandler())
+        {
+            BaseAddress = new Uri("https://localhost:7047")
+        };
+        var sut = new AccountConnectionsService(http);
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.GetAsync(cts.Token));
+    }
+
+    [Fact]
     public async Task RevokeAsync_posts_to_owner_scoped_revoke_endpoint()
     {
         HttpMethod? method = null;
@@ -161,5 +193,11 @@ public sealed class AccountConnectionsBlazorServiceTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             => Task.FromResult(callback(request));
+    }
+
+    private sealed class TimeoutHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => throw new TaskCanceledException("simulated HttpClient timeout");
     }
 }

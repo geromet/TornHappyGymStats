@@ -1,5 +1,7 @@
 ﻿@using HappyGymStats.Blazor.Components.Auth
+@using HappyGymStats.Blazor.Services
 @rendermode InteractiveServer
+@inject IServerAccessTokenProvider AccessTokens
 
 <CascadingAuthenticationState>
     <Router AppAssembly="typeof(Program).Assembly" AdditionalAssemblies="new[] { typeof(Client._Imports).Assembly }" NotFoundPage="typeof(Pages.NotFound)">
@@ -16,3 +18,8 @@
         </Found>
     </Router>
 </CascadingAuthenticationState>
+
+@code {
+    protected override async Task OnInitializedAsync()
+        => await AccessTokens.GetAccessTokenAsync();
+}
