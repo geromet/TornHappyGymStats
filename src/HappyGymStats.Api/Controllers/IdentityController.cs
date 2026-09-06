@@ -1,7 +1,7 @@
 using System.Security.Claims;
-using System.Security.Cryptography;
 using HappyGymStats.Api.Infrastructure;
 using HappyGymStats.Core.Repositories;
+using HappyGymStats.Encryption;
 using HappyGymStats.Identity.Authentication;
 using HappyGymStats.Identity.Provisional;
 using Microsoft.AspNetCore.Authorization;
@@ -60,13 +60,18 @@ public sealed class IdentityController : ApiControllerBase
         try
         {
             spki = Convert.FromBase64String(request.PublicKey);
-            using var ecdh = ECDiffieHellman.Create();
-            ecdh.ImportSubjectPublicKeyInfo(spki, out _);
         }
-        catch
+        catch (FormatException)
         {
             return ApiError(StatusCodes.Status422UnprocessableEntity, "validation_failed", "PublicKey is not a valid base64-encoded P-256 SPKI key.");
         }
+
+        if (!P256PublicKey.IsValidSubjectPublicKeyInfo(spki))
+            return ApiError(StatusCodes.Status422UnprocessableEntity, "validation_failed", "PublicKey is not a valid base64-encoded P-256 SPKI key.");
+
+        var entry = await _identityMapRepo.GetByAnonymousIdAsync(anonymousId, ct);
+        if (entry is null)
+            return ApiError(StatusCodes.Status404NotFound, "not_found", "Identity record not found.");
 
         await _identityMapRepo.StorePublicKeyAsync(anonymousId, spki, ct);
         await _unitOfWork.SaveChangesAsync(ct);

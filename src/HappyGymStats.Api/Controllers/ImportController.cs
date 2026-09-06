@@ -4,6 +4,7 @@ using HappyGymStats.Core.Models;
 using HappyGymStats.Core.Import;
 using HappyGymStats.Core.Repositories;
 using HappyGymStats.Data.Entities;
+using HappyGymStats.Encryption;
 using HappyGymStats.Identity.Authentication;
 using HappyGymStats.Identity.Provisional;
 using Microsoft.AspNetCore.Authorization;
@@ -126,11 +127,17 @@ public sealed class ImportController : ApiControllerBase
         byte[]? publicKey = null;
         if (!string.IsNullOrEmpty(request?.PublicKey))
         {
-            try { publicKey = Convert.FromBase64String(request.PublicKey); }
+            try
+            {
+                publicKey = Convert.FromBase64String(request.PublicKey);
+            }
             catch (FormatException)
             {
                 return ValidationError("publicKey must be a valid base64 string.", new { field = "publicKey" });
             }
+
+            if (!P256PublicKey.IsValidSubjectPublicKeyInfo(publicKey))
+                return ValidationError("publicKey must be a valid P-256 SPKI key.", new { field = "publicKey" });
         }
 
         var status = _importService.Enqueue(apiKey, fresh: true, publicKey);
