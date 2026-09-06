@@ -78,8 +78,17 @@ Before any repository mutation:
 - refresh the target issue/PR and dependencies;
 - discover current default branch/head;
 - refresh every branch/PR head involved;
-- choose the exact intended branch name;
-- append ASSIGNING with exact issue/package/seam and observed heads.
+- choose the exact intended branch name.
+
+Before appending ASSIGNING, apply the eligibility gate: every authoritative
+dependency for the intended scope must be satisfied and every applicable stop
+gate must be cleared. A blocked scope is ineligible even when ownership and global
+capacity are available; it must not append ASSIGNING or enter Gate A/Gate B. Fail
+closed until the dependency is satisfied or the authoritative issue disposition
+explicitly removes the gate.
+
+Only an eligible scope appends ASSIGNING with exact issue/package/seam and
+observed heads.
 
 ASSIGNING is a durable SYN request, but it becomes an **active lease only if it wins both admission gates below**. This distinction is necessary because comment creation itself is not an atomic capacity reservation and a losing worker may be cut off before cleanup.
 
@@ -195,7 +204,7 @@ Do not rewrite historical comments.
 ```text
 🟡 ASSIGNING | seq=1 | run=ux-abc123 | lane=UX | issue/package=#98 |
 branch=feature/account-privacy | head=<main-sha> | pr=none |
-base=none | base_sha=none | prev=OPEN | ts=... | note=account privacy seam
+base=none | base_sha=none | prev=none | ts=... | note=account privacy seam
 ```
 
 ```text

@@ -33,6 +33,12 @@ protocol and legacy records**. Validate each new-protocol run's sequence/prev/AC
 chain and reconstruct every run's latest valid state. A recent-comment window is
 never authoritative for ownership or lease counting.
 
+Also refresh the target issue's current dependencies and stop gates before
+ASSIGNING. A scope with an unresolved dependency or active stop gate is ineligible
+for admission and must not append an ASSIGNING request merely because ownership
+and capacity are available. Fail closed until the blocking state is satisfied or
+the authoritative issue disposition changes.
+
 Before mutation, use the append-only ASSIGNING → ASSIGNED handshake in #140. A
 run is not allowed to mutate merely because it posted ASSIGNING. After posting,
 reconstruct complete state again. If any materially overlapping run is already

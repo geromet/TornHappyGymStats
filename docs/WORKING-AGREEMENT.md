@@ -31,6 +31,12 @@ Before materially conflicting mutation, refresh:
 3. the repository's actual current default branch and head;
 4. every branch/PR head involved in the mutation.
 
+Dependency and stop-gate state is an admission condition, not informational
+context. If the target scope has an unresolved dependency or active stop gate, it
+is not eligible to append ASSIGNING or enter the ownership/capacity elections.
+Fail closed until the dependency is satisfied or the authoritative issue state
+explicitly removes the gate.
+
 Read-only inspection does not require ownership. Mutable work uses the append-only
 state machine below.
 
