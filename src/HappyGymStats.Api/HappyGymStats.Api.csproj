@@ -18,6 +18,7 @@
     <ProjectReference Include="..\HappyGymStats.Core\HappyGymStats.Core.csproj" />
     <ProjectReference Include="..\HappyGymStats.Data\HappyGymStats.Data.csproj" />
     <ProjectReference Include="..\HappyGymStats.Identity\HappyGymStats.Identity.csproj" />
+    <ProjectReference Include="..\HappyGymStats.Encryption\HappyGymStats.Encryption.csproj" />
   </ItemGroup>
 
 </Project>
