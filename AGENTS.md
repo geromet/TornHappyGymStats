@@ -25,18 +25,30 @@ The coordination states are:
   branch/PR topology;
 - ✅ **FINISHED** — issue/package is actually completed.
 
+Active ownership has no TTL. Before admitting mutable work, paginate **all** #140
+protocol comments (or use a mechanically complete durable index proven equivalent),
+validate each run's sequence/prev/ACK chain, and reconstruct every run's latest
+valid state. A recent-comment window is never authoritative for ownership or lease
+counting.
+
 Before mutation, use the append-only ASSIGNING → ASSIGNED handshake in #140. A
 run is not allowed to mutate merely because it posted ASSIGNING. After posting,
-reread latest valid states for all relevant runs. If any materially overlapping
-run is already ASSIGNED or WORKING, the newcomer must back off. Only when no
-active owner overlaps do competing ASSIGNING requests race; then the earlier
-materially overlapping ASSIGNING GitHub comment ID wins.
+reconstruct complete state again. If any materially overlapping run is already
+ASSIGNED or WORKING, the newcomer must back off. Among overlapping ASSIGNING
+requests, the earlier GitHub comment ID wins.
+
+Admission is also globally capacity-ordered. Count incumbent ASSIGNED/WORKING
+leases, compute the remaining slots up to five, then sort every otherwise-eligible
+latest ASSIGNING record by GitHub comment ID ascending. Only the earliest records
+that fit those slots may ACK; every later candidate appends OPEN/backoff. This
+prevents non-overlapping claims from racing the fleet above five active leases.
 
 Every state transition is a **new** #140 comment with a unique `run=`, monotonic
 `seq=`, exact issue/package, branch, head, PR, previous state/comment, timestamp,
-and short result. Do not edit an old state comment into a new state. Ambiguous
-writes are retried only after rereading and suppressing an already-present same
-`run+seq` record.
+and short result. PR-facing WAITING/proof records also carry machine-readable
+`base=<ref>` and `base_sha=<sha>`. Do not edit an old state comment into a new
+state. Ambiguous writes are retried only after rereading and suppressing an already-
+present same `run+seq` record.
 
 Immediately after a branch is selected/created and before useful mutation, append
 🛠️ WORKING with the exact branch/head. After every remote head change, append
@@ -51,7 +63,7 @@ just because an automation may have been cut off.
 ### 🆘 Codex advisor safety valve
 
 Before concluding there is no work, before repeating unchanged investigation, and
-before acquiring a sixth active lease, reconstruct latest #140 state per run and
+before acquiring a sixth active lease, reconstruct complete #140 state per run and
 inspect current branches/PRs/open issues.
 
 Use 🆘 WAITING ON ADVISOR plus one deduplicated `@codex` request when any of these
@@ -67,7 +79,7 @@ is true:
    confidently reconciled.
 
 At five already-active leases, advisor dispatch is an explicit **lease-free
-control-plane exception**: after read-only reconstruction and fingerprint
+control-plane exception**: after complete read-only reconstruction and fingerprint
 deduplication, an unassigned recovery run may append WAITING ON ADVISOR directly
 as `seq=1`/`prev=none` and post the single matching `@codex` request without first
 creating ASSIGNING/ASSIGNED. That exception permits only the #140 advisor control-
@@ -106,9 +118,10 @@ branch**. Final default-branch review and merge belong to Gerome's designated
 Codex/human workflow.
 
 🧪 WAITING ON PR CR is the normal state after a coherent package is ready for
-Codex review. ✅ FINISHED is reserved for actual issue/package completion after
-required default incorporation or an explicit completed/not-planned terminal
-disposition is verified.
+Codex review. Its record must include exact PR head plus exact base ref/SHA so
+recovery can tell which base the evidence covered. ✅ FINISHED is reserved for
+actual issue/package completion after required default incorporation or an explicit
+completed/not-planned terminal disposition is verified.
 
 A child merged only into a non-default integration branch is not default
 incorporation. Preserve a current review path for useful work; do not hide it merely
