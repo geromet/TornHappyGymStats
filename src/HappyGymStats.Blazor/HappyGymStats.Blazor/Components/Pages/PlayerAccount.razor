@@ -379,5 +379,6 @@
         return null;
     }
 
-    private static string FormatDate(DateTimeOffset value) => value.ToLocalTime().ToString("g");
+    private static string FormatDate(DateTimeOffset value)
+        => value.ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'");
 }
