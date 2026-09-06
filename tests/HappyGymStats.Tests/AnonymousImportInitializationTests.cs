@@ -1,5 +1,5 @@
+using HappyGymStats.Api;
 using HappyGymStats.Api.Controllers;
-using HappyGymStats.Api.Models;
 using HappyGymStats.Core.Import;
 using HappyGymStats.Core.Repositories;
 using HappyGymStats.Data.Entities;
