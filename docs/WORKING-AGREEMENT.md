@@ -5,75 +5,118 @@ A clean clone must contain everything needed to work safely. Gitignored
 `workspace/` material may explain history or hold local evidence, but it is never
 an authority for correctness, acceptance criteria, or implementation decisions.
 
+Read [`AGENT-COORDINATION-PROTOCOL.md`](AGENT-COORDINATION-PROTOCOL.md) for the
+wire-level state/handshake format used in GitHub issue #140.
+
 ## 1. Planning and live coordination state live in GitHub
 
 GitHub issues are the authoritative backlog. **Issue #140 is the canonical live
-Agent work coordination LOCK for this repository.** Current repository, PR, CI,
-and branch state wins over stale issue prose, old PR descriptions, audit notes,
-plans, or historical handoff comments.
+Agent coordination/state log for this repository.** Current repository, PR, CI,
+branch state, and the latest valid protocol transitions win over stale issue
+prose, old PR descriptions, audit notes, plans, historical handoffs, or an agent's
+memory of a prior run.
 
-Before selecting mutable work, read #140's current body and recent comments. Before
-any materially conflicting mutation, refresh:
+Before selecting mutable work, read #140's current body and recent transitions.
+Before materially conflicting mutation, refresh:
 
-1. #140 body + recent comments;
+1. #140 body + recent protocol comments;
 2. the target issue/PR and relevant dependencies;
-3. the repository's actual current default branch and head (discover it; do not
-   rely on an old assumption that it is still `main`);
+3. the repository's actual current default branch and head;
 4. every branch/PR head involved in the mutation.
 
-Obey all live coordination restrictions recorded in #140: active claims, WIP and
-throughput gates, queue/drain ordering, branch ownership, dependency restrictions,
-and outside-contributor boundaries. A free-looking issue is not available when a
-live gate or overlapping ownership rule says otherwise.
+Read-only inspection does not require ownership. Mutable work uses the append-only
+state machine below.
 
-Read-only inspection does not require a claim. Before editing/pushing code or a
-fleet branch, changing a PR body/base/state, posting a substantive PR review or
-comment, updating an overlapping implementation issue, or consolidating/closing
-fleet work, acquire ownership with the two-phase claim protocol:
+### 🚦 Assignment and work states
 
-1. **Pre-claim:** immediately refresh #140, the target, default, and relevant
-   heads; reject the candidate if a materially overlapping active claim exists.
-2. **Claim:** record the exact issue/PR/branch/work-package/seam, a unique
-   `run=<token>`, and the observed head SHA where practical.
-3. **Post-claim win check:** reread recent #140 comments immediately. If claims
-   overlap, the earlier GitHub comment ID wins. The later claimant must edit its
-   own claim to canonical `🔓 RELEASED` and choose independent work.
-4. **Before first mutation:** refresh #140 and the relevant heads once more.
+- 🟢 **OPEN** — default/unowned; no active lease.
+- 🟡 **ASSIGNING** — phase-1 assignment request / SYN.
+- 🔵 **ASSIGNED** — phase-2 acknowledged ownership / ACK.
+- 🛠️ **WORKING @ branch** — active mutation at an exact branch/head.
+- 🧪 **WAITING ON PR CR** — coherent package waiting on Codex code/final review.
+- 🆘 **WAITING ON ADVISOR** — Codex must investigate/repair coordination or
+  branch/PR topology.
+- ✅ **FINISHED** — issue/package is actually completed.
 
-After two failed acquisitions for overlapping work, back off to lower-priority
-independent work rather than repeatedly competing for the same scope.
+Before mutation, append ASSIGNING with a unique `run=`, `seq=1`, exact
+issue/package/seam, intended branch and observed heads. Reread #140 immediately;
+earlier materially overlapping ASSIGNING GitHub comment ID wins.
 
-Treat an observed branch head SHA as a compare-and-swap token. Before every remote
-branch mutation, verify the current head still matches the expected head. If it
-moved unexpectedly, stop and reconcile before writing. Never force-push through a
+The winner appends a **new** ASSIGNED record with `seq=2`, repeats the exact
+scope/branch/expected heads, and references the ASSIGNING comment ID as `ack=`.
+Mutation is forbidden until this acknowledgement exists.
+
+Every later transition is another **new #140 comment** with monotonic sequence,
+exact branch/head/PR, previous state/comment, timestamp and short result. Do not
+edit an old state comment into a new state. Before retrying an ambiguous comment
+write, reread and suppress an already-present same `run+seq` record.
+
+Immediately after a branch is selected/created and before useful mutation, append
+🛠️ WORKING with the exact branch/head. After every remote branch-head change,
+append another WORKING record with the new head. The recorded head is a CAS token:
+unexpected movement stops mutation until reconciled. Never force-push through a
 race or commandeer/rewrite an outside-contributor or human-owned branch.
 
-For ordinary task flow:
+Only latest ASSIGNING, ASSIGNED and WORKING states consume the five active fleet
+leases. OPEN, WAITING ON PR CR, WAITING ON ADVISOR and FINISHED do not. Do not
+silently reclaim stale active state just because a worker may have been cut off.
 
-1. read the issue and its current comments;
-2. check open and recently merged PRs for overlapping work;
-3. refresh from the actual current default before starting a new independent task;
-4. keep one active task on one branch and name stacked/dependent PRs explicitly;
-5. after a PR merges or closes, follow-on work gets a fresh branch unless the
-   original task is explicitly reopened.
+The wire format, sequence validation, reconstruction algorithm and legacy
+`🔒 CLAIM` migration rules are defined in
+`docs/AGENT-COORDINATION-PROTOCOL.md`.
 
-Coordination epics are not implementation tasks. Respect dependency and stop-gate
-ordering recorded in the child issues. `docs/MILESTONES.md` and
-`docs/UX-PLAN.md` are pointers, not parallel planning databases.
+### 🆘 Codex advisor safety valve
+
+Before concluding there is no work, before repeating unchanged investigation, and
+before acquiring a sixth active lease, reconstruct latest #140 state per run and
+inspect live branches, PRs and open issues.
+
+Transition once to WAITING ON ADVISOR and send one deduplicated `@codex` request
+when any of these applies:
+
+1. open **non-documentation** issues remain but no safe runnable implementation,
+   rescue or integration work can be found;
+2. the same issue/branch/PR/anomaly would be attempted again without material
+   head/state/evidence change;
+3. active fleet leases exceed or would exceed five;
+4. stale/contradictory/cut-off state, hidden useful work, a missing PR/review path,
+   supersession ambiguity, or branch/LOCK disagreement cannot be cheaply and
+   confidently reconciled.
+
+Use the stable advisor fingerprint format from the protocol doc and search #140
+before posting. An unresolved identical fingerprint suppresses another request.
+Codex is asked to inspect **and repair** live state/topology/work, preserve useful
+commits, use the same state protocol for mutations, and report concrete results or
+blockers.
+
+### 📦 Review-unit economy and branch-explosion prevention
+
+Reviewer cost is a real resource. For Torn, **three open fleet-owned
+default-destined PRs is the normal operating cap; five is the emergency ceiling**.
+At or above three, do not create another default-destined PR except an urgent,
+independently reviewable stop-line/default-regression/security repair.
+
+Prefer persistent feature/work-package/integration branches and existing
+draft/open PRs across multiple runs. A new default-destined PR should normally
+represent a complete meaningful feature/work-package, multiple tightly related
+acceptance slices/issues, or a coherent integration rollup—not an hourly micro-
+fragment. Parallel child branches are for useful isolation only and should feed a
+claimed non-default integration branch when compatible.
+
+Normally send at most one new Codex final-review/merge handoff per repository per
+hour, preferably less. A changed head while a package is still accumulating is not
+itself a reason to re-handoff.
 
 ### Default-branch authority boundary
 
 Fleet/manual agents **must never merge a branch or PR into the repository default
 branch** or weaken protections to permit such a merge. Final default-branch review
-and merge belong exclusively to Gerome's separately invoked coding-agent/human
-workflow. Fleet/manual agents may build, repair, test, review, and consolidate
-compatible fleet-owned work only through non-default branches and PRs.
+and merge belong exclusively to Gerome's designated Codex/human workflow.
 
-A final coding-agent session that Gerome explicitly authorizes to review/merge
-must still refresh #140, the current default head, the candidate PR exact head,
-checks, reviews, dependencies, and any live ownership before each merge decision.
-After a default merge, refresh the default branch and re-evaluate remaining PRs;
-do not inherit readiness from their pre-merge base state.
+Codex final review/merge must still refresh #140 protocol state, current default,
+candidate PR exact head, checks, reviews, dependencies and ownership before each
+merge decision. After a default merge, refresh default and re-evaluate remaining
+PRs; do not inherit readiness from pre-merge state.
 
 ## 2. Torn is read-only from HappyGymStats
 
@@ -119,18 +162,23 @@ changed code. Broaden local verification when:
 - current-head GitHub CI reports a deterministic failure that needs local
   reproduction and repair.
 
-GitHub Actions is the broad regression suite for PR heads. Before declaring work
-ready, inspect the required checks on the exact current head. Deterministic CI
-failures are agent work, not human blockers. Pending, unavailable, failed, or
-old-head checks are not proof, and never describe a command or evidence tier as
-observed unless it actually ran.
+For **default-targeting PR heads that actually receive the repository's broad CI
+workflow**, GitHub Actions may supply the broad regression pass. Before declaring
+work ready, inspect required checks on the exact current head and repair
+deterministic failures.
 
-The complete local source/build gate remains available when broad local proof is
-warranted:
+Do **not** assume every PR head receives that workflow. Child PRs targeting
+non-default feature/stable/integration branches may not trigger broad CI. When an
+exact head has no broad CI coverage, run the complete local source/build gate
+before declaring that child review-ready unless its acceptance criteria require a
+stronger evidence tier:
 
 ```bash
 bash scripts/verify/build-and-test.sh
 ```
+
+Pending, unavailable, failed, or old-head checks are not proof. Never describe a
+command or evidence tier as observed unless it actually ran.
 
 Verifier routing is owned by `scripts/verify/manifest.tsv`; do not add a second
 handwritten verifier list. A new verifier must be registered there, and an
@@ -142,8 +190,8 @@ Evidence tiers are about the environment capable of falsifying the change:
 - **T1 — source/contracts/tests:** focused deterministic source/build/test proof
   appropriate to the changed behavior, with a regression or negative control
   where practical. Use the complete canonical gate when the change has broad
-  impact or the work package explicitly requires it; otherwise GitHub CI may
-  supply the broad regression pass.
+  impact, the work package explicitly requires it, or the exact non-default child
+  head has no broad CI coverage.
 - **T2 — rendered UI:** T1 plus actual rendering/browser evidence. Use
   `scripts/screenshot-board.sh` where applicable and inspect the relevant 390,
   768, and desktop output; source inspection alone is not UI proof.
@@ -205,7 +253,7 @@ a client-supplied faction/role/scope boundary.
 ## 8. `workspace/` is supporting material only
 
 `workspace/` is gitignored. It can hold screenshots, reports, local handoff
-notes, or historical archives, but a cold clone must not need it. If a fact is
+notes, or historical archives, but a clean clone must not need it. If a fact is
 load-bearing for safe implementation, move that fact into a tracked issue,
 document, test, verifier, contract, or code comment before relying on it.
 
@@ -213,9 +261,9 @@ Do not cite `workspace/V2`, `workspace/handoff`, or archived GSD state as the so
 source of an acceptance criterion. Historical material may explain why a rule
 exists; tracked enforcement is what makes the rule current.
 
-## 9. Handoff standard
+## 9. Handoff and terminal-state standard
 
-Before handing a PR back, state:
+Before handing a PR to Codex, state:
 
 - which issue/scope it implements and what it deliberately does not;
 - dependencies/stacking and the exact base/head state it was proved against;
@@ -227,28 +275,21 @@ Before handing a PR back, state:
 Use `Closes #N` only when the PR satisfies the issue's full current acceptance
 criteria. Partial work uses `Refs #N` and leaves the issue open.
 
-### Terminal handoff invariant
+When a coherent package is ready for Codex review, append **🧪 WAITING ON PR CR**
+with exact PR/head/base/evidence and then send one deduplicated same-head Codex
+handoff. Waiting on review does not consume a fleet implementation lease.
 
-A branch being pushed, or a child PR being merged into a non-default
-stable/integration branch, is **not** enough to declare useful work finished.
-Before releasing ownership, every useful branch touched or created by the run must
-be in exactly one recorded terminal state:
+Use **✅ FINISHED** only after the issue/package is truly complete and required
+default incorporation or explicit completed/not-planned disposition is verified.
+A pushed branch, open PR, green CI run, or child merge into non-default is not by
+itself FINISHED.
 
-1. directly or transitively represented by an **open PR ultimately targeting the
-   repository default branch**;
-2. proven incorporated or superseded by a current default-destined review surface,
-   with that relationship recorded; or
-3. explicitly abandoned after its unique commits were assessed and the reason was
-   recorded.
+Useful work that is not finished must remain discoverable through the protocol:
+exact branch/head in WORKING, an explicit WAITING state, a current review surface,
+proven incorporation/supersession, or explicit OPEN/abandonment with unique-commit
+assessment. Never rely on remote branch existence alone as the ownership record.
 
 When tracing branch history, do not use `ahead` alone as evidence of missing work.
 Account for squash merges, stable rollups, replacement PRs, and explicit
-supersession. If a non-default stable branch becomes a coherent review unit and
-still contains useful work absent from default, open or update a live
-stable-to-default review surface for Gerome/coding-agent review. Do not close the
-only default-destined visibility surface merely to reduce PR count.
-
-Immediately before releasing a claim, refresh #140 and the relevant branch/PR
-heads one final time. Edit the **same claim comment** to canonical `🔓 RELEASED`
-and record the durable terminal disposition, exact final head/evidence where
-relevant, and any truthful remaining gap.
+supersession. Remote deletion belongs only to dedicated cleanup/provenance work,
+not ordinary implementation cleanup.
