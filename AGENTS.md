@@ -93,8 +93,14 @@ control-plane exception**. After complete read-only reconstruction and initial
 fingerprint deduplication, an unassigned recovery run may append WAITING ON ADVISOR
 directly as `seq=1`/`prev=none`. It must then reconstruct complete state again and
 compare every unresolved WAITING record with the identical fingerprint. Only the
-earliest GitHub comment ID may post the matching `@codex` request; later candidates
-stay non-leases and do not dispatch. That closes concurrent advisor duplication.
+earliest GitHub comment ID is the elected request. That WAITING record is durable
+dispatch intent, not ownership by one worker: if its author is cut off, any later
+recovery worker may complete the same elected request. Before posting, search the
+complete history for
+`advisor-dispatch:<fingerprint>:<elected-WAITING-comment-id>`; an existing marker
+suppresses the write. Otherwise post one `@codex` request carrying that marker,
+and reconcile ambiguous failures by rereading before retrying. Later WAITING
+candidates stay non-leases and never dispatch as separate requests.
 
 The exception permits only the #140 advisor control-plane comments; branch, PR,
 issue-body, code, review, merge, or other repository mutation still requires the

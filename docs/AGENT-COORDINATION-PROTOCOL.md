@@ -160,7 +160,16 @@ Fingerprint format:
 advisor:<repo>:<reason>:<stable-identifiers>:<relevant-head-or-state>
 ```
 
-When five active leases already exist, advisor dispatch uses a **lease-free #140-only control-plane exception**. After complete read-only reconstruction and initial fingerprint deduplication, an otherwise unassigned recovery run may append `🆘 WAITING ON ADVISOR` directly as its first transition (`seq=1`, `prev=none`). It must then reconstruct complete state **again**, collect all unresolved WAITING ON ADVISOR records with the identical fingerprint, and allow only the earliest GitHub comment ID to post the matching `@codex` request. Later identical-fingerprint WAITING records remain non-leases and do not dispatch. This post-write election closes the concurrent pre-search race.
+When five active leases already exist, advisor dispatch uses a **lease-free #140-only control-plane exception**. After complete read-only reconstruction and initial fingerprint deduplication, an otherwise unassigned recovery run may append `🆘 WAITING ON ADVISOR` directly as its first transition (`seq=1`, `prev=none`). It must then reconstruct complete state **again**, collect all unresolved WAITING ON ADVISOR records with the identical fingerprint, and elect the earliest GitHub comment ID as the one durable request. Later identical-fingerprint WAITING records remain non-leases and do not become separate requests. This post-write election closes the concurrent pre-search race.
+
+The earliest WAITING comment is the elected durable request, not a lease owned by
+its originating worker. Any later recovery worker may complete dispatch for that
+same elected record if the originator is cut off. Immediately before posting,
+search the complete #140 history for the deterministic marker
+`advisor-dispatch:<fingerprint>:<elected-WAITING-comment-id>`. If it exists, do
+not post. If it does not, post one `@codex` request containing that marker and the
+elected record URL. On an ambiguous write result, reread for the marker before any
+retry. Later WAITING candidates never dispatch as separate requests.
 
 The exception authorizes only those #140 control-plane comments; branch, PR, issue-body, code, review, merge, or other repository mutation still requires normal admission once capacity is available.
 
@@ -230,7 +239,7 @@ ts=... | note=coherent package complete; exact-head evidence recorded
 issue/package=coordination | branch=none | head=none | pr=none |
 base=none | base_sha=none | prev=none | ts=... |
 fingerprint=advisor:geromet/TornHappyGymStats:active-leases:5:<state-hash> |
-note=lease-free saturated-control-plane candidate; earliest identical-fingerprint WAITING comment dispatches @codex after post-write reconstruction
+note=lease-free saturated-control-plane candidate; earliest identical-fingerprint WAITING comment is elected and any recovery worker may complete its marker-deduplicated @codex dispatch
 ```
 
 The goal is not ceremony. The goal is that an interrupted worker leaves enough durable, ordered evidence for the next worker or Codex advisor to recover safely without inventing state.
