@@ -57,7 +57,7 @@ Fleet self-improvement is bounded. Without explicit Gerome approval, no automati
 - no fleet merge into a repository default branch;
 - Gerome/coding-agent ownership of final default review/merge;
 - actual-default-branch discovery;
-- repository LOCK + two-phase claim + earlier-comment-ID race winner + collision backoff + same-claim RELEASED + head CAS;
+- repository LOCK + append-only ASSIGNING/ASSIGNED handshake + earlier-comment-ID race winner + collision backoff + a new OPEN/WAITING/FINISHED transition to release the run + head CAS;
 - outside-contributor protections;
 - default five independent-package and five open fleet-owned PR ceilings;
 - fleet merges only into explicitly verified non-default stable/integration branches;
