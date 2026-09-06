@@ -11,9 +11,10 @@ public interface IIdentityMapRepository
 
     Task<IdentityMapEntity?> GetByKeycloakSubAsync(string keycloakSub, CancellationToken ct);
 
-    // Links a provisional entry to the given Keycloak sub, clears IsProvisional and ExpiresAtUtc.
-    // Returns false if the entry does not exist or is already claimed.
-    // Caller commits via IUnitOfWork.
+    // Atomically links one unexpired provisional entry to the given Keycloak sub,
+    // clears IsProvisional/ExpiresAtUtc, and persists that transition immediately.
+    // Returns false if the entry does not exist, is expired/already claimed, or the
+    // Keycloak subject concurrently won another identity mapping.
     Task<bool> ClaimProvisionalAsync(Guid anonymousId, string keycloakSub, CancellationToken ct);
 
     // Stores the ECIES ciphertext of the user's Torn player ID.
