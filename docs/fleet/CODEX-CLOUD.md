@@ -1,33 +1,35 @@
 # Codex Cloud for TornHappyGymStats
 
-> **Current capability snapshot — 2026-09-05.** This is operational guidance for the configured Torn Codex Cloud environment, not a permanent statement about the Codex platform. Live repository state, `AGENTS.md`, `docs/WORKING-AGREEMENT.md`, issue #140, current CI, and current OpenAI documentation win when this snapshot becomes stale.
+> **Capability snapshot — 2026-09-05; control-plane guidance updated 2026-09-06.** The capability measurements below describe the configured Torn Codex Cloud environment at the time they were observed. Current authority, access, handoff and scheduling guidance is maintained separately in this document. Live repository state, `AGENTS.md`, `docs/WORKING-AGREEMENT.md`, issue #140, current CI, and current OpenAI documentation win when any snapshot becomes stale.
 
 ## Purpose
 
-Codex Cloud is an additional remote implementation/proof worker for TornHappyGymStats. The environment is scoped to this repository and is intended to let a remote agent check out a branch, edit code, compile/test it, exercise browser/render proof, and hand work back through GitHub without depending on Gerome's local machine.
+Codex is TornHappyGymStats' primary implementation workhorse and the designated final PR reviewer/merger. The configured Codex Cloud environment gives that worker a remote repository checkout where it can edit code, compile/test it, exercise browser/render proof, and hand work back through GitHub without depending on Gerome's local machine.
 
-It is **not** a separate authority plane. Codex workers must use the same live coordination, branch ownership, evidence, security, and no-default-merge rules as every other fleet lane.
+Fleet/scout automations are not default-branch mergers. They may prepare work and, after the complete live readiness gate passes, request one deduplicated account-authored `@codex` final-review/merge handoff. The request itself is not evidence that Codex could or did merge; GitHub merged state and resulting default incorporation are the authority.
 
-The current verified classification is:
+Codex Cloud is **not** a separate authority plane. Workers must use the same live coordination, branch ownership, evidence, security, outside-contributor and protection rules as every other lane. Credential availability does not bypass those rules.
+
+The current verified capability classification is:
 
 > **CAPABLE EXCEPT POSTGRES**
 
-Codex Cloud can run Torn's ordinary source/build/test gate and real Chromium/render proof. The current Cloud sandbox cannot run Docker containers, so genuine Testcontainers/PostgreSQL proof remains owned by GitHub CI.
+Codex Cloud can run Torn's ordinary source/build/test gate and real Chromium/render proof. The capability smoke test found that the Cloud sandbox could not run Docker containers, so genuine Testcontainers/PostgreSQL proof remains owned by GitHub CI until a fresh capability test proves otherwise.
 
 ## Environment lifecycle
 
 The configured Cloud environment uses two preparation phases:
 
-1. **Setup** — cacheable machine-level preparation such as OS tools, the repository-pinned .NET SDK infrastructure, Docker CLI/daemon binaries, Python/Playwright, Chromium, and browser dependencies.
+1. **Setup** — cacheable machine-level preparation such as OS tools, the repository-pinned .NET SDK infrastructure, Docker CLI/daemon binaries, Python/Playwright, Chromium, browser dependencies, and GitHub CLI/authentication setup.
 2. **Maintenance** — runs after the requested branch is checked out when a cached environment is resumed. It reconciles the cache with that exact branch: reads `global.json`, activates/installs the required SDK, restores NuGet packages, repairs browser tooling when needed, and checks Docker binaries.
 
-The current Codex UI states that the maintenance script has network access. Keep branch-dependent downloads/restores in maintenance where practical rather than broadening the autonomous agent's runtime network access merely for dependency installation.
+The current Codex UI states that the maintenance script has network access. Keep branch-dependent downloads/restores in maintenance where practical rather than broadening autonomous runtime access merely for dependency installation.
 
 Important environment behavior:
 
 - the selected branch/commit is checked out before agent work;
 - cached environments can resume rather than rebuilding everything from scratch;
-- setup and later task shells are separate shells, so important values must be made persistent rather than relying only on `export` in setup;
+- setup and later task shells are separate shells, so important state must be persisted rather than relying only on `export` in setup;
 - `global.json` is the source of truth for the active SDK; do not hard-code a stale SDK assumption into task prompts;
 - `AGENTS.md` remains the repository entrypoint for safety and current verification commands;
 - actual acceptance tests belong **after** the worker's code changes, not in setup/maintenance.
@@ -85,9 +87,9 @@ Do not weaken, mock, skip, or replace a repository verifier merely because the C
 
 ## PostgreSQL / Docker boundary
 
-The current blocker is not Docker CLI installation and not a Torn test defect.
+The observed blocker is not Docker CLI installation and not a Torn test defect.
 
-Codex Cloud can initialize a constrained daemon such as:
+The 2026-09-05 smoke environment could initialize a constrained daemon such as:
 
 ```bash
 dockerd \
@@ -101,20 +103,20 @@ dockerd \
   --bridge=none
 ```
 
-and that daemon can answer `docker info`. However, real image registration fails at the host/container namespace boundary:
+and that daemon could answer `docker info`. However, real image registration failed at the host/container namespace boundary:
 
 ```text
 failed to register layer: unshare: operation not permitted
 ```
 
-The failure occurs before useful container execution. For the Torn PostgreSQL tier this means:
+The failure occurred before useful container execution. For the Torn PostgreSQL tier this meant:
 
-- `hello-world` cannot start;
-- PostgreSQL cannot start;
-- Testcontainers' Ryuk image cannot be registered;
-- PostgreSQL readiness, mapped-port connectivity and application behavior are never reached.
+- `hello-world` could not start;
+- PostgreSQL could not start;
+- Testcontainers' Ryuk image could not be registered;
+- PostgreSQL readiness, mapped-port connectivity and application behavior were never reached.
 
-The Testcontainers integration also expects ordinary container networking, mapped host ports and the default resource reaper. Even if image-layer registration becomes available later, the current `--bridge=none` / disabled-iptables daemon may expose a second networking limitation; that layer has not yet been proven either way.
+The Testcontainers integration also expects ordinary container networking, mapped host ports and the default resource reaper. Even if image-layer registration becomes available later, the observed `--bridge=none` / disabled-iptables daemon may expose a second networking limitation; that layer was not proven either way.
 
 ### Evidence ownership
 
@@ -128,13 +130,40 @@ HAPPYGYMSTATS_POSTGRES_START_TIMEOUT_SECONDS=300 \
 bash scripts/verify/s07-postgres-integration.sh
 ```
 
-A Codex worker may complete local source/build/browser proof and open/update a PR; GitHub CI must supply the missing genuine PostgreSQL/T4 evidence before the work is considered relationally proven.
+A Codex worker may complete local source/build/browser proof and open/update a PR; GitHub CI must supply the missing genuine PostgreSQL/T4 evidence before relational work is considered proven.
 
-## GitHub and fleet coordination
+## GitHub access and fleet coordination
 
 Codex Cloud workers are fleet workers, not privileged bypasses.
 
-Before mutable work they must:
+### Saved GitHub authentication — prepared, new-worker execution not yet proven
+
+Gerome has configured a GitHub token in the Codex environment **secrets** and supplied a complete replacement `torn-codex-setup.sh`; that script has passed Bash syntax validation. Installation plus successful authenticated execution in a newly created worker are **not yet evidenced**.
+
+The supplied setup path:
+
+- installs `gh`;
+- accepts `CODEX_GITHUB_TOKEN`, then `GH_TOKEN`, then `GITHUB_TOKEN` in that priority order;
+- authenticates `gh` through stdin during setup;
+- configures Git to use the `gh` credential helper;
+- adds a credential-free `origin` only if one is missing;
+- reads Torn #140 as a setup check.
+
+Environment secrets themselves disappear before the worker phase. The design deliberately persists `gh` credentials/config for the same OS user and `HOME`; depending on `gh`/keyring availability this may fall back to plaintext storage. Never request, print, dump, commit, echo into logs, or place the credential in a Git remote URL.
+
+A new worker should begin by using the **saved** authentication rather than expecting the original secret environment variable to still exist:
+
+```bash
+gh api repos/geromet/TornHappyGymStats/issues/140 --jq '{number,title}'
+```
+
+Then read the live #140 body and all relevant recent comments plus the exact target/default/PR state. GitHub access requires worker network access to `api.github.com` and Git operations require `github.com`. If access fails, distinguish missing saved authentication from network denial from insufficient repository permission without exposing credentials. Public reads, a successful setup script, or a connector-published response are not authenticated-write proof.
+
+Issue **#227** owns the remaining new-worker access proof. Before mutable work, a newly authenticated worker must demonstrate the normal two-phase lifecycle on a narrow diagnostic scope: create a #140 claim, reread and win by comment ID, then edit that **same** comment to `🔓 RELEASED`. Failure to create or edit ownership fails closed; do not substitute stale snapshots, Manager preclaims, Claude, or uncoordinated mutation.
+
+### Mutable-work contract
+
+Before mutable work a worker must:
 
 1. read `AGENTS.md` and `docs/WORKING-AGREEMENT.md`;
 2. read issue #140 body **and recent comments**, plus current target/PR/default state;
@@ -143,40 +172,47 @@ Before mutable work they must:
 5. reread #140 immediately after claiming; earlier GitHub comment ID wins overlapping claims;
 6. refresh once more immediately before the first conflicting mutation;
 7. treat the observed remote branch head as a CAS token and stop/reconcile unexpected movement;
-8. edit the **same claim comment** to canonical `🔓 RELEASED` when ownership ends;
-9. **never merge any branch or PR into `main` or another repository default branch**.
+8. edit the **same claim comment** to canonical `🔓 RELEASED` when ownership ends.
 
-A separate Codex GitHub-plugin smoke test has been prepared to prove that the Cloud worker can create a #140 claim comment and edit that exact comment back to RELEASED. Until that smoke test actually passes, do not assume direct LOCK mutation works merely because the plugin is installed; a Manager/preclaim handoff remains the safe fallback.
+Fleet/scout lanes must never merge any branch or PR into a repository default. Do not give Cloud workers production/deployment/Torn credentials merely to increase autonomy. Production/operator actions, interactive SSH/passkey work and Torn state changes remain outside normal agent authority.
 
-Do not give Cloud workers production/deployment/Torn credentials simply to increase autonomy. Production/operator actions, interactive SSH/passkey work and Torn state changes remain outside normal agent authority.
+## Codex final review / merge handoff
 
-## Scheduling / unattended dispatch
+Gerome designates Codex as the final PR reviewer/merger; Claude is no longer the merger.
 
-There is currently **no verified recurring scheduler directly attached to this configured Codex Cloud code environment** in the Cloud web setup used for Torn.
+Torn also performs additional automatic Codex scans when PRs are created. A scan request, task acceptance, reaction, silence, or earlier-head result is not current-head approval. Before a final-merge request, inspect the actual current-head scan/review result, required CI/evidence tiers, review threads, linked acceptance/dependencies, PR base/head and live #140 ownership. If a required scan has not visibly completed, classify the PR `WAITING FOR SCAN` with the exact missing result rather than treating silence as a pass.
 
-Related OpenAI capabilities must not be conflated:
-
-- Codex/ChatGPT automations can schedule work, but project-scoped desktop code automations and web/plugin automations have different execution models.
-- OpenAI's official `openai/codex-action@v1` runs `codex exec` on a GitHub Actions runner and requires an `OPENAI_API_KEY`. That is not proof that it launches this configured subscription-backed Cloud environment.
-- OpenAI exposes remote trigger APIs for some workspace-agent surfaces, but equivalence to this configured Codex Cloud environment has not been proven.
-
-Issue **#227** is the canonical work package for investigating a low-cost GitHub Actions `schedule` dispatcher. The intended architecture is:
+When the full gate passes, the normal handoff owner may make **one** deduplicated account-authored PR conversation request beginning `@codex`, with deterministic marker:
 
 ```text
-GitHub Actions cron / workflow_dispatch
-            ↓
-small coordination + trigger dispatcher
-            ↓
-configured Torn Codex Cloud worker
-            ↓
-AGENTS.md → #140 claim → work → local proof → PR
-            ↓
-GitHub CI supplies full proof, including PostgreSQL
-            ↓
-Codex releases the same #140 claim
+codex-final-merge:<owner/repo>:<pr>:<head-sha>
 ```
 
-The dispatcher must not silently switch from subscription/Codex allowance to separately metered API usage. Billing path, idempotency, concurrency, WIP-gate no-op behavior and a kill switch are acceptance criteria in #227.
+The handoff transfers ownership only after its own exact #140 claim is released. Codex must then acquire its own exact scope, recheck head/base/checks/scans/threads/dependencies, and merge only if permissions and repository protections permit. Never bypass protections. A changed head requires fresh proof and a new request only after prior worker ownership is resolved.
+
+An `@codex` request is not merge evidence. Follow through by verifying GitHub's merged state and resulting default incorporation. If Codex cannot authenticate, claim, or merge, record the concrete access blocker once on the canonical access/human-attention surface; do not loop mentions, fall back to Claude, or let a fleet automation perform the merge.
+
+## Trigger evidence and deferred scheduling
+
+The trigger question is no longer open-ended research:
+
+- PR **#233 is merged** and contains the bounded manual-only Actions diagnostic workflow.
+- Both an account-authored mention and an actual `github-actions[bot]` mention have been observed to start Codex Cloud workers.
+- Issue **#232 is closed completed** as a bounded diagnostic outcome.
+- The same-token NO-OP is verified in Actions run `33998009222`, job `101392610776`: token `torn-cloud-smoke-0006-020` was already present on #200 as comment `5555426288`, and the compose/post path was skipped rather than posting a duplicate trigger.
+
+These observations prove the bounded trigger/dedup behavior. They do **not** prove authenticated worker mutation, final result publication/account attribution, merge permission, or a safe recurring scheduler.
+
+Issue **#227** remains open for the exact remaining access/result/account proof and for recurring-dispatch requirements **only when Gerome reopens that scope**. Actions scheduling is currently deferred. Do not:
+
+- re-run broad trigger research or the completed #232 smoke merely because an older comment called a rerun pending;
+- enable cron/schedules or dispatch repeated blocked workers;
+- add/change credentials or settings from fleet automation;
+- silently substitute `openai/codex-action` / separately metered API execution;
+- describe bot-author filtering as the blocker;
+- claim that adding the setup script or reading a public issue proves worker write/merge access.
+
+When Gerome later reopens recurring scheduling, #227 must still cover pre-dispatch live LOCK/WIP no-op, durable task identity, worker-lifecycle exclusion, ambiguous-submission reconciliation, explicit billing/account attribution and a kill switch before any schedule is relied upon.
 
 Official related references:
 
@@ -187,21 +223,25 @@ Official related references:
 
 ## Re-test triggers
 
-Repeat the Cloud capability test when a material platform/environment change could invalidate this snapshot, especially if:
+Repeat the Cloud capability test when a material platform/environment change could invalidate the capability snapshot, especially if:
 
 - Codex Cloud gains documented container/nested-virtualization support;
 - Docker image execution starts succeeding;
 - the environment/base image changes materially;
-- Torn changes its required SDK/browser/test topology;
-- the GitHub plugin/Cloud trigger surfaces materially change.
+- Torn changes its required SDK/browser/test topology.
 
-Do not re-run expensive Docker/Postgres experiments every ordinary coding task without such a signal.
+Re-test the GitHub access boundary separately when the saved-credential setup is deployed to a new worker or GitHub/network permissions change. Do not infer access from the older unauthenticated worker result after a new setup, and do not infer successful write/merge authority from read access alone.
+
+Do not re-run expensive Docker/Postgres experiments every ordinary coding task without a material signal.
 
 ## Current control-plane references
 
-- #140 — canonical live fleet LOCK / WIP authority.
-- #218 — completion/consolidation map.
-- #227 — scheduled Codex Cloud dispatcher work package.
+- #140 — canonical live fleet LOCK / WIP / handoff authority.
+- #218 — dated completion/consolidation aid; live code and GitHub state win.
+- #223 — canonical tracked-Markdown remediation inventory.
+- #227 — current Codex Cloud authenticated-worker/result/account proof; recurring scheduling is deferred until Gerome reopens it.
+- #232 — **closed completed** bounded Actions-bot trigger/dedup diagnostic.
+- #233 — **merged** manual-only trigger-smoke workflow and contract tests.
 - `AGENTS.md` — repository agent entrypoint.
 - `docs/WORKING-AGREEMENT.md` — cross-agent safety/evidence contract.
 - `scripts/verify/manifest.tsv` — verifier graph.
