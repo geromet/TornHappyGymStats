@@ -17,8 +17,7 @@ public static class Ecies
     public static byte[] Encrypt(ReadOnlySpan<byte> recipientPublicKeySpki, ReadOnlySpan<byte> plaintext)
     {
         using var ephemeral = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
-        using var recipientEcdh = ECDiffieHellman.Create();
-        recipientEcdh.ImportSubjectPublicKeyInfo(recipientPublicKeySpki, out _);
+        using var recipientEcdh = P256PublicKey.ImportSubjectPublicKeyInfo(recipientPublicKeySpki);
 
         var sharedSecret = ephemeral.DeriveRawSecretAgreement(recipientEcdh.PublicKey);
         var aesKey = HKDF.DeriveKey(HashAlgorithmName.SHA256, sharedSecret, 32, info: HkdfInfo);
@@ -66,8 +65,7 @@ public static class Ecies
         var ciphertext = blob.Slice(off, ciphertextLen);
         var tag = blob.Slice(off + ciphertextLen, TagSize);
 
-        using var ephemeralKey = ECDiffieHellman.Create();
-        ephemeralKey.ImportSubjectPublicKeyInfo(ephemeralSpki, out _);
+        using var ephemeralKey = P256PublicKey.ImportSubjectPublicKeyInfo(ephemeralSpki);
 
         var sharedSecret = recipientKey.DeriveRawSecretAgreement(ephemeralKey.PublicKey);
         var aesKey = HKDF.DeriveKey(HashAlgorithmName.SHA256, sharedSecret, 32, info: HkdfInfo);
