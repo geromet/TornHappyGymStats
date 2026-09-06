@@ -55,9 +55,11 @@ public sealed class AccountConnectionsBlazorServiceTests
 
         await sut.ConnectAsync(secret, consentAccepted: true);
 
-        Assert.DoesNotContain(secret, requestUri, StringComparison.Ordinal);
-        Assert.Contains(secret, requestBody, StringComparison.Ordinal);
-        Assert.Contains("ConsentAccepted", requestBody, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(requestUri);
+        Assert.NotNull(requestBody);
+        Assert.DoesNotContain(secret, requestUri!, StringComparison.Ordinal);
+        Assert.Contains(secret, requestBody!, StringComparison.Ordinal);
+        Assert.Contains("ConsentAccepted", requestBody!, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
