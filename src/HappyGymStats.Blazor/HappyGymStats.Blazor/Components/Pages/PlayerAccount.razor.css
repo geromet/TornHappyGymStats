@@ -1,0 +1,33 @@
+.account-connections-page {
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.account-connections-page .account-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.account-connections-page .account-table th,
+.account-connections-page .account-table td {
+    padding: 0.55rem 0.35rem;
+    text-align: left;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+}
+
+.account-connections-page .account-table th {
+    width: 11rem;
+    font-weight: 600;
+}
+
+.account-connections-page ::deep .mud-stack-row {
+    flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+    .account-connections-page .account-table th {
+        width: 8rem;
+    }
+}

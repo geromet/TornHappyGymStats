@@ -1,0 +1,83 @@
+name: Account connections render proof
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Layout/MainLayout.razor'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Layout/MainLayout.razor.css'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/PlayerAccount.razor'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/PlayerAccount.razor.css'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Services/AccountConnectionsService.cs'
+      - 'src/HappyGymStats.Api/Infrastructure/DevelopmentAccountConnectionFixture.cs'
+      - 'src/HappyGymStats.Api/Program.cs'
+      - 'scripts/screenshot-board.sh'
+      - 'scripts/ux/shoot.py'
+      - '.github/workflows/account-connections-render.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: account-connections-render-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    name: 390 / 768 / 1440 account lifecycle screenshots
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install .NET (version from global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install screenshot tooling
+        run: bash scripts/screenshot-board.sh --setup
+
+      - name: Capture Account & Connections at phone, tablet and desktop widths
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p workspace/tmp
+          bash scripts/screenshot-board.sh --route /player-account --out workspace/tmp/screenshots/account-connections 2>&1 | tee workspace/tmp/account-connections-render.log
+          if grep -q '^  ! .*console/page error(s)' workspace/tmp/account-connections-render.log; then
+            echo 'FAIL: /player-account emitted browser console/page errors during render proof' >&2
+            exit 1
+          fi
+
+      - name: Capture connected, replacement-error and revoke-confirmation states
+        shell: bash
+        run: |
+          set -o pipefail
+          SHOT_ACCOUNT_FIXTURE=replacement-error SHOT_SKIP_BUILD=1 \
+            bash scripts/screenshot-board.sh \
+              --route /player-account \
+              --account-state connected \
+              --account-state replacement-error \
+              --account-state revoke-confirmation \
+              --out workspace/tmp/screenshots/account-connections-states \
+              2>&1 | tee workspace/tmp/account-connections-states-render.log
+          if grep -q '^  ! .*console/page error(s)' workspace/tmp/account-connections-states-render.log; then
+            echo 'FAIL: an Account & Connections lifecycle state emitted browser console/page errors' >&2
+            exit 1
+          fi
+          test "$(find workspace/tmp/screenshots/account-connections-states -maxdepth 1 -type f -name '*.png' | wc -l)" -eq 18
+
+      - name: Upload render proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: account-connections-render-proof
+          path: |
+            workspace/tmp/screenshots/account-connections
+            workspace/tmp/screenshots/account-connections-states
+            workspace/tmp/account-connections-render.log
+            workspace/tmp/account-connections-states-render.log
+          if-no-files-found: error
+          retention-days: 7

@@ -1,64 +1,420 @@
 @page "/player-account"
+@rendermode InteractiveServer
 @attribute [Authorize]
-@using Microsoft.AspNetCore.Authorization
 @using System.Security.Claims
+@using HappyGymStats.Blazor.Services
+@using Microsoft.AspNetCore.Authorization
+@inject AccountConnectionsService Connections
+@inject NavigationManager Navigation
 
-<PageTitle>Player Account · Happy Gym Stats</PageTitle>
+<PageTitle>Account &amp; Connections · Happy Gym Stats</PageTitle>
 
-<MudPaper Class="pa-6">
-    <MudText Typo="Typo.h4" GutterBottom="true">Player account</MudText>
-    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
-        Confirm which Happy Gym Stats account is currently signed in.
-    </MudText>
+<MudStack Spacing="3" Class="account-connections-page">
+    <div>
+        <MudText Typo="Typo.h4" GutterBottom="true">Account &amp; Connections</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary">
+            Manage the account signed in to Happy Gym Stats and the Torn credential used for your personal data.
+        </MudText>
+    </div>
 
     <AuthorizeView>
         <Authorized Context="authState">
-            <MudCard>
-                <MudCardHeader>
-                    <MudText Typo="Typo.h6">Signed-in account</MudText>
-                </MudCardHeader>
-                <MudCardContent>
-                    <MudSimpleTable Dense="true" Hover="true">
+            <MudPaper Class="pa-5" Elevation="0" Outlined="true">
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.h5">Identity</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Confirm which Happy Gym Stats account is currently signed in. Provider and claim diagnostics stay on operator-only surfaces.
+                    </MudText>
+                    <table class="mud-table-root account-table" aria-label="Signed-in account details">
                         <tbody>
                             <tr>
-                                <td><strong>Account</strong></td>
+                                <th scope="row">Account</th>
                                 <td>@GetDisplayName(authState.User)</td>
                             </tr>
                             @if (GetEmail(authState.User) is { } email)
                             {
                                 <tr>
-                                    <td><strong>Email</strong></td>
+                                    <th scope="row">Email</th>
                                     <td>@email</td>
                                 </tr>
                             }
                             <tr>
-                                <td><strong>Session</strong></td>
+                                <th scope="row">App role</th>
+                                <td>@GetFriendlyRole(authState.User)</td>
+                            </tr>
+                            @if (GetFaction(authState.User) is { } faction)
+                            {
+                                <tr>
+                                    <th scope="row">Faction</th>
+                                    <td>@faction</td>
+                                </tr>
+                            }
+                            <tr>
+                                <th scope="row">Session</th>
                                 <td>Signed in</td>
                             </tr>
                         </tbody>
-                    </MudSimpleTable>
+                    </table>
+                </MudStack>
+            </MudPaper>
 
-                    <MudAlert Severity="Severity.Info" Dense="true" Class="mt-4">
-                        Technical sign-in diagnostics are intentionally kept out of member-facing pages.
-                    </MudAlert>
-                </MudCardContent>
-            </MudCard>
+            <MudPaper Class="pa-5" Elevation="0" Outlined="true">
+                <MudStack Spacing="2">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <div>
+                            <MudText Typo="Typo.h5">Torn connection</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                The Torn API key is stored encrypted on the Happy Gym Stats server only after you confirm the current consent.
+                            </MudText>
+                        </div>
+                        @if (_connection is not null)
+                        {
+                            <MudChip T="string" Color="@ConnectionColor" Variant="Variant.Outlined">@ConnectionLabel</MudChip>
+                        }
+                    </MudStack>
+
+                    @if (_loadingConnection)
+                    {
+                        <MudProgressLinear Indeterminate="true" Color="Color.Primary" aria-label="Loading Torn connection status" />
+                        <MudText Typo="Typo.body2">Loading connection status…</MudText>
+                    }
+                    else if (_loadError is not null)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                            @_loadError
+                        </MudAlert>
+                        <MudButton Variant="Variant.Outlined" OnClick="LoadConnectionAsync">Retry</MudButton>
+                    }
+                    else
+                    {
+                        @if (IsConnected)
+                        {
+                            <table class="mud-table-root account-table" aria-label="Torn connection details">
+                                <tbody>
+                                    @if (_connection?.TornPlayerId is { } playerId)
+                                    {
+                                        <tr><th scope="row">Torn player</th><td>#@playerId</td></tr>
+                                    }
+                                    @if (_connection?.StoredAtUtc is { } storedAt)
+                                    {
+                                        <tr><th scope="row">Credential stored</th><td>@FormatDate(storedAt)</td></tr>
+                                    }
+                                    @if (_connection?.Consent is { } consent)
+                                    {
+                                        <tr><th scope="row">Consent version</th><td>@consent.DocumentVersion</td></tr>
+                                        <tr><th scope="row">Consent accepted</th><td>@FormatDate(consent.AcceptedAtUtc)</td></tr>
+                                        <tr><th scope="row">Purpose</th><td>@consent.Purpose</td></tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                                No Torn API key is connected to this account yet.
+                            </MudAlert>
+                        }
+
+                        @if (_showCredentialForm || !IsConnected)
+                        {
+                            <MudPaper Class="pa-4" Elevation="0" Outlined="true">
+                                <MudStack Spacing="2">
+                                    <MudText Typo="Typo.h6">@(IsConnected ? "Replace Torn API key" : "Connect Torn")</MudText>
+                                    <MudText Typo="Typo.body2">
+                                        Use a Torn API key with only the permissions Happy Gym Stats requires. The submitted key is sent to the server for validation, encrypted for storage after consent, and is never shown here again. You can revoke the stored connection below at any time.
+                                    </MudText>
+                                    <MudTextField T="string"
+                                                  Label="Torn API key"
+                                                  InputType="InputType.Password"
+                                                  Variant="Variant.Outlined"
+                                                  @bind-Value="_tornApiKey"
+                                                  Disabled="_savingConnection"
+                                                  HelperText="The key is cleared from this form after every connection attempt."
+                                                  aria-label="Torn API key" />
+                                    <MudCheckBox T="bool"
+                                                 @bind-Value="_consentAccepted"
+                                                 Disabled="_savingConnection"
+                                                 Label="I consent to encrypted server-side storage of this Torn API key for my Happy Gym Stats connection." />
+                                    <MudStack Row="true" Spacing="2">
+                                        <MudButton Variant="Variant.Filled"
+                                                   Color="Color.Primary"
+                                                   Disabled="@(!CanSubmitCredential)"
+                                                   OnClick="SaveConnectionAsync">
+                                            @(IsConnected ? "Replace connection" : "Connect Torn")
+                                        </MudButton>
+                                        @if (IsConnected)
+                                        {
+                                            <MudButton Variant="Variant.Text" Disabled="_savingConnection" OnClick="CancelCredentialEdit">Cancel</MudButton>
+                                        }
+                                    </MudStack>
+                                </MudStack>
+                            </MudPaper>
+                        }
+                        else if (IsConnected)
+                        {
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="BeginCredentialEdit">
+                                Replace Torn API key
+                            </MudButton>
+                        }
+
+                        @if (IsConnected)
+                        {
+                            <MudDivider />
+                            @if (!_confirmRevoke)
+                            {
+                                <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="BeginRevoke">
+                                    Revoke connection
+                                </MudButton>
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                                    Revoking removes this account's stored Torn credential. Happy Gym Stats will stop using it for personal Torn requests until you connect again.
+                                </MudAlert>
+                                <MudStack Row="true" Spacing="2">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Error" Disabled="_savingConnection" OnClick="ConfirmRevokeAsync">
+                                        Confirm revoke
+                                    </MudButton>
+                                    <MudButton Variant="Variant.Text" Disabled="_savingConnection" OnClick="CancelRevoke">Keep connection</MudButton>
+                                </MudStack>
+                            }
+                        }
+                    }
+
+                    @if (_operationMessage is not null)
+                    {
+                        <div role="status" aria-live="polite">
+                            <MudAlert Severity="@_operationSeverity" Variant="Variant.Outlined">@_operationMessage</MudAlert>
+                        </div>
+                    }
+                </MudStack>
+            </MudPaper>
+
+            <MudPaper Class="pa-5" Elevation="0" Outlined="true">
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.h5">Consent &amp; privacy</MudText>
+                    <MudText Typo="Typo.body2">
+                        Connection consent applies to the credential Happy Gym Stats stores for your account. Revoking the connection removes the stored Torn credential; other account data follows the application's published retention and deletion terms.
+                    </MudText>
+                    <MudStack Row="true" Spacing="2">
+                        <MudButton Href="/privacy" Variant="Variant.Text">Privacy</MudButton>
+                        <MudButton Href="/terms" Variant="Variant.Text">Terms &amp; data handling</MudButton>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+
+            <MudPaper Class="pa-5" Elevation="0" Outlined="true">
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.h5">App session</MudText>
+                    <MudText Typo="Typo.body2">You are signed in to Happy Gym Stats as @GetDisplayName(authState.User).</MudText>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="SignOut">Sign out</MudButton>
+                </MudStack>
+            </MudPaper>
+
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                Technical sign-in diagnostics are intentionally kept out of member-facing pages. Operators can use the dedicated authenticated diagnostics surface when troubleshooting is required.
+            </MudAlert>
         </Authorized>
-        <NotAuthorized>
-            <MudAlert Severity="Severity.Warning">You must be signed in to view player account details.</MudAlert>
-        </NotAuthorized>
     </AuthorizeView>
-</MudPaper>
+</MudStack>
 
 @code {
+    private TornConnectionStatusDto? _connection;
+    private bool _loadingConnection = true;
+    private bool _savingConnection;
+    private bool _showCredentialForm;
+    private bool _consentAccepted;
+    private bool _confirmRevoke;
+    private string? _tornApiKey;
+    private string? _loadError;
+    private string? _operationMessage;
+    private Severity _operationSeverity = Severity.Info;
+
+    private bool IsConnected => string.Equals(_connection?.State, "connected", StringComparison.OrdinalIgnoreCase);
+    private string ConnectionLabel => IsConnected ? "Connected" : "Not connected";
+    private Color ConnectionColor => IsConnected ? Color.Success : Color.Default;
+    private bool CanSubmitCredential => !_savingConnection && !string.IsNullOrWhiteSpace(_tornApiKey) && _consentAccepted;
+
+    protected override async Task OnInitializedAsync() => await LoadConnectionAsync();
+
+    private async Task LoadConnectionAsync()
+    {
+        _loadingConnection = true;
+        _loadError = null;
+        try
+        {
+            _connection = await Connections.GetAsync();
+        }
+        catch (AccountConnectionFailure failure)
+        {
+            _loadError = failure.SafeMessage;
+        }
+        catch (HttpRequestException)
+        {
+            _loadError = "The connection service is temporarily unreachable. Please try again.";
+        }
+        finally
+        {
+            _loadingConnection = false;
+        }
+    }
+
+    private void BeginCredentialEdit()
+    {
+        _showCredentialForm = true;
+        _consentAccepted = false;
+        _operationMessage = null;
+        _confirmRevoke = false;
+    }
+
+    private void CancelCredentialEdit()
+    {
+        _showCredentialForm = false;
+        _tornApiKey = null;
+        _consentAccepted = false;
+    }
+
+    private async Task SaveConnectionAsync()
+    {
+        if (!CanSubmitCredential)
+            return;
+
+        _savingConnection = true;
+        _operationMessage = null;
+        var key = _tornApiKey!;
+        try
+        {
+            _connection = await Connections.ConnectAsync(key, _consentAccepted);
+            _operationSeverity = Severity.Success;
+            _operationMessage = IsConnected ? "Torn connection saved." : "Torn connection request completed.";
+            _showCredentialForm = false;
+            _consentAccepted = false;
+        }
+        catch (AccountConnectionFailure failure) when (failure.Code is "connection_timeout" or "connection_interrupted")
+        {
+            await ReconcileUnknownMutationAsync(failure.SafeMessage);
+        }
+        catch (AccountConnectionFailure failure)
+        {
+            _operationSeverity = Severity.Warning;
+            _operationMessage = failure.SafeMessage;
+        }
+        catch (HttpRequestException)
+        {
+            await ReconcileUnknownMutationAsync(
+                "The connection service became unreachable before the result was confirmed, so the connection outcome is unknown.");
+        }
+        finally
+        {
+            _tornApiKey = null;
+            _savingConnection = false;
+        }
+    }
+
+    private void BeginRevoke()
+    {
+        _confirmRevoke = true;
+        _operationMessage = null;
+        _showCredentialForm = false;
+        _tornApiKey = null;
+        _consentAccepted = false;
+    }
+
+    private void CancelRevoke() => _confirmRevoke = false;
+
+    private async Task ConfirmRevokeAsync()
+    {
+        _savingConnection = true;
+        _operationMessage = null;
+        try
+        {
+            _connection = await Connections.RevokeAsync();
+            _confirmRevoke = false;
+            _operationSeverity = IsConnected ? Severity.Warning : Severity.Success;
+            _operationMessage = IsConnected
+                ? "The revoke request completed, but a Torn connection is still active. Review the current connection before trying again."
+                : "Torn connection revoked. The stored Torn credential is no longer connected to this account.";
+        }
+        catch (AccountConnectionFailure failure) when (failure.Code is "connection_timeout" or "connection_interrupted")
+        {
+            await ReconcileUnknownMutationAsync(failure.SafeMessage);
+        }
+        catch (AccountConnectionFailure failure)
+        {
+            _operationSeverity = Severity.Warning;
+            _operationMessage = failure.SafeMessage;
+        }
+        catch (HttpRequestException)
+        {
+            await ReconcileUnknownMutationAsync(
+                "The connection service became unreachable before the result was confirmed, so the connection outcome is unknown.");
+        }
+        finally
+        {
+            _savingConnection = false;
+        }
+    }
+
+    private async Task ReconcileUnknownMutationAsync(string reason)
+    {
+        _operationSeverity = Severity.Warning;
+        _operationMessage = reason;
+
+        try
+        {
+            _connection = await Connections.GetAsync();
+            _loadError = null;
+            _operationMessage = $"{reason} The current status was refreshed; review it before retrying.";
+        }
+        catch (AccountConnectionFailure)
+        {
+            MarkStatusUnknown();
+        }
+        catch (HttpRequestException)
+        {
+            MarkStatusUnknown();
+        }
+    }
+
+    private void MarkStatusUnknown()
+    {
+        _connection = null;
+        _loadError = "The request outcome is unknown, and the current connection status could not be refreshed. Retry status before taking another action.";
+    }
+
+    private void SignOut() => Navigation.NavigateTo("/auth/logout?returnUrl=%2F", forceLoad: true);
+
     private static string GetDisplayName(ClaimsPrincipal user)
-        => user.Identity?.Name
-            ?? FindFirst(user, "preferred_username")
-            ?? "Signed-in member";
+    {
+        if (!string.IsNullOrWhiteSpace(user.Identity?.Name))
+            return user.Identity.Name;
 
-    private static string? GetEmail(ClaimsPrincipal user)
-        => FindFirst(user, ClaimTypes.Email) ?? FindFirst(user, "email");
+        return FindFirst(user, "preferred_username", ClaimTypes.Email, "email") ?? "Signed-in user";
+    }
 
-    private static string? FindFirst(ClaimsPrincipal user, string claimType)
-        => user.Claims.FirstOrDefault(c => string.Equals(c.Type, claimType, StringComparison.Ordinal))?.Value;
+    private static string? GetEmail(ClaimsPrincipal user) => FindFirst(user, ClaimTypes.Email, "email");
+
+    private static string GetFriendlyRole(ClaimsPrincipal user)
+    {
+        if (user.IsInRole("admin")) return "Administrator";
+        if (user.IsInRole("hgs-user") || user.IsInRole("user")) return "Member";
+        return "Signed-in member";
+    }
+
+    private static string? GetFaction(ClaimsPrincipal user) => FindFirst(user, "faction_name", "faction");
+
+    private static string? FindFirst(ClaimsPrincipal user, params string[] claimTypes)
+    {
+        foreach (var claimType in claimTypes)
+        {
+            var value = user.FindFirst(claimType)?.Value;
+            if (!string.IsNullOrWhiteSpace(value))
+                return value;
+        }
+
+        return null;
+    }
+
+    private static string FormatDate(DateTimeOffset value)
+        => value.ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'");
 }

@@ -153,6 +153,10 @@ public sealed class Program
                 client.BaseAddress = new Uri(apiBaseUrl))
             .AddHttpMessageHandler<AccessTokenForwardingHandler>();
 
+        builder.Services.AddHttpClient<AccountConnectionsService>(client =>
+                client.BaseAddress = new Uri(apiBaseUrl))
+            .AddHttpMessageHandler<AccessTokenForwardingHandler>();
+
         builder.Services.Configure<ForwardedHeadersOptions>(options =>
         {
             options.ForwardedHeaders =

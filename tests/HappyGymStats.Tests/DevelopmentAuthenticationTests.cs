@@ -34,7 +34,7 @@ public sealed class DevelopmentAuthenticationTests
         var response = await client.GetAsync("/secure");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("dev-war-planner", await response.Content.ReadAsStringAsync());
+        Assert.Equal(DevelopmentAuthenticationExtensions.DefaultUserName, await response.Content.ReadAsStringAsync());
     }
 
     [Fact]

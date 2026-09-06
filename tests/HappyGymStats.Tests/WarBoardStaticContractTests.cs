@@ -62,6 +62,10 @@ public sealed class WarBoardStaticContractTests
         Assert.Contains("GetTokenAsync(\"access_token\")", tokenProvider, StringComparison.Ordinal);
         Assert.Contains("PersistAsJson", tokenProvider, StringComparison.Ordinal);
         Assert.Contains("TryTakeFromJson", tokenProvider, StringComparison.Ordinal);
+
+        var routes = ReadRepoFile("src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Routes.razor");
+        Assert.Contains("@inject IServerAccessTokenProvider AccessTokens", routes, StringComparison.Ordinal);
+        Assert.Contains("AccessTokens.GetAccessTokenAsync()", routes, StringComparison.Ordinal);
     }
 
     [Fact]

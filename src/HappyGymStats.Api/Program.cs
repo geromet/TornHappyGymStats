@@ -33,7 +33,11 @@ else
 builder.Services.AddScoped<IClaimsTransformation, HappyGymStatsClaimsTransformer>();
 builder.Services.Configure<ProvisionalTokenOptions>(
     builder.Configuration.GetSection(ProvisionalTokenOptions.Section));
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IProvisionalTokenService, ProvisionalTokenService>();
+var developmentAccountFixture = DevelopmentAccountConnectionFixture.Create(
+    builder.Configuration,
+    developmentAuthEnabled);
 
 builder.Services.AddCors(options =>
     options.AddPolicy("ReadApi", policy =>
@@ -112,7 +116,14 @@ builder.Services.AddScoped<IWarPayoutRepository, WarPayoutRepository>();
 builder.Services.AddScoped(sp => new StoredApiKeyStore(
     sp.GetRequiredService<HappyGymStatsDbContext>(),
     () => WarKeyVault.FromEnvironment()));
-builder.Services.AddScoped<IAccountConnectionService, AccountConnectionService>();
+if (developmentAccountFixture is null)
+{
+    builder.Services.AddScoped<IAccountConnectionService, AccountConnectionService>();
+}
+else
+{
+    builder.Services.AddSingleton<IAccountConnectionService>(developmentAccountFixture);
+}
 
 builder.Services.AddScoped<LogFetcher>();
 builder.Services.AddScoped<PerkLogFetcher>();
@@ -167,6 +178,8 @@ using (var scope = app.Services.CreateScope())
         || string.Equals(skipWarSeedRaw, "true", StringComparison.OrdinalIgnoreCase);
     if (developmentAuthEnabled)
     {
+        await DevelopmentIdentitySeed.SeedAsync(db, app.Logger);
+
         if (skipWarSeed)
         {
             await DevelopmentWarSeed.ClearAsync(db, app.Logger);

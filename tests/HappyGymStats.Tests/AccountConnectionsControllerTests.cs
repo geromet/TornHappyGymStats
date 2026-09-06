@@ -11,7 +11,7 @@ namespace HappyGymStats.Tests;
 public sealed class AccountConnectionsControllerTests
 {
     [Fact]
-    public async Task Missing_or_malformed_owner_claim_fails_closed_before_service_call()
+    public async Task Missing_owner_claim_requests_identity_setup_while_malformed_claim_fails_closed()
     {
         var service = new RecordingConnectionService();
         var missing = CreateController(service, anonymousIdClaim: null);
@@ -20,7 +20,9 @@ public sealed class AccountConnectionsControllerTests
         var missingResult = await missing.GetStatus(CancellationToken.None);
         var malformedResult = await malformed.Revoke(CancellationToken.None);
 
-        Assert.Equal(StatusCodes.Status401Unauthorized, Assert.IsType<ObjectResult>(missingResult).StatusCode);
+        var missingError = Assert.IsType<ObjectResult>(missingResult);
+        Assert.Equal(StatusCodes.Status409Conflict, missingError.StatusCode);
+        Assert.Contains("identity_setup_required", JsonSerializer.Serialize(missingError.Value), StringComparison.Ordinal);
         Assert.Equal(StatusCodes.Status401Unauthorized, Assert.IsType<ObjectResult>(malformedResult).StatusCode);
         Assert.Empty(service.Calls);
     }

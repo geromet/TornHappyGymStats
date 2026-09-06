@@ -2,17 +2,19 @@
 @attribute [Authorize]
 @using Microsoft.AspNetCore.Authorization
 
-<PageTitle>Settings · Happy Gym Stats</PageTitle>
+<PageTitle>Preferences · Happy Gym Stats</PageTitle>
 
 <MudPaper Class="pa-6">
-    <MudText Typo="Typo.h4" GutterBottom="true">Settings</MudText>
-    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
-        User and environment preferences.
-    </MudText>
-
-    <MudStack Spacing="2" Style="max-width:700px;">
-        <MudTextField T="string" Label="API base URL" Placeholder="https://api.happygymstats.dev" Variant="Variant.Outlined" />
-        <MudSwitch T="bool" Label="Use compact cards" Color="Color.Primary" Value="false" Disabled="true" />
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="true">Save settings</MudButton>
+    <MudStack Spacing="2">
+        <MudText Typo="Typo.h4">Preferences</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary">
+            There are no member preferences to configure yet.
+        </MudText>
+        <MudText Typo="Typo.body2">
+            Torn credentials and connection consent are managed from Account &amp; Connections instead of developer settings.
+        </MudText>
+        <MudButton Href="/player-account" Variant="Variant.Outlined" Color="Color.Primary">
+            Open Account &amp; Connections
+        </MudButton>
     </MudStack>
 </MudPaper>
