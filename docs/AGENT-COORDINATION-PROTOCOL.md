@@ -94,6 +94,11 @@ ASSIGNING is a durable SYN request, but it becomes an **active lease only if it 
 
 Immediately reconstruct complete state again. Admission has two independent gates.
 
+Refresh the target issue/PR and its authoritative dependencies/stop gates again
+after the SYN and immediately before evaluating admission. If the scope became
+blocked, it is no longer eligible, must not ACK, and should append OPEN/backoff
+when able.
+
 ### Gate A — ownership collision
 
 If any materially overlapping run is already `🔵 ASSIGNED` or `🛠️ WORKING`, the newcomer loses and must not mutate. It should append 🟢 OPEN when able, but correctness does not depend on that cleanup because the losing SYN is not admitted.
@@ -154,22 +159,40 @@ Escalate once when any applies:
 3. active leases already exceed five or a new assignment would exceed five;
 4. stale/contradictory/cut-off state, hidden useful work, missing review paths, supersession ambiguity, or branch/LOCK disagreement cannot be reconciled cheaply.
 
-Fingerprint format:
+Canonical fingerprint format:
 
 ```text
 advisor:<repo>:<reason>:<stable-identifiers>:<relevant-head-or-state>
 ```
 
+Serialize it deterministically:
+
+- `repo` is lowercase `owner/name`;
+- `reason` is exactly one of `no-runnable-work`, `repeat-unchanged`,
+  `lease-capacity`, or `unreconciled-state`;
+- `stable-identifiers` is the bytewise-ascending, comma-joined set of lowercase
+  issue/PR/ref/run tokens, with no whitespace or duplicates;
+- `relevant-head-or-state` is an exact lowercase 40-hex head when one head defines
+  the incident, otherwise `sha256-<hex>` over UTF-8/LF lines for every relevant
+  latest record, sorted by `run`, formatted
+  `run|seq|state|issue/package|branch|head|pr`, with no trailing newline.
+
+Do not invent aliases, reorder identifiers, or use an unspecified `<state-hash>`.
+
 When five active leases already exist, advisor dispatch uses a **lease-free #140-only control-plane exception**. After complete read-only reconstruction and initial fingerprint deduplication, an otherwise unassigned recovery run may append `🆘 WAITING ON ADVISOR` directly as its first transition (`seq=1`, `prev=none`). It must then reconstruct complete state **again**, collect all unresolved WAITING ON ADVISOR records with the identical fingerprint, and elect the earliest GitHub comment ID as the one durable request. Later identical-fingerprint WAITING records remain non-leases and do not become separate requests. This post-write election closes the concurrent pre-search race.
 
 The earliest WAITING comment is the elected durable request, not a lease owned by
 its originating worker. Any later recovery worker may complete dispatch for that
-same elected record if the originator is cut off. Immediately before posting,
-search the complete #140 history for the deterministic marker
-`advisor-dispatch:<fingerprint>:<elected-WAITING-comment-id>`. If it exists, do
-not post. If it does not, post one `@codex` request containing that marker and the
-elected record URL. On an ambiguous write result, reread for the marker before any
-retry. Later WAITING candidates never dispatch as separate requests.
+same elected record if the originator is cut off. A recovery worker first appends
+a non-mention dispatch-candidate comment containing the fingerprint and elected
+WAITING ID, then reconstructs complete history again. Among candidates for that
+elected record, the earliest GitHub comment ID wins. Any worker may idempotently
+PATCH only that winning candidate comment to the canonical `@codex` request,
+elected-record URL, and
+`advisor-dispatch:<fingerprint>:<elected-WAITING-comment-id>` marker. Concurrent
+helpers PATCH the same object to identical content, so GitHub contains one mention;
+losing candidate comments remain inert. On an ambiguous create or PATCH, reread
+before retrying.
 
 The exception authorizes only those #140 control-plane comments; branch, PR, issue-body, code, review, merge, or other repository mutation still requires normal admission once capacity is available.
 
@@ -238,8 +261,8 @@ ts=... | note=coherent package complete; exact-head evidence recorded
 🆘 WAITING ON ADVISOR | seq=1 | run=steward-def456 | lane=STEWARD |
 issue/package=coordination | branch=none | head=none | pr=none |
 base=none | base_sha=none | prev=none | ts=... |
-fingerprint=advisor:geromet/TornHappyGymStats:active-leases:5:<state-hash> |
-note=lease-free saturated-control-plane candidate; earliest identical-fingerprint WAITING comment is elected and any recovery worker may complete its marker-deduplicated @codex dispatch
+fingerprint=advisor:geromet/tornhappygymstats:lease-capacity:#140,main:sha256-<canonical-64-hex> |
+note=lease-free saturated-control-plane candidate; earliest identical-fingerprint WAITING is elected and its earliest dispatch-candidate comment is idempotently patched to the @codex request
 ```
 
 The goal is not ceremony. The goal is that an interrupted worker leaves enough durable, ordered evidence for the next worker or Codex advisor to recover safely without inventing state.

@@ -54,10 +54,11 @@ state machine below.
 
 Before mutation, append ASSIGNING with a unique `run=`, `seq=1`, exact
 issue/package/seam, intended branch and observed heads. Then reconstruct complete
-#140 state again. If any materially overlapping run is already ASSIGNED or
-WORKING, the newcomer must back off; a new ASSIGNING record never supersedes an
-active owner. Among overlapping ASSIGNING requests, the earlier GitHub comment ID
-wins.
+#140 state and refresh the target issue's dependencies/stop gates again. A
+candidate blocked since its SYN must back off without ACK. If any materially
+overlapping run is already ASSIGNED or WORKING, the newcomer must also back off; a
+new ASSIGNING record never supersedes an active owner. Among overlapping
+ASSIGNING requests, the earlier GitHub comment ID wins.
 
 Capacity admission is global, deterministic, and cleanup-independent. Count
 incumbent ASSIGNED/WORKING leases, compute remaining slots up to five, then sort
@@ -119,12 +120,13 @@ append WAITING ON ADVISOR directly as its first `seq=1`, `prev=none` transition.
 It must then reconstruct complete state again, compare every unresolved WAITING
 record with the identical fingerprint, and elect the earliest GitHub comment ID
 as the single durable request. Dispatch is not tied to that comment's originating
-worker: any later recovery worker may complete the elected request if no comment
-contains `advisor-dispatch:<fingerprint>:<elected-WAITING-comment-id>`. The one
-`@codex` dispatch must carry that marker; ambiguous writes require a complete
-reread before retry. Later identical-fingerprint WAITING records remain
-non-leases and never dispatch as separate requests. This preserves failover
-without turning later candidates into duplicate advisor requests.
+worker. Recovery workers append non-mention dispatch-candidate comments naming the
+elected WAITING ID, reread complete history, and elect the earliest candidate
+comment ID. Any worker may idempotently PATCH only that winning comment to the
+canonical `@codex` request with
+`advisor-dispatch:<fingerprint>:<elected-WAITING-comment-id>`. Concurrent PATCHes
+converge on one comment; losing candidates remain inert. Ambiguous creates or
+PATCHes require reread-before-retry.
 
 The exception authorizes only those #140 control-plane comments; branch, PR,
 issue-body, code, review, merge, or any other repository mutation still requires

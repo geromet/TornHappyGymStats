@@ -41,9 +41,10 @@ the authoritative issue disposition changes.
 
 Before mutation, use the append-only ASSIGNING → ASSIGNED handshake in #140. A
 run is not allowed to mutate merely because it posted ASSIGNING. After posting,
-reconstruct complete state again. If any materially overlapping run is already
-ASSIGNED or WORKING, the newcomer must back off. Among overlapping ASSIGNING
-requests, the earlier GitHub comment ID wins.
+reconstruct complete state and refresh the target issue's dependencies/stop gates
+again. A newly blocked candidate must back off without ACK. If any materially
+overlapping run is already ASSIGNED or WORKING, the newcomer must also back off.
+Among overlapping ASSIGNING requests, the earlier GitHub comment ID wins.
 
 Admission is globally capacity-ordered. Count incumbent ASSIGNED/WORKING leases,
 compute remaining slots up to five, then sort every otherwise-eligible latest
@@ -95,12 +96,13 @@ directly as `seq=1`/`prev=none`. It must then reconstruct complete state again a
 compare every unresolved WAITING record with the identical fingerprint. Only the
 earliest GitHub comment ID is the elected request. That WAITING record is durable
 dispatch intent, not ownership by one worker: if its author is cut off, any later
-recovery worker may complete the same elected request. Before posting, search the
-complete history for
-`advisor-dispatch:<fingerprint>:<elected-WAITING-comment-id>`; an existing marker
-suppresses the write. Otherwise post one `@codex` request carrying that marker,
-and reconcile ambiguous failures by rereading before retrying. Later WAITING
-candidates stay non-leases and never dispatch as separate requests.
+recovery worker may complete the same elected request. Recovery workers first post
+non-mention dispatch-candidate comments for that elected WAITING ID, then reread
+complete history; the earliest candidate comment ID wins. Any worker may
+idempotently PATCH that single winning comment to the canonical `@codex` body and
+`advisor-dispatch:<fingerprint>:<elected-WAITING-comment-id>` marker. Competing
+PATCHes converge on one comment; losing candidates are never mentioned or edited
+into requests. Reconcile ambiguous creates/PATCHes by rereading before retrying.
 
 The exception permits only the #140 advisor control-plane comments; branch, PR,
 issue-body, code, review, merge, or other repository mutation still requires the
