@@ -59,6 +59,10 @@ again. A newly blocked candidate must back off without ACK. If any materially
 overlapping run is already ASSIGNED or WORKING, the newcomer must also back off.
 Among overlapping ASSIGNING requests, the earlier GitHub comment ID wins.
 
+Gate A considers only ASSIGNING records that remain eligible and were permanently
+admitted by their immutable-prefix capacity decision. A SYN permanently rejected
+by Gate B cannot block a fresh overlapping SYN after capacity is released.
+
 Admission is globally capacity-ordered. Count incumbent ASSIGNED/WORKING leases,
 compute remaining slots up to five, then classify otherwise-eligible ASSIGNING
 records by GitHub comment ID using only the immutable history prefix ending at
@@ -77,9 +81,9 @@ present same `run+seq` record.
 
 Immediately after a branch is selected/created and before useful mutation, append
 🛠️ WORKING with the exact branch/head. After every remote head change, append
-another WORKING transition with the new head. Treat the observed head as a CAS
-token: unexpected movement stops mutation until reconciled. Never force-push
-through a race.
+another WORKING transition with the new head before any further useful mutation,
+related or otherwise. Treat the observed head as a CAS token: unexpected movement
+stops mutation until reconciled. Never force-push through a race.
 
 Only admitted ASSIGNING, ASSIGNED, and WORKING states consume the five active
 fleet leases. Waiting/open/finished and unadmitted SYN records do not. Do not

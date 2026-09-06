@@ -121,7 +121,11 @@ successful post-SYN decision.
 
 If any materially overlapping run is already `🔵 ASSIGNED` or `🛠️ WORKING`, the newcomer loses and must not mutate. It should append 🟢 OPEN when able, but correctness does not depend on that cleanup because the losing SYN is not admitted.
 
-If multiple otherwise-eligible ASSIGNING records overlap each other, only the earliest GitHub comment ID remains eligible; later overlapping candidates lose.
+If multiple otherwise-eligible and permanently admitted ASSIGNING records overlap
+each other, only the earliest GitHub comment ID remains eligible; later
+overlapping candidates lose. Permanently unadmitted Gate B losers are excluded
+from every later Gate A election and cannot block a fresh SYN after capacity
+opens.
 
 ### Gate B — global five-lease capacity
 
@@ -148,7 +152,9 @@ A loser should append 🟢 OPEN for observability, but its unadmitted SYN alread
 
 ## 5. Branch crash-recovery record
 
-Immediately after a branch is created or selected, and before useful mutation, append WORKING with the exact branch/head. After each remote branch-head mutation, append the new head before proceeding to unrelated work.
+Immediately after a branch is created or selected, and before useful mutation,
+append WORKING with the exact branch/head. After each remote branch-head mutation,
+append the new head before any further useful mutation, related or unrelated.
 
 Branch mutations use compare-and-swap semantics. If current remote head differs from expected head, stop and reconcile. Never force-push through a coordination race.
 
@@ -194,8 +200,10 @@ Serialize it deterministically:
 - `repo` is lowercase `owner/name`;
 - `reason` is exactly one of `no-runnable-work`, `repeat-unchanged`,
   `lease-capacity`, or `unreconciled-state`;
-- `stable-identifiers` is the bytewise-ascending, comma-joined set of lowercase
-  issue/PR/ref/run tokens, with no whitespace or duplicates;
+- `stable-identifiers` is mechanically fixed to
+  `lock-<canonical-coordination-issue-number>` for every reason; for this
+  repository it is exactly `lock-140`. Do not add caller-selected issue, PR, ref,
+  or run tokens;
 - `relevant-head-or-state` is an exact lowercase 40-hex head when one head defines
   the incident. Otherwise it is `sha256-<hex>` over the exact complete set of
   latest valid records for every **non-advisor** new-protocol run plus every active
@@ -292,7 +300,7 @@ ts=... | note=coherent package complete; exact-head evidence recorded
 🆘 WAITING ON ADVISOR | seq=1 | run=steward-def456 | lane=STEWARD |
 issue/package=coordination | branch=none | head=none | pr=none |
 base=none | base_sha=none | prev=none | ts=... |
-fingerprint=advisor:geromet/tornhappygymstats:lease-capacity:#140,main:sha256-<canonical-64-hex> |
+fingerprint=advisor:geromet/tornhappygymstats:lease-capacity:lock-140:sha256-<canonical-64-hex> |
 note=lease-free saturated-control-plane candidate; earliest identical-fingerprint WAITING is elected and its earliest dispatch-candidate comment is idempotently patched to the @codex request
 ```
 

@@ -72,6 +72,9 @@ overlapping run is already ASSIGNED or WORKING, the newcomer must also back off;
 new ASSIGNING record never supersedes an active owner. Among overlapping
 ASSIGNING requests, the earlier GitHub comment ID wins.
 
+Exclude every SYN permanently classified as unadmitted by capacity from later
+overlap elections. It cannot block a fresh candidate after a slot opens.
+
 Capacity admission is global, deterministic, and cleanup-independent. Count
 incumbent ASSIGNED/WORKING leases and classify each otherwise-eligible ASSIGNING
 against the immutable GitHub history prefix ending at that SYN comment. Admission
@@ -93,7 +96,8 @@ suppress an already-present same `run+seq` record.
 
 Immediately after a branch is selected/created and before useful mutation, append
 🛠️ WORKING with the exact branch/head. After every remote branch-head change,
-append another WORKING record with the new head. The recorded head is a CAS token:
+append another WORKING record with the new head before any further useful
+mutation, including related follow-up edits. The recorded head is a CAS token:
 unexpected movement stops mutation until reconciled. Never force-push through a
 race or commandeer/rewrite an outside-contributor or human-owned branch.
 
