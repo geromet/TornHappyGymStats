@@ -137,7 +137,7 @@ public sealed class WarHistoryIngestWriterTests
                     // only because the API project's appsettings.json lands in the test
                     // output directory and supplies a real-looking one. On a clean CI
                     // checkout there was nothing to fall back on and this failed.
-                    ["ConnectionStrings:HappyGymStats"] = "Host=localhost;Database=happy-gym-stats-tests;Username=test;Password=test",
+                    ["ConnectionStrings:HappyGymStats"] = "Host=localhost;Database=happy-gym-stats-tests;Username=test;Password=test;SSL Mode=Require",
                     ["WarPoller:ApiKey"] = "test-key",
                     ["WarPoller:FactionId"] = "123",
                 });

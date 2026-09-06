@@ -50,7 +50,7 @@ public sealed class RankedWarHistoryBackfillServiceTests
         Assert.Throws<InvalidOperationException>(() => WarPollerProgram.BuildHost(
             configureBuilder: builder => builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["ConnectionStrings:HappyGymStats"] = "Host=localhost;Database=happygymstats_test;Username=test;Password=test",
+                ["ConnectionStrings:HappyGymStats"] = "Host=localhost;Database=happygymstats_test;Username=test;Password=test;SSL Mode=Require",
                 ["WarPoller:ApiKey"] = ApiKey,
                 ["WarPoller:FactionId"] = FactionId.ToString(),
                 ["WarPoller:PollIntervalSeconds"] = "300",
@@ -255,7 +255,7 @@ public sealed class RankedWarHistoryBackfillServiceTests
     private static Dictionary<string, string?> CreateConfiguration(bool enabled)
         => new()
         {
-            ["ConnectionStrings:HappyGymStats"] = "Host=localhost;Database=happygymstats_test;Username=test;Password=test",
+            ["ConnectionStrings:HappyGymStats"] = "Host=localhost;Database=happygymstats_test;Username=test;Password=test;SSL Mode=Require",
             ["WarPoller:ApiKey"] = ApiKey,
             ["WarPoller:FactionId"] = FactionId.ToString(),
             ["WarPoller:PollIntervalSeconds"] = "300",

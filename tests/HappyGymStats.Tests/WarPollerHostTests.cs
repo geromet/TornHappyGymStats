@@ -145,7 +145,7 @@ public sealed class WarPollerHostTests
     private static Dictionary<string, string?> CreateConfiguration()
         => new()
         {
-            ["ConnectionStrings:HappyGymStats"] = "Host=localhost;Database=happygymstats_test;Username=test;Password=test",
+            ["ConnectionStrings:HappyGymStats"] = "Host=localhost;Database=happygymstats_test;Username=test;Password=test;SSL Mode=Require",
             ["WarPoller:ApiKey"] = "limited-key-123",
             ["WarPoller:FactionId"] = FactionId.ToString(),
             ["WarPoller:PollIntervalSeconds"] = "300",

@@ -15,6 +15,7 @@ using HappyGymStats.Core.Torn;
 using HappyGymStats.Core.War;
 using HappyGymStats.Data;
 using HappyGymStats.Data.Repositories;
+using HappyGymStats.Data.Security;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -65,6 +66,9 @@ builder.Services.AddSignalR(options =>
 var connectionString = developmentAuthEnabled
     ? AppConfiguration.ResolveDevelopmentSqliteConnectionString(builder.Configuration, builder.Environment)
     : AppConfiguration.ResolveConnectionString(builder.Configuration);
+if (!developmentAuthEnabled && builder.Environment.IsProduction())
+    PostgresConnectionSecurityPolicy.RequireEncryptedTransport(connectionString);
+
 var surfacesCacheDirectory = AppConfiguration.ResolveSurfacesCacheDirectory(builder.Configuration, builder.Environment);
 
 Directory.CreateDirectory(surfacesCacheDirectory);

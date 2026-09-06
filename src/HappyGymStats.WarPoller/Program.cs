@@ -3,6 +3,7 @@ using HappyGymStats.Core.Torn;
 using HappyGymStats.Core.War;
 using HappyGymStats.Data;
 using HappyGymStats.Data.Repositories;
+using HappyGymStats.Data.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -33,6 +34,8 @@ public static class Program
     private static void ConfigureServices(HostApplicationBuilder builder)
     {
         var connectionString = ResolveConnectionString(builder.Configuration);
+        if (builder.Environment.IsProduction())
+            PostgresConnectionSecurityPolicy.RequireEncryptedTransport(connectionString);
 
         builder.Services
             .AddOptions<WarPollerOptions>()
