@@ -26,7 +26,10 @@ The coordination states are:
 - ✅ **FINISHED** — issue/package is actually completed.
 
 Before mutation, use the append-only ASSIGNING → ASSIGNED handshake in #140. A
-run is not allowed to mutate merely because it posted ASSIGNING. Earlier
+run is not allowed to mutate merely because it posted ASSIGNING. After posting,
+reread latest valid states for all relevant runs. If any materially overlapping
+run is already ASSIGNED or WORKING, the newcomer must back off. Only when no
+active owner overlaps do competing ASSIGNING requests race; then the earlier
 materially overlapping ASSIGNING GitHub comment ID wins.
 
 Every state transition is a **new** #140 comment with a unique `run=`, monotonic
@@ -62,6 +65,14 @@ is true:
 4. stale/contradictory/cut-off state, hidden useful work, a missing PR path,
    supersession ambiguity, or branch/LOCK disagreement cannot be cheaply and
    confidently reconciled.
+
+At five already-active leases, advisor dispatch is an explicit **lease-free
+control-plane exception**: after read-only reconstruction and fingerprint
+deduplication, an unassigned recovery run may append WAITING ON ADVISOR directly
+as `seq=1`/`prev=none` and post the single matching `@codex` request without first
+creating ASSIGNING/ASSIGNED. That exception permits only the #140 advisor control-
+plane comments; branch, PR, issue-body, code, review, merge, or other repository
+mutation still requires the normal handshake once capacity is available.
 
 Fingerprint and deduplicate advisor requests as documented in
 `docs/AGENT-COORDINATION-PROTOCOL.md`. Codex is asked to investigate **and repair**
