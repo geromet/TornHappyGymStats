@@ -91,6 +91,45 @@ public sealed class AccountConnectionsBlazorServiceTests
         Assert.DoesNotContain("never-render-this", failure.SafeMessage, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("{\"error\":null}")]
+    [InlineData("{\"error\":{\"code\":42}}")]
+    public async Task Error_responses_with_unexpected_json_shapes_use_the_safe_status_fallback(string payload)
+    {
+        using var http = CreateHttpClient(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json")
+        });
+        var sut = new AccountConnectionsService(http);
+
+        var failure = await Assert.ThrowsAsync<AccountConnectionFailure>(() => sut.GetAsync());
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, failure.StatusCode);
+        Assert.Contains("could not be completed", failure.SafeMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("not-json")]
+    [InlineData("[]")]
+    public async Task Successful_responses_with_invalid_status_payloads_become_retryable_safe_failures(string payload)
+    {
+        using var http = CreateHttpClient(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json")
+        });
+        var sut = new AccountConnectionsService(http);
+
+        var failure = await Assert.ThrowsAsync<AccountConnectionFailure>(() => sut.GetAsync());
+
+        Assert.Equal("invalid_response", failure.Code);
+        Assert.Equal(HttpStatusCode.BadGateway, failure.StatusCode);
+        Assert.Contains("unexpected response", failure.SafeMessage, StringComparison.OrdinalIgnoreCase);
+        if (payload.Length > 0)
+            Assert.DoesNotContain(payload, failure.SafeMessage, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task RevokeAsync_posts_to_owner_scoped_revoke_endpoint()
     {

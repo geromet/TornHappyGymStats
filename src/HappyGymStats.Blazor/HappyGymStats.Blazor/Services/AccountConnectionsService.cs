@@ -32,17 +32,23 @@ public sealed class AccountConnectionsService(HttpClient http)
         try
         {
             return await response.Content.ReadFromJsonAsync<TornConnectionStatusDto>(ct)
-                ?? throw ApiFailure.Deserialization(Endpoint, new JsonException("Connection status payload was empty."));
+                ?? throw InvalidResponse();
         }
-        catch (JsonException ex)
+        catch (JsonException)
         {
-            throw ApiFailure.Deserialization(Endpoint, ex);
+            throw InvalidResponse();
         }
-        catch (NotSupportedException ex)
+        catch (NotSupportedException)
         {
-            throw ApiFailure.Deserialization(Endpoint, ex);
+            throw InvalidResponse();
         }
     }
+
+    private static AccountConnectionFailure InvalidResponse()
+        => new(
+            "invalid_response",
+            HttpStatusCode.BadGateway,
+            "The Torn connection service returned an unexpected response. Please try again.");
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken ct)
     {
@@ -54,8 +60,11 @@ public sealed class AccountConnectionsService(HttpClient http)
         {
             await using var stream = await response.Content.ReadAsStreamAsync(ct);
             using var document = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-            if (document.RootElement.TryGetProperty("error", out var error)
-                && error.TryGetProperty("code", out var codeElement))
+            if (document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("error", out var error)
+                && error.ValueKind == JsonValueKind.Object
+                && error.TryGetProperty("code", out var codeElement)
+                && codeElement.ValueKind == JsonValueKind.String)
             {
                 code = codeElement.GetString();
             }

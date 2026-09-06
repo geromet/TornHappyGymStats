@@ -22,7 +22,7 @@
     font-weight: 600;
 }
 
-.account-connections-page :deep(.mud-stack-row) {
+.account-connections-page ::deep .mud-stack-row {
     flex-wrap: wrap;
 }
 
