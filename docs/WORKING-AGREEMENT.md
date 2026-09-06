@@ -17,14 +17,16 @@ prose, old PR descriptions, audit notes, plans, historical handoffs, or an agent
 memory of a prior run.
 
 Active ownership has no TTL. Before selecting mutable work or counting capacity,
-paginate **all** #140 protocol comments (or use a mechanically complete durable
-index proven equivalent), validate each run's sequence/prev/ACK chain, and
-reconstruct every run's latest valid state. A recent-comment window is never
-authoritative for ownership or lease counting.
+paginate **all** #140 comments and recognize both new-protocol transitions and
+legacy CLAIM/RELEASE records, or use a mechanically maintained durable index proven
+equivalent for **all recognized protocol and legacy records**. Validate each new-
+protocol run's sequence/prev/ACK chain and reconstruct every run's latest valid
+state. A recent-comment window is never authoritative for ownership or lease
+counting.
 
 Before materially conflicting mutation, refresh:
 
-1. complete reconstructed #140 protocol state plus the current issue body;
+1. complete reconstructed #140 protocol + legacy state and the current issue body;
 2. the target issue/PR and relevant dependencies;
 3. the repository's actual current default branch and head;
 4. every branch/PR head involved in the mutation.
@@ -35,7 +37,8 @@ state machine below.
 ### 🚦 Assignment and work states
 
 - 🟢 **OPEN** — default/unowned; no active lease.
-- 🟡 **ASSIGNING** — phase-1 assignment request / SYN.
+- 🟡 **ASSIGNING** — phase-1 assignment request / SYN; an active lease only when
+  admitted by the deterministic capacity election.
 - 🔵 **ASSIGNED** — phase-2 acknowledged ownership / ACK.
 - 🛠️ **WORKING @ branch** — active mutation at an exact branch/head.
 - 🧪 **WAITING ON PR CR** — coherent package waiting on Codex code/final review.
@@ -50,12 +53,14 @@ WORKING, the newcomer must back off; a new ASSIGNING record never supersedes an
 active owner. Among overlapping ASSIGNING requests, the earlier GitHub comment ID
 wins.
 
-Capacity admission is global, not scope-local. Count incumbent ASSIGNED/WORKING
-leases, compute remaining slots up to five, then sort every otherwise-eligible
-latest ASSIGNING record by GitHub comment ID ascending. Only the earliest records
-that fit those slots may ACK. Every later candidate appends OPEN/backoff and must
-not mutate. This deterministic ordering prevents two non-overlapping claims from
-racing the fleet above five active leases.
+Capacity admission is global, deterministic, and cleanup-independent. Count
+incumbent ASSIGNED/WORKING leases, compute remaining slots up to five, then sort
+every otherwise-eligible latest ASSIGNING record by GitHub comment ID ascending.
+Only the earliest records that fit those slots are **admitted ASSIGNING leases**
+and may ACK. Every later SYN is durably unadmitted, consumes no lease, and must not
+mutate; it should append OPEN/backoff when able, but correctness does not depend on
+that cleanup. Thus concurrent pre-admission comments cannot leave a persistent
+sixth active lease if a losing worker is cut off.
 
 A winning candidate appends a **new** ASSIGNED record with `seq=2`, repeats the
 exact scope/branch/expected heads, and references the ASSIGNING comment ID as
@@ -74,9 +79,10 @@ append another WORKING record with the new head. The recorded head is a CAS toke
 unexpected movement stops mutation until reconciled. Never force-push through a
 race or commandeer/rewrite an outside-contributor or human-owned branch.
 
-Only latest ASSIGNING, ASSIGNED and WORKING states consume the five active fleet
-leases. OPEN, WAITING ON PR CR, WAITING ON ADVISOR and FINISHED do not. Do not
-silently reclaim stale active state just because a worker may have been cut off.
+Only admitted ASSIGNING, ASSIGNED and WORKING states consume the five active fleet
+leases. Unadmitted SYN, OPEN, WAITING ON PR CR, WAITING ON ADVISOR and FINISHED do
+not. Do not silently reclaim an admitted active state just because a worker may
+have been cut off.
 
 The wire format, global admission ordering, complete reconstruction algorithm and
 legacy `🔒 CLAIM` migration rules are defined in
@@ -101,19 +107,23 @@ when any of these applies:
    confidently reconciled.
 
 At five already-active leases, advisor dispatch uses an explicit **lease-free
-control-plane exception**. After complete read-only state reconstruction and stable-
-fingerprint deduplication, an otherwise unassigned recovery run may append
-WAITING ON ADVISOR directly as its first `seq=1`, `prev=none` transition and post
-the one matching `@codex` request. This exception authorizes only those #140
-control-plane comments; branch, PR, issue-body, code, review, merge, or any other
-repository mutation still requires the normal ASSIGNING → ASSIGNED handshake
-after capacity is available.
+control-plane exception**. After complete read-only state reconstruction and an
+initial stable-fingerprint deduplication, an otherwise unassigned recovery run may
+append WAITING ON ADVISOR directly as its first `seq=1`, `prev=none` transition.
+It must then reconstruct complete state again, compare every unresolved WAITING
+record with the identical fingerprint, and allow only the earliest GitHub comment
+ID to post the matching `@codex` request. Later identical-fingerprint candidates
+stay non-leases and do not dispatch. This post-WAITING election closes the race
+between simultaneous pre-write fingerprint searches.
 
-Use the stable advisor fingerprint format from the protocol doc and search complete
-#140 state before posting. An unresolved identical fingerprint suppresses another
-request. Codex is asked to inspect **and repair** live state/topology/work, preserve
-useful commits, use the same state protocol for mutations, and report concrete
-results or blockers.
+The exception authorizes only those #140 control-plane comments; branch, PR,
+issue-body, code, review, merge, or any other repository mutation still requires
+the normal ASSIGNING → ASSIGNED handshake after capacity is available.
+
+Use the stable advisor fingerprint format from the protocol doc and reconstruct
+complete #140 state before dispatch. Codex is asked to inspect **and repair** live
+state/topology/work, preserve useful commits, use the same state protocol for
+mutations, and report concrete results or blockers.
 
 ### 📦 Review-unit economy and branch-explosion prevention
 
@@ -139,10 +149,10 @@ Fleet/manual agents **must never merge a branch or PR into the repository defaul
 branch** or weaken protections to permit such a merge. Final default-branch review
 and merge belong exclusively to Gerome's designated Codex/human workflow.
 
-Codex final review/merge must still refresh complete #140 protocol state, current
-default, candidate PR exact head/base SHA, checks, reviews, dependencies and
-ownership before each merge decision. After a default merge, refresh default and
-re-evaluate remaining PRs; do not inherit readiness from pre-merge state.
+Codex final review/merge must still refresh complete #140 protocol + legacy state,
+current default, candidate PR exact head/base SHA, checks, reviews, dependencies
+and ownership before each merge decision. After a default merge, refresh default
+and re-evaluate remaining PRs; do not inherit readiness from pre-merge state.
 
 ## 2. Torn is read-only from HappyGymStats
 
