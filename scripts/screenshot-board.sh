@@ -43,6 +43,8 @@ Screenshots the local app at phone/tablet/desktop, light and dark.
 Environment:
   SHOT_ROUTE     page to shoot (default /war)
   SHOT_NO_WAR    1 = start with no war seeded, to shoot the empty board
+  SHOT_ACCOUNT_FIXTURE  connected or replacement-error; development auth only
+  SHOT_SKIP_BUILD  1 = reuse binaries built by an earlier invocation
   SHOT_OUT_DIR   default workspace/tmp/screenshots
   SHOT_API_PORT  default 5047
   SHOT_WEB_PORT  default 5137
@@ -124,7 +126,7 @@ while (( $# > 0 )); do
     --keep-running) KEEP_RUNNING=1; shift ;;
     --route) SHOT_ROUTE="$2"; shift 2 ;;
     --out) SHOT_OUT_DIR="$2"; shift 2 ;;
-    --viewport|--theme) EXTRA_ARGS+=("$1" "$2"); shift 2 ;;
+    --viewport|--theme|--account-state) EXTRA_ARGS+=("$1" "$2"); shift 2 ;;
     *) echo "Unknown option '$1'. Try --help." >&2; exit 2 ;;
   esac
 done
@@ -156,12 +158,20 @@ LOG_DIR="$(mktemp -d)"
 # and its output can vanish entirely. An earlier version of this script did that
 # and produced empty logs, a port nobody owned, and a browser getting
 # ERR_CONNECTION_REFUSED against a server that had never started.
-echo "==> Building"
-dotnet build "${ROOT_DIR}/HappyGymStats.sln" -v q --nologo > "${LOG_DIR}/build.log" 2>&1 || {
-  tail -20 "${LOG_DIR}/build.log"
-  echo "FAIL: build failed" >&2
-  exit 1
-}
+if [[ "${SHOT_SKIP_BUILD:-0}" == "1" ]]; then
+  [[ -x "${API_BIN}" && -x "${WEB_BIN}" ]] || {
+    echo "FAIL: SHOT_SKIP_BUILD=1 but built host binaries are missing" >&2
+    exit 1
+  }
+  echo "==> Reusing built host binaries"
+else
+  echo "==> Building"
+  dotnet build "${ROOT_DIR}/HappyGymStats.sln" -v q --nologo > "${LOG_DIR}/build.log" 2>&1 || {
+    tail -20 "${LOG_DIR}/build.log"
+    echo "FAIL: build failed" >&2
+    exit 1
+  }
+fi
 
 if [[ "${SHOT_NO_WAR:-0}" == "1" ]]; then
   echo "==> Starting API on :${SHOT_API_PORT} (development auth, NO war seeded)"
@@ -171,6 +181,7 @@ fi
 ASPNETCORE_ENVIRONMENT=Development \
 HAPPYGYMSTATS_DEV_AUTH=1 \
 HAPPYGYMSTATS_DEV_SKIP_WAR_SEED="${SHOT_NO_WAR:-0}" \
+HAPPYGYMSTATS_DEV_ACCOUNT_FIXTURE="${SHOT_ACCOUNT_FIXTURE:-}" \
 ASPNETCORE_URLS="http://127.0.0.1:${SHOT_API_PORT}" \
   "${API_BIN}" > "${LOG_DIR}/api.log" 2>&1 &
 API_PID=$!

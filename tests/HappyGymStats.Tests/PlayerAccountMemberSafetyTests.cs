@@ -63,6 +63,24 @@ public sealed class PlayerAccountMemberSafetyTests
         Assert.Contains("/player-account", content, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Render_workflow_proves_account_lifecycle_states_without_live_torn_requests()
+    {
+        var workflow = ReadRepoFile(".github/workflows/account-connections-render.yml");
+        var fixture = ReadRepoFile(
+            "src/HappyGymStats.Api/Infrastructure/DevelopmentAccountConnectionFixture.cs");
+        var program = ReadRepoFile("src/HappyGymStats.Api/Program.cs");
+
+        Assert.Contains("--account-state connected", workflow, StringComparison.Ordinal);
+        Assert.Contains("--account-state replacement-error", workflow, StringComparison.Ordinal);
+        Assert.Contains("--account-state revoke-confirmation", workflow, StringComparison.Ordinal);
+        Assert.Contains("rendered markup", ReadRepoFile("scripts/ux/shoot.py"), StringComparison.Ordinal);
+        Assert.Contains("developmentAuthEnabled", program, StringComparison.Ordinal);
+        Assert.Contains("requires the explicitly enabled development authentication host", fixture, StringComparison.Ordinal);
+        Assert.DoesNotContain("TornApiClient", fixture, StringComparison.Ordinal);
+        Assert.DoesNotContain("ITornConnectionValidator", fixture, StringComparison.Ordinal);
+    }
+
     private static string ReadRepoFile(string relativePath)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
