@@ -139,7 +139,14 @@ public sealed class ChainOperationsRepository(HappyGymStatsDbContext db) : IChai
             snapshot.Handoffs.Select(item => new PersistedHandoff(
                 item.FromShiftId, item.ToShiftId, item.OccurredAtUtc)).ToArray(),
             snapshot.AttackSlots.Select(item => new PersistedAttackSlot(
-                item.Id, item.StartsAtUtc, item.PrimaryMemberId, item.OrderedBackupMemberIds.ToArray())).ToArray());
+                item.Id, item.StartsAtUtc, item.PrimaryMemberId, item.OrderedBackupMemberIds.ToArray())).ToArray(),
+            snapshot.OperationalEvents.Select(item => new PersistedOperationalEvent(
+                item.Kind,
+                item.Key,
+                item.OccurredAtUtc,
+                item.SourceId,
+                item.MemberId,
+                item.EndsAtUtc)).ToArray());
 
     private static ChainOperationsSnapshot ToDomain(
         long factionId,
@@ -157,7 +164,14 @@ public sealed class ChainOperationsRepository(HappyGymStatsDbContext db) : IChai
             (payload.Handoffs ?? []).Select(item => new WatcherHandoff(
                 item.FromShiftId, item.ToShiftId, item.OccurredAtUtc)),
             (payload.AttackSlots ?? []).Select(item => new ChainAttackSlot(
-                item.Id, item.StartsAtUtc, item.PrimaryMemberId, item.OrderedBackupMemberIds)));
+                item.Id, item.StartsAtUtc, item.PrimaryMemberId, item.OrderedBackupMemberIds)),
+            (payload.OperationalEvents ?? []).Select(item => new ChainOperationalEvent(
+                item.Kind,
+                item.Key,
+                item.OccurredAtUtc,
+                item.SourceId,
+                item.MemberId,
+                item.EndsAtUtc)));
 
     private static void ValidateScope(long factionId, long warId)
     {
@@ -179,7 +193,8 @@ public sealed class ChainOperationsRepository(HappyGymStatsDbContext db) : IChai
         PersistedShiftEvent[]? CheckIns,
         PersistedShiftEvent[]? CheckOuts,
         PersistedHandoff[]? Handoffs,
-        PersistedAttackSlot[]? AttackSlots);
+        PersistedAttackSlot[]? AttackSlots,
+        PersistedOperationalEvent[]? OperationalEvents);
 
     private sealed record PersistedShift(
         Guid Id,
@@ -199,4 +214,12 @@ public sealed class ChainOperationsRepository(HappyGymStatsDbContext db) : IChai
         DateTimeOffset StartsAtUtc,
         long PrimaryMemberId,
         long[] OrderedBackupMemberIds);
+
+    private sealed record PersistedOperationalEvent(
+        ChainOperationalEventKind Kind,
+        string Key,
+        DateTimeOffset OccurredAtUtc,
+        Guid? SourceId,
+        long? MemberId,
+        DateTimeOffset? EndsAtUtc);
 }

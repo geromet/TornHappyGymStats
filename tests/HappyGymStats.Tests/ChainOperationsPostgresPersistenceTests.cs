@@ -49,7 +49,7 @@ public sealed class ChainOperationsPostgresPersistenceTests : IAsyncLifetime
         if (!_available)
             return;
 
-        var expected = Snapshot(factionId: 100, warId: 200, revision: 1);
+        var expected = Snapshot(factionId: 100, warId: 200, revision: 1, includeOperationalEvent: true);
         await using (var writerDb = CreateDbContext())
         {
             var writer = new ChainOperationsRepository(writerDb);
@@ -68,6 +68,12 @@ public sealed class ChainOperationsPostgresPersistenceTests : IAsyncLifetime
         Assert.Equal((FirstShiftId, SecondShiftId),
             (Assert.Single(actual.Handoffs).FromShiftId, Assert.Single(actual.Handoffs).ToShiftId));
         Assert.Equal(new long[] { 41, 42, 43 }, Assert.Single(actual.AttackSlots).CandidateOrder);
+
+        var persistedEvent = Assert.Single(actual.OperationalEvents);
+        Assert.Equal(ChainOperationalEventKind.CriticalSaveSlot, persistedEvent.Kind);
+        Assert.Equal("critical-save-slot:20000000000000000000000000000001:42", persistedEvent.Key);
+        Assert.Equal(SlotId, persistedEvent.SourceId);
+        Assert.Equal(42, persistedEvent.MemberId);
     }
 
     [Fact]
@@ -97,6 +103,53 @@ public sealed class ChainOperationsPostgresPersistenceTests : IAsyncLifetime
         Assert.Equal(2, restored.Revision);
         Assert.Equal(2, restored.CheckIns.Count);
         Assert.Equal(restored.CheckIns.Count, restored.CheckIns.Distinct().Count());
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresApiIntegration")]
+    public async Task Persisted_operational_event_keys_make_restart_reconciliation_idempotent()
+    {
+        if (!_available)
+            return;
+
+        await using var db = CreateDbContext();
+        var repository = new ChainOperationsRepository(db);
+        var source = Snapshot(100, 200, revision: 1);
+        await repository.SaveAsync(source, 0, CancellationToken.None);
+
+        var reconciled = ChainOperationsReconciler.Reconcile(
+            source,
+            nowUtc: Now.AddHours(3).AddMinutes(5),
+            checkInGrace: TimeSpan.FromMinutes(5),
+            upcomingLead: TimeSpan.FromMinutes(30),
+            criticalSlotLead: TimeSpan.FromMinutes(30),
+            coverageWindowStartsAtUtc: Now,
+            coverageWindowEndsAtUtc: Now.AddHours(4),
+            unavailableOrReservedMemberIds: new HashSet<long> { 41 });
+        Assert.True(reconciled.HasChanges);
+        await repository.SaveAsync(reconciled.Snapshot, expectedRevision: 1, CancellationToken.None);
+
+        await using var restartedDb = CreateDbContext();
+        var restartedRepository = new ChainOperationsRepository(restartedDb);
+        var restarted = Assert.IsType<ChainOperationsSnapshot>(
+            await restartedRepository.GetAsync(100, 200, CancellationToken.None));
+
+        var replay = ChainOperationsReconciler.Reconcile(
+            restarted,
+            nowUtc: Now.AddHours(3).AddMinutes(5),
+            checkInGrace: TimeSpan.FromMinutes(5),
+            upcomingLead: TimeSpan.FromMinutes(30),
+            criticalSlotLead: TimeSpan.FromMinutes(30),
+            coverageWindowStartsAtUtc: Now,
+            coverageWindowEndsAtUtc: Now.AddHours(4),
+            unavailableOrReservedMemberIds: new HashSet<long> { 41 });
+
+        Assert.False(replay.HasChanges);
+        Assert.Empty(replay.NewEvents);
+        Assert.Equal(reconciled.Snapshot.Revision, replay.Snapshot.Revision);
+        Assert.Equal(
+            reconciled.Snapshot.OperationalEvents.Select(item => item.Key),
+            replay.Snapshot.OperationalEvents.Select(item => item.Key));
     }
 
     [Fact]
@@ -136,7 +189,8 @@ public sealed class ChainOperationsPostgresPersistenceTests : IAsyncLifetime
         long factionId,
         long warId,
         long revision,
-        bool includeSecondCheckIn = false)
+        bool includeSecondCheckIn = false,
+        bool includeOperationalEvent = false)
     {
         var first = new WatcherShift(FirstShiftId, 11, Now, Now.AddHours(1));
         var second = new WatcherShift(SecondShiftId, 12, Now.AddHours(1), Now.AddHours(2));
@@ -147,6 +201,18 @@ public sealed class ChainOperationsPostgresPersistenceTests : IAsyncLifetime
         if (includeSecondCheckIn)
             checkIns.Add(new WatcherCheckIn(SecondShiftId, Now.AddHours(1).AddMinutes(1)));
 
+        var operationalEvents = includeOperationalEvent
+            ? new[]
+            {
+                new ChainOperationalEvent(
+                    ChainOperationalEventKind.CriticalSaveSlot,
+                    "critical-save-slot:20000000000000000000000000000001:42",
+                    Now.AddHours(3),
+                    SlotId,
+                    42)
+            }
+            : [];
+
         return new ChainOperationsSnapshot(
             factionId,
             warId,
@@ -155,7 +221,8 @@ public sealed class ChainOperationsPostgresPersistenceTests : IAsyncLifetime
             checkIns,
             [new WatcherCheckOut(FirstShiftId, Now.AddHours(1))],
             [new WatcherHandoff(FirstShiftId, SecondShiftId, Now.AddHours(1))],
-            [new ChainAttackSlot(SlotId, Now.AddHours(3), 41, [42, 43])]);
+            [new ChainAttackSlot(SlotId, Now.AddHours(3), 41, [42, 43])],
+            operationalEvents);
     }
 
     private HappyGymStatsDbContext CreateDbContext()

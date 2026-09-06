@@ -10,7 +10,8 @@ public sealed class ChainOperationsSnapshot
         IEnumerable<WatcherCheckIn>? checkIns = null,
         IEnumerable<WatcherCheckOut>? checkOuts = null,
         IEnumerable<WatcherHandoff>? handoffs = null,
-        IEnumerable<ChainAttackSlot>? attackSlots = null)
+        IEnumerable<ChainAttackSlot>? attackSlots = null,
+        IEnumerable<ChainOperationalEvent>? operationalEvents = null)
     {
         if (factionId <= 0) throw new ArgumentOutOfRangeException(nameof(factionId));
         if (warId <= 0) throw new ArgumentOutOfRangeException(nameof(warId));
@@ -30,6 +31,18 @@ public sealed class ChainOperationsSnapshot
             .Select(item => new WatcherHandoff(item.FromShiftId, item.ToShiftId, item.OccurredAtUtc.ToUniversalTime()))
             .OrderBy(item => item.OccurredAtUtc).ThenBy(item => item.FromShiftId).ThenBy(item => item.ToShiftId).ToArray();
         AttackSlots = (attackSlots ?? []).OrderBy(item => item.StartsAtUtc).ThenBy(item => item.Id).ToArray();
+        OperationalEvents = (operationalEvents ?? [])
+            .Select(item => new ChainOperationalEvent(
+                item.Kind,
+                item.Key,
+                item.OccurredAtUtc,
+                item.SourceId,
+                item.MemberId,
+                item.EndsAtUtc))
+            .OrderBy(item => item.OccurredAtUtc)
+            .ThenBy(item => item.Kind)
+            .ThenBy(item => item.Key, StringComparer.Ordinal)
+            .ToArray();
 
         ValidateUniqueIds(Shifts.Select(item => item.Id), "Watcher shift ids must be unique.");
         ValidateUniqueIds(AttackSlots.Select(item => item.Id), "Attack slot ids must be unique.");
@@ -46,7 +59,13 @@ public sealed class ChainOperationsSnapshot
             || CheckOuts.Distinct().Count() != CheckOuts.Count
             || Handoffs.Distinct().Count() != Handoffs.Count)
         {
-            throw new ArgumentException("Operational events must be unique so restart replay cannot duplicate them.");
+            throw new ArgumentException("Watcher events must be unique so restart replay cannot duplicate them.");
+        }
+
+        var eventKeys = OperationalEvents.Select(item => item.Key).ToArray();
+        if (eventKeys.Distinct(StringComparer.Ordinal).Count() != eventKeys.Length)
+        {
+            throw new ArgumentException("Operational event keys must be unique so restart replay cannot duplicate emissions.");
         }
     }
 
@@ -58,6 +77,7 @@ public sealed class ChainOperationsSnapshot
     public IReadOnlyList<WatcherCheckOut> CheckOuts { get; }
     public IReadOnlyList<WatcherHandoff> Handoffs { get; }
     public IReadOnlyList<ChainAttackSlot> AttackSlots { get; }
+    public IReadOnlyList<ChainOperationalEvent> OperationalEvents { get; }
 
     private static void ValidateUniqueIds(IEnumerable<Guid> ids, string message)
     {
