@@ -1,6 +1,19 @@
 name: Scout render proof
 
 on:
+  push:
+    branches: [ux/issue-95-shared-states]
+    paths:
+      - 'src/HappyGymStats.Api/Infrastructure/DevelopmentScoutSeed.cs'
+      - 'src/HappyGymStats.Api/Program.cs'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/WarScout.razor'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/WarScout.razor.css'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/WarScoutProvenance.cs'
+      - 'src/HappyGymStats.Core/War/WarScoutService.cs'
+      - 'src/HappyGymStats.Data/Repositories/RankedWarHistoryBackfillStateRepository.cs'
+      - 'scripts/screenshot-board.sh'
+      - 'scripts/ux/shoot.py'
+      - '.github/workflows/scout-render.yml'
   pull_request:
     branches: [main]
     paths:
