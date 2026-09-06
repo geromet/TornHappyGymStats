@@ -16,10 +16,15 @@ branch state, and the latest valid protocol transitions win over stale issue
 prose, old PR descriptions, audit notes, plans, historical handoffs, or an agent's
 memory of a prior run.
 
-Before selecting mutable work, read #140's current body and recent transitions.
+Active ownership has no TTL. Before selecting mutable work or counting capacity,
+paginate **all** #140 protocol comments (or use a mechanically complete durable
+index proven equivalent), validate each run's sequence/prev/ACK chain, and
+reconstruct every run's latest valid state. A recent-comment window is never
+authoritative for ownership or lease counting.
+
 Before materially conflicting mutation, refresh:
 
-1. #140 body + recent protocol comments;
+1. complete reconstructed #140 protocol state plus the current issue body;
 2. the target issue/PR and relevant dependencies;
 3. the repository's actual current default branch and head;
 4. every branch/PR head involved in the mutation.
@@ -39,21 +44,29 @@ state machine below.
 - ✅ **FINISHED** — issue/package is actually completed.
 
 Before mutation, append ASSIGNING with a unique `run=`, `seq=1`, exact
-issue/package/seam, intended branch and observed heads. Reread #140 immediately
-and reconstruct the latest valid state for relevant runs. If any materially
-overlapping run is already ASSIGNED or WORKING, the newcomer must back off; a new
-ASSIGNING record never supersedes an active owner. Only when no active owner
-overlaps do competing ASSIGNING requests race, and then the earlier materially
-overlapping ASSIGNING GitHub comment ID wins.
+issue/package/seam, intended branch and observed heads. Then reconstruct complete
+#140 state again. If any materially overlapping run is already ASSIGNED or
+WORKING, the newcomer must back off; a new ASSIGNING record never supersedes an
+active owner. Among overlapping ASSIGNING requests, the earlier GitHub comment ID
+wins.
 
-The winner appends a **new** ASSIGNED record with `seq=2`, repeats the exact
-scope/branch/expected heads, and references the ASSIGNING comment ID as `ack=`.
-Mutation is forbidden until this acknowledgement exists.
+Capacity admission is global, not scope-local. Count incumbent ASSIGNED/WORKING
+leases, compute remaining slots up to five, then sort every otherwise-eligible
+latest ASSIGNING record by GitHub comment ID ascending. Only the earliest records
+that fit those slots may ACK. Every later candidate appends OPEN/backoff and must
+not mutate. This deterministic ordering prevents two non-overlapping claims from
+racing the fleet above five active leases.
+
+A winning candidate appends a **new** ASSIGNED record with `seq=2`, repeats the
+exact scope/branch/expected heads, and references the ASSIGNING comment ID as
+`ack=`. Mutation is forbidden until this acknowledgement exists.
 
 Every later transition is another **new #140 comment** with monotonic sequence,
-exact branch/head/PR, previous state/comment, timestamp and short result. Do not
-edit an old state comment into a new state. Before retrying an ambiguous comment
-write, reread and suppress an already-present same `run+seq` record.
+exact branch/head/PR, previous state/comment, timestamp and short result. PR-facing
+WAITING/proof transitions additionally record machine-readable `base=<ref>` and
+`base_sha=<sha>` for the exact base the evidence covered. Do not edit an old state
+comment into a new state. Before retrying an ambiguous comment write, reread and
+suppress an already-present same `run+seq` record.
 
 Immediately after a branch is selected/created and before useful mutation, append
 🛠️ WORKING with the exact branch/head. After every remote branch-head change,
@@ -65,14 +78,14 @@ Only latest ASSIGNING, ASSIGNED and WORKING states consume the five active fleet
 leases. OPEN, WAITING ON PR CR, WAITING ON ADVISOR and FINISHED do not. Do not
 silently reclaim stale active state just because a worker may have been cut off.
 
-The wire format, sequence validation, reconstruction algorithm and legacy
-`🔒 CLAIM` migration rules are defined in
+The wire format, global admission ordering, complete reconstruction algorithm and
+legacy `🔒 CLAIM` migration rules are defined in
 `docs/AGENT-COORDINATION-PROTOCOL.md`.
 
 ### 🆘 Codex advisor safety valve
 
 Before concluding there is no work, before repeating unchanged investigation, and
-before acquiring a sixth active lease, reconstruct latest #140 state per run and
+before acquiring a sixth active lease, reconstruct complete #140 state per run and
 inspect live branches, PRs and open issues.
 
 Transition once to WAITING ON ADVISOR and send one deduplicated `@codex` request
@@ -88,7 +101,7 @@ when any of these applies:
    confidently reconciled.
 
 At five already-active leases, advisor dispatch uses an explicit **lease-free
-control-plane exception**. After read-only state reconstruction and stable-
+control-plane exception**. After complete read-only state reconstruction and stable-
 fingerprint deduplication, an otherwise unassigned recovery run may append
 WAITING ON ADVISOR directly as its first `seq=1`, `prev=none` transition and post
 the one matching `@codex` request. This exception authorizes only those #140
@@ -96,11 +109,11 @@ control-plane comments; branch, PR, issue-body, code, review, merge, or any othe
 repository mutation still requires the normal ASSIGNING → ASSIGNED handshake
 after capacity is available.
 
-Use the stable advisor fingerprint format from the protocol doc and search #140
-before posting. An unresolved identical fingerprint suppresses another request.
-Codex is asked to inspect **and repair** live state/topology/work, preserve useful
-commits, use the same state protocol for mutations, and report concrete results or
-blockers.
+Use the stable advisor fingerprint format from the protocol doc and search complete
+#140 state before posting. An unresolved identical fingerprint suppresses another
+request. Codex is asked to inspect **and repair** live state/topology/work, preserve
+useful commits, use the same state protocol for mutations, and report concrete
+results or blockers.
 
 ### 📦 Review-unit economy and branch-explosion prevention
 
@@ -126,10 +139,10 @@ Fleet/manual agents **must never merge a branch or PR into the repository defaul
 branch** or weaken protections to permit such a merge. Final default-branch review
 and merge belong exclusively to Gerome's designated Codex/human workflow.
 
-Codex final review/merge must still refresh #140 protocol state, current default,
-candidate PR exact head, checks, reviews, dependencies and ownership before each
-merge decision. After a default merge, refresh default and re-evaluate remaining
-PRs; do not inherit readiness from pre-merge state.
+Codex final review/merge must still refresh complete #140 protocol state, current
+default, candidate PR exact head/base SHA, checks, reviews, dependencies and
+ownership before each merge decision. After a default merge, refresh default and
+re-evaluate remaining PRs; do not inherit readiness from pre-merge state.
 
 ## 2. Torn is read-only from HappyGymStats
 
@@ -279,7 +292,7 @@ exists; tracked enforcement is what makes the rule current.
 Before handing a PR to Codex, state:
 
 - which issue/scope it implements and what it deliberately does not;
-- dependencies/stacking and the exact base/head state it was proved against;
+- dependencies/stacking and the exact base ref/SHA and head SHA it was proved against;
 - required evidence tier(s);
 - commands/evidence actually observed on the exact final head;
 - regression/negative control;
@@ -289,8 +302,9 @@ Use `Closes #N` only when the PR satisfies the issue's full current acceptance
 criteria. Partial work uses `Refs #N` and leaves the issue open.
 
 When a coherent package is ready for Codex review, append **🧪 WAITING ON PR CR**
-with exact PR/head/base/evidence and then send one deduplicated same-head Codex
-handoff. Waiting on review does not consume a fleet implementation lease.
+with exact PR/head plus machine-readable base ref/SHA/evidence and then send one
+deduplicated same-head Codex handoff. Waiting on review does not consume a fleet
+implementation lease.
 
 Use **✅ FINISHED** only after the issue/package is truly complete and required
 default incorporation or explicit completed/not-planned disposition is verified.
