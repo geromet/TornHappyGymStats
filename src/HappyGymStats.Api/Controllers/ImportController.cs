@@ -155,7 +155,7 @@ public sealed class ImportController : ApiControllerBase
                 AnonymousId = reservation.AnonymousId,
                 IsProvisional = true,
                 CreatedAtUtc = reservation.StartedAtUtc,
-                ExpiresAtUtc = reservation.StartedAtUtc.AddHours(24),
+                ExpiresAtUtc = provisionalToken.ExpiresAtUtc,
                 PublicKey = publicKey,
             }, ct);
             await _unitOfWork.SaveChangesAsync(ct);
@@ -167,7 +167,7 @@ public sealed class ImportController : ApiControllerBase
             return StatusCode(StatusCodes.Status202Accepted, new
             {
                 anonymousId = status.AnonymousId,
-                provisionalToken,
+                provisionalToken = provisionalToken.Value,
                 job = ToDto(status),
             });
         }

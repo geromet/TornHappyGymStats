@@ -66,17 +66,19 @@ public sealed class IdentityMapClaimPostgresTests : IAsyncLifetime
         var options = new DbContextOptionsBuilder<HappyGymStatsDbContext>()
             .UseNpgsql(_postgres!.GetConnectionString())
             .Options;
+        var now = new DateTimeOffset(2030, 6, 15, 12, 30, 45, TimeSpan.Zero);
+        var clock = new FixedTimeProvider(now);
 
         await using (var setup = new HappyGymStatsDbContext(options))
         {
             await setup.Database.MigrateAsync();
 
-            var now = DateTimeOffset.UtcNow;
             setup.IdentityMap.AddRange(
                 NewProvisional(Guid.Parse("11111111-1111-1111-1111-111111111111"), now.AddHours(1)),
                 NewProvisional(Guid.Parse("22222222-2222-2222-2222-222222222222"), now.AddHours(1)),
                 NewProvisional(Guid.Parse("33333333-3333-3333-3333-333333333333"), now.AddHours(1)),
-                NewProvisional(Guid.Parse("44444444-4444-4444-4444-444444444444"), now.AddMinutes(-1)));
+                NewProvisional(Guid.Parse("44444444-4444-4444-4444-444444444444"), now.AddMinutes(-1)),
+                NewProvisional(Guid.Parse("55555555-5555-5555-5555-555555555555"), now));
             await setup.SaveChangesAsync();
         }
 
@@ -84,8 +86,8 @@ public sealed class IdentityMapClaimPostgresTests : IAsyncLifetime
         await using var singleUseA = new HappyGymStatsDbContext(options);
         await using var singleUseB = new HappyGymStatsDbContext(options);
         var singleUseResults = await Task.WhenAll(
-            new IdentityMapRepository(singleUseA).ClaimProvisionalAsync(singleUseId, "subject-a", CancellationToken.None),
-            new IdentityMapRepository(singleUseB).ClaimProvisionalAsync(singleUseId, "subject-b", CancellationToken.None));
+            new IdentityMapRepository(singleUseA, clock).ClaimProvisionalAsync(singleUseId, "subject-a", CancellationToken.None),
+            new IdentityMapRepository(singleUseB, clock).ClaimProvisionalAsync(singleUseId, "subject-b", CancellationToken.None));
 
         Assert.Single(singleUseResults.Where(result => result));
 
@@ -94,15 +96,20 @@ public sealed class IdentityMapClaimPostgresTests : IAsyncLifetime
         await using var subjectContextA = new HappyGymStatsDbContext(options);
         await using var subjectContextB = new HappyGymStatsDbContext(options);
         var subjectResults = await Task.WhenAll(
-            new IdentityMapRepository(subjectContextA).ClaimProvisionalAsync(subjectUniqueA, "shared-subject", CancellationToken.None),
-            new IdentityMapRepository(subjectContextB).ClaimProvisionalAsync(subjectUniqueB, "shared-subject", CancellationToken.None));
+            new IdentityMapRepository(subjectContextA, clock).ClaimProvisionalAsync(subjectUniqueA, "shared-subject", CancellationToken.None),
+            new IdentityMapRepository(subjectContextB, clock).ClaimProvisionalAsync(subjectUniqueB, "shared-subject", CancellationToken.None));
 
         Assert.Single(subjectResults.Where(result => result));
 
         var expiredId = Guid.Parse("44444444-4444-4444-4444-444444444444");
         await using var expiredContext = new HappyGymStatsDbContext(options);
-        Assert.False(await new IdentityMapRepository(expiredContext)
+        Assert.False(await new IdentityMapRepository(expiredContext, clock)
             .ClaimProvisionalAsync(expiredId, "expired-subject", CancellationToken.None));
+
+        var boundaryId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        await using var boundaryContext = new HappyGymStatsDbContext(options);
+        Assert.False(await new IdentityMapRepository(boundaryContext, clock)
+            .ClaimProvisionalAsync(boundaryId, "boundary-subject", CancellationToken.None));
 
         await using var verify = new HappyGymStatsDbContext(options);
         var singleUse = await verify.IdentityMap.AsNoTracking().SingleAsync(x => x.AnonymousId == singleUseId);
@@ -137,4 +144,9 @@ public sealed class IdentityMapClaimPostgresTests : IAsyncLifetime
         => string.Equals(raw, "1", StringComparison.Ordinal)
            || string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase)
            || string.Equals(raw, "yes", StringComparison.OrdinalIgnoreCase);
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
+    }
 }

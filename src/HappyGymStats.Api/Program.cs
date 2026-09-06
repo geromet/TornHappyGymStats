@@ -33,6 +33,7 @@ else
 builder.Services.AddScoped<IClaimsTransformation, HappyGymStatsClaimsTransformer>();
 builder.Services.Configure<ProvisionalTokenOptions>(
     builder.Configuration.GetSection(ProvisionalTokenOptions.Section));
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IProvisionalTokenService, ProvisionalTokenService>();
 
 builder.Services.AddCors(options =>

@@ -13,6 +13,9 @@ namespace HappyGymStats.Tests;
 
 public sealed class AnonymousImportInitializationTests
 {
+    private static readonly DateTimeOffset TokenExpiresAtUtc =
+        new(2030, 6, 16, 12, 30, 45, TimeSpan.Zero);
+
     [Fact]
     public async Task Identity_commit_completes_before_reserved_work_is_published()
     {
@@ -30,6 +33,7 @@ public sealed class AnonymousImportInitializationTests
         Assert.NotNull(orchestrator.Latest);
         Assert.Equal("initializing", orchestrator.Latest!.Outcome);
         Assert.Equal(orchestrator.Latest.AnonymousId, repository.Created!.AnonymousId);
+        Assert.Equal(TokenExpiresAtUtc, repository.Created.ExpiresAtUtc);
 
         var competing = orchestrator.Enqueue("competing-key", fresh: true);
         Assert.Equal("busy", competing.Outcome);
@@ -103,13 +107,17 @@ public sealed class AnonymousImportInitializationTests
 
     private sealed class StubTokenService : IProvisionalTokenService
     {
-        public string Issue(Guid anonymousId) => $"token-for-{anonymousId}";
+        public IssuedProvisionalToken Issue(Guid anonymousId)
+            => new($"token-for-{anonymousId}", TokenExpiresAtUtc);
+
         public Guid? Validate(string token) => throw new NotSupportedException();
     }
 
     private sealed class ThrowingTokenService : IProvisionalTokenService
     {
-        public string Issue(Guid anonymousId) => throw new InvalidOperationException("invalid token configuration");
+        public IssuedProvisionalToken Issue(Guid anonymousId)
+            => throw new InvalidOperationException("invalid token configuration");
+
         public Guid? Validate(string token) => throw new NotSupportedException();
     }
 

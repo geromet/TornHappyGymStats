@@ -5,8 +5,12 @@ using Npgsql;
 
 namespace HappyGymStats.Data.Repositories;
 
-public sealed class IdentityMapRepository(HappyGymStatsDbContext db) : IIdentityMapRepository
+public sealed class IdentityMapRepository(
+    HappyGymStatsDbContext db,
+    TimeProvider? timeProvider = null) : IIdentityMapRepository
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+
     public Task CreateAsync(IdentityMapEntity entity, CancellationToken ct)
     {
         db.IdentityMap.Add(entity);
@@ -21,7 +25,7 @@ public sealed class IdentityMapRepository(HappyGymStatsDbContext db) : IIdentity
 
     public async Task<bool> ClaimProvisionalAsync(Guid anonymousId, string keycloakSub, CancellationToken ct)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
 
         try
         {
