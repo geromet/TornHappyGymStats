@@ -12,14 +12,12 @@
 
     @if (!string.IsNullOrWhiteSpace(AuthError))
     {
-        <MudAlert Severity="Severity.Error" Dense="true" Class="mb-4">
-            Sign-in failed. Please try again.
-        </MudAlert>
+        <ErrorState Message="Sign-in failed. Please try again." Dense="true" />
     }
 
     <AuthorizeView>
         <Authorized Context="authState">
-            <MudAlert Severity="Severity.Success" Dense="true" Class="mb-4">
+            <MudAlert Severity="Severity.Success" Dense="true" Class="mb-4" role="status" aria-live="polite">
                 Signed in as @(authState.User.Identity?.Name ?? "signed-in member").
             </MudAlert>
 
@@ -31,16 +29,15 @@
             </MudButton>
         </Authorized>
         <NotAuthorized>
-            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
-                You are currently signed out.
-            </MudAlert>
+            <SetupRequiredState Message="You are currently signed out. Sign in to continue to member-only Happy Gym Stats features." />
 
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        StartIcon="@(_redirecting ? Icons.Material.Filled.HourglassTop : Icons.Material.Filled.Login)"
                        Disabled="@_redirecting"
-                       OnClick="SignIn">
-                @(_redirecting ? "Redirecting..." : "Sign in")
+                       OnClick="SignIn"
+                       aria-busy="@_redirecting">
+                @(_redirecting ? "Redirecting…" : "Sign in")
             </MudButton>
         </NotAuthorized>
     </AuthorizeView>
