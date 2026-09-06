@@ -53,7 +53,7 @@ public sealed class WarTargetCoordinationPostgresPersistenceTests : IAsyncLifeti
         await using (var writeDb = CreateDbContext())
         {
             var repository = new WarTargetCoordinationRepository(writeDb);
-            Assert.True(await repository.TryCreateClaimAsync(claim, Now, CancellationToken.None));
+            Assert.True(await repository.TryCreateClaimAsync(claim, CancellationToken.None));
             await repository.SaveReservationAsync(reservation, CancellationToken.None);
         }
 
@@ -86,8 +86,8 @@ public sealed class WarTargetCoordinationPostgresPersistenceTests : IAsyncLifeti
         var right = new WarTargetCoordinationRepository(rightDb);
 
         var results = await Task.WhenAll(
-            left.TryCreateClaimAsync(Claim(11, 21), Now, CancellationToken.None),
-            right.TryCreateClaimAsync(Claim(12, 21), Now, CancellationToken.None));
+            left.TryCreateClaimAsync(Claim(11, 21), CancellationToken.None),
+            right.TryCreateClaimAsync(Claim(12, 21), CancellationToken.None));
 
         Assert.Single(results.Where(result => result));
 
@@ -109,15 +109,38 @@ public sealed class WarTargetCoordinationPostgresPersistenceTests : IAsyncLifeti
         var right = new WarTargetCoordinationRepository(rightDb);
 
         var results = await Task.WhenAll(
-            left.TryCreateClaimAsync(Claim(11, 21), Now, CancellationToken.None),
-            right.TryCreateClaimAsync(Claim(11, 22), Now, CancellationToken.None));
+            left.TryCreateClaimAsync(Claim(11, 21), CancellationToken.None),
+            right.TryCreateClaimAsync(Claim(11, 22), CancellationToken.None));
 
         Assert.Single(results.Where(result => result));
     }
 
     [Fact]
     [Trait("Category", "PostgresApiIntegration")]
-    public async Task Expired_primary_and_assist_do_not_consume_live_primary_slot()
+    public async Task Overlapping_future_primary_windows_are_rejected_before_they_become_live()
+    {
+        if (!_available) return;
+
+        await using var db = CreateDbContext();
+        var repository = new WarTargetCoordinationRepository(db);
+        var first = new WarTargetClaim(
+            Guid.NewGuid(), 100, 200, 21, 11,
+            Now.AddMinutes(10), Now.AddMinutes(20));
+        var overlap = new WarTargetClaim(
+            Guid.NewGuid(), 100, 200, 21, 12,
+            Now.AddMinutes(15), Now.AddMinutes(25));
+        var adjacent = new WarTargetClaim(
+            Guid.NewGuid(), 100, 200, 21, 13,
+            Now.AddMinutes(20), Now.AddMinutes(30));
+
+        Assert.True(await repository.TryCreateClaimAsync(first, CancellationToken.None));
+        Assert.False(await repository.TryCreateClaimAsync(overlap, CancellationToken.None));
+        Assert.True(await repository.TryCreateClaimAsync(adjacent, CancellationToken.None));
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresApiIntegration")]
+    public async Task Expired_primary_and_assist_do_not_consume_nonoverlapping_primary_slot()
     {
         if (!_available) return;
 
@@ -131,9 +154,9 @@ public sealed class WarTargetCoordinationPostgresPersistenceTests : IAsyncLifeti
             Now.AddMinutes(-1), Now.AddMinutes(5), WarTargetClaimMode.Assist);
         var replacement = Claim(13, 21);
 
-        Assert.True(await repository.TryCreateClaimAsync(expired, Now, CancellationToken.None));
-        Assert.True(await repository.TryCreateClaimAsync(assist, Now, CancellationToken.None));
-        Assert.True(await repository.TryCreateClaimAsync(replacement, Now, CancellationToken.None));
+        Assert.True(await repository.TryCreateClaimAsync(expired, CancellationToken.None));
+        Assert.True(await repository.TryCreateClaimAsync(assist, CancellationToken.None));
+        Assert.True(await repository.TryCreateClaimAsync(replacement, CancellationToken.None));
     }
 
     [Fact]
@@ -144,14 +167,12 @@ public sealed class WarTargetCoordinationPostgresPersistenceTests : IAsyncLifeti
 
         await using var db = CreateDbContext();
         var repository = new WarTargetCoordinationRepository(db);
-        Assert.True(await repository.TryCreateClaimAsync(Claim(11, 21), Now, CancellationToken.None));
+        Assert.True(await repository.TryCreateClaimAsync(Claim(11, 21), CancellationToken.None));
         Assert.True(await repository.TryCreateClaimAsync(
             new WarTargetClaim(Guid.NewGuid(), 100, 201, 21, 11, Now, Now.AddMinutes(5)),
-            Now,
             CancellationToken.None));
         Assert.True(await repository.TryCreateClaimAsync(
             new WarTargetClaim(Guid.NewGuid(), 101, 200, 21, 11, Now, Now.AddMinutes(5)),
-            Now,
             CancellationToken.None));
     }
 

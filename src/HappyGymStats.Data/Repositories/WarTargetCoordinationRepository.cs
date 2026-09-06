@@ -7,10 +7,7 @@ namespace HappyGymStats.Data.Repositories;
 
 public sealed class WarTargetCoordinationRepository(HappyGymStatsDbContext db)
 {
-    public async Task<bool> TryCreateClaimAsync(
-        WarTargetClaim claim,
-        DateTimeOffset nowUtc,
-        CancellationToken ct)
+    public async Task<bool> TryCreateClaimAsync(WarTargetClaim claim, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(claim);
         EnsurePostgres();
@@ -26,7 +23,7 @@ public sealed class WarTargetCoordinationRepository(HappyGymStatsDbContext db)
             await AcquireScopeLockAsync(connection, transaction, claim.FactionId, claim.WarId, ct);
 
             if (claim.Mode == WarTargetClaimMode.Primary
-                && await HasPrimaryConflictAsync(connection, transaction, claim, nowUtc, ct))
+                && await HasPrimaryConflictAsync(connection, transaction, claim, ct))
             {
                 await transaction.RollbackAsync(ct);
                 return false;
@@ -213,7 +210,6 @@ public sealed class WarTargetCoordinationRepository(HappyGymStatsDbContext db)
         DbConnection connection,
         DbTransaction transaction,
         WarTargetClaim claim,
-        DateTimeOffset nowUtc,
         CancellationToken ct)
     {
         await using var command = connection.CreateCommand();
@@ -224,15 +220,16 @@ public sealed class WarTargetCoordinationRepository(HappyGymStatsDbContext db)
             WHERE "FactionId" = @factionId
               AND "WarId" = @warId
               AND "Mode" = @primaryMode
-              AND "ClaimedAtUtc" <= @nowUtc
-              AND "ExpiresAtUtc" > @nowUtc
+              AND "ClaimedAtUtc" < @expiresAtUtc
+              AND "ExpiresAtUtc" > @claimedAtUtc
               AND ("TargetMemberId" = @targetMemberId OR "AttackerMemberId" = @attackerMemberId)
             LIMIT 1
             """;
         AddParameter(command, "factionId", DbType.Int64, claim.FactionId);
         AddParameter(command, "warId", DbType.Int64, claim.WarId);
         AddParameter(command, "primaryMode", DbType.Int32, (int)WarTargetClaimMode.Primary);
-        AddParameter(command, "nowUtc", DbType.DateTime, nowUtc.UtcDateTime);
+        AddParameter(command, "claimedAtUtc", DbType.DateTime, claim.ClaimedAtUtc.UtcDateTime);
+        AddParameter(command, "expiresAtUtc", DbType.DateTime, claim.ExpiresAtUtc.UtcDateTime);
         AddParameter(command, "targetMemberId", DbType.Int64, claim.TargetMemberId);
         AddParameter(command, "attackerMemberId", DbType.Int64, claim.AttackerMemberId);
         return await command.ExecuteScalarAsync(ct) is not null;
