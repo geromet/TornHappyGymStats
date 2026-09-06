@@ -1,0 +1,61 @@
+name: Account connections render proof
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Layout/MainLayout.razor'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Layout/MainLayout.razor.css'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/PlayerAccount.razor'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Components/Pages/PlayerAccount.razor.css'
+      - 'src/HappyGymStats.Blazor/HappyGymStats.Blazor/Services/AccountConnectionsService.cs'
+      - 'scripts/screenshot-board.sh'
+      - 'scripts/ux/shoot.py'
+      - '.github/workflows/account-connections-render.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: account-connections-render-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    name: 390 / 768 / 1440 empty-account screenshots
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install .NET (version from global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install screenshot tooling
+        run: bash scripts/screenshot-board.sh --setup
+
+      - name: Capture Account & Connections at phone, tablet and desktop widths
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p workspace/tmp
+          bash scripts/screenshot-board.sh --route /player-account --out workspace/tmp/screenshots/account-connections 2>&1 | tee workspace/tmp/account-connections-render.log
+          if grep -q '^  ! .*console/page error(s)' workspace/tmp/account-connections-render.log; then
+            echo 'FAIL: /player-account emitted browser console/page errors during render proof' >&2
+            exit 1
+          fi
+
+      - name: Upload render proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: account-connections-render-proof
+          path: |
+            workspace/tmp/screenshots/account-connections
+            workspace/tmp/account-connections-render.log
+          if-no-files-found: error
+          retention-days: 7
