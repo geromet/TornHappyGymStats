@@ -49,7 +49,7 @@ Unknown values are written explicitly as `none` or `unknown`. Load-bearing metad
 
 A unique `run=<token>` is the connection identifier. `seq` is monotonically increasing **within that run**.
 
-1. First mutable intent is `🟡 ASSIGNING seq=1`.
+1. First mutable intent is `🟡 ASSIGNING seq=1`, except the lease-free saturated-advisor control-plane path defined in §7.
 2. The winner of the overlap check appends `🔵 ASSIGNED seq=2` and acknowledges the ASSIGNING comment ID.
 3. Branch selection/creation is recorded as `🛠️ WORKING` before useful mutation.
 4. Every remote branch-head change is followed by another WORKING record with the next sequence number and exact new head.
@@ -72,7 +72,7 @@ Before any mutation:
 - choose the exact intended branch name;
 - append ASSIGNING with exact issue/package/seam and observed heads.
 
-Reread #140 immediately. Earlier overlapping ASSIGNING GitHub comment ID wins.
+Reread #140 immediately and reconstruct the latest valid state for every relevant run. If any materially overlapping run is already `🔵 ASSIGNED` or `🛠️ WORKING`, the newcomer loses and must append 🟢 OPEN for its own run/scope; a new ASSIGNING record never supersedes an active owner. Only when no active owner overlaps do competing ASSIGNING records race, and then the earlier overlapping ASSIGNING GitHub comment ID wins.
 
 ### Phase 2 — 🔵 ASSIGNED / ACK
 
@@ -131,6 +131,8 @@ Fingerprint format:
 ```text
 advisor:<repo>:<reason>:<stable-identifiers>:<relevant-head-or-state>
 ```
+
+When five active leases already exist, advisor dispatch uses an explicit **lease-free control-plane exception** so recovery does not create a prohibited sixth lease. After read-only state reconstruction and fingerprint deduplication, an otherwise unassigned recovery run may append `🆘 WAITING ON ADVISOR` directly as its first transition (`seq=1`, `prev=none`) and post the single matching `@codex` advisor request. This exception authorizes only those #140 control-plane comments. It does **not** authorize branch, PR, issue-body, code, review, merge, or other repository mutation; any such work still requires the normal ASSIGNING → ASSIGNED handshake after capacity is available.
 
 The advisor request should be a single account-authored #140 comment containing `@codex` and must ask Codex to:
 
@@ -231,11 +233,11 @@ prev=WORKING/<comment-id> | ts=... | note=coherent package complete; current-hea
 ### Advisor escalation
 
 ```text
-🆘 WAITING ON ADVISOR | seq=4 | run=steward-def456 | lane=STEWARD |
+🆘 WAITING ON ADVISOR | seq=1 | run=steward-def456 | lane=STEWARD |
 issue/package=coordination | branch=none | head=none | pr=none |
-prev=ASSIGNED/<comment-id> | ts=... |
-fingerprint=advisor:geromet/TornHappyGymStats:active-leases:6:<state-hash> |
-note=@codex inspect and repair stale/cut-off leases and branch/PR topology
+prev=none | ts=... |
+fingerprint=advisor:geromet/TornHappyGymStats:active-leases:5:<state-hash> |
+note=@codex lease-free saturated-control-plane escalation; inspect and repair stale/cut-off leases and branch/PR topology
 ```
 
 The goal is not ceremony. The goal is that an interrupted worker leaves enough durable, ordered evidence for the next worker or Codex advisor to recover safely without inventing state.
