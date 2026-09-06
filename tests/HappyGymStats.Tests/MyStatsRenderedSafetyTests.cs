@@ -63,6 +63,68 @@ public sealed class MyStatsRenderedSafetyTests : BunitContext
     }
 
     [Fact]
+    public void Missing_dataset_renders_successful_empty_state_instead_of_error()
+    {
+        ConfigureServices(new StubMessageHandler(ResponseMode.MissingDataset));
+
+        var cut = Render<MyStats>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var state = cut.Find("[role=status]");
+            Assert.Contains("No personal gym stats found yet. Import data first.", state.TextContent, StringComparison.Ordinal);
+            Assert.Empty(cut.FindAll("[role=alert]"));
+        });
+    }
+
+    [Fact]
+    public void Initial_failure_is_retryable_and_retry_can_transition_to_empty()
+    {
+        var handler = new StubMessageHandler(ResponseMode.FailureThenMissing);
+        ConfigureServices(handler);
+
+        var cut = Render<MyStats>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Could not load your stats. Please try again.", cut.Find("[role=alert]").TextContent, StringComparison.Ordinal);
+            Assert.Equal(1, handler.LoadCount);
+        });
+
+        cut.FindAll("button").Single(button => button.TextContent.Contains("Retry", StringComparison.Ordinal)).Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("No personal gym stats found yet. Import data first.", cut.Find("[role=status]").TextContent, StringComparison.Ordinal);
+            Assert.Empty(cut.FindAll("[role=alert]"));
+            Assert.Equal(2, handler.LoadCount);
+        });
+    }
+
+    [Fact]
+    public void Failed_refresh_retains_last_known_good_and_marks_it_stale()
+    {
+        var handler = new StubMessageHandler(ResponseMode.SuccessThenRefreshFailure);
+        ConfigureServices(handler);
+
+        var cut = Render<MyStats>();
+        cut.WaitForAssertion(() => Assert.Contains("1 points", cut.Markup, StringComparison.Ordinal));
+
+        cut.Find("input[type=password]").Change("safe-key");
+        cut.FindAll("button").Single(button => button.TextContent.Contains("Import + Refresh", StringComparison.Ordinal)).Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Stale data.", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Showing your last loaded stats", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Import completed, but your stats could not be refreshed.", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Retry refresh", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("1 points", cut.Markup, StringComparison.Ordinal);
+            Assert.Equal(2, handler.LoadCount);
+        });
+    }
+
+    [Fact]
     public void Source_contract_has_no_member_facing_identity_or_failure_internals()
     {
         var content = ReadRepoFile(
@@ -92,6 +154,8 @@ public sealed class MyStatsRenderedSafetyTests : BunitContext
 
     private sealed class StubMessageHandler(ResponseMode mode) : HttpMessageHandler
     {
+        public int LoadCount { get; private set; }
+
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
@@ -100,7 +164,18 @@ public sealed class MyStatsRenderedSafetyTests : BunitContext
 
             if (request.Method == HttpMethod.Get && path == "/api/v1/torn/surfaces/me")
             {
-                if (mode == ResponseMode.MalformedLoad)
+                LoadCount++;
+
+                if (mode == ResponseMode.SuccessThenRefreshFailure && LoadCount == 1)
+                {
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(SuccessDatasetJson, Encoding.UTF8, "application/json")
+                    });
+                }
+
+                if (mode is ResponseMode.MalformedLoad or ResponseMode.SuccessThenRefreshFailure
+                    || (mode == ResponseMode.FailureThenMissing && LoadCount == 1))
                 {
                     return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                     {
@@ -116,6 +191,14 @@ public sealed class MyStatsRenderedSafetyTests : BunitContext
                 if (mode == ResponseMode.ForbiddenImport)
                 {
                     return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
+                }
+
+                if (mode == ResponseMode.SuccessThenRefreshFailure)
+                {
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(SuccessImportStatusJson, Encoding.UTF8, "application/json")
+                    });
                 }
 
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
@@ -148,8 +231,35 @@ public sealed class MyStatsRenderedSafetyTests : BunitContext
     {
         FailedImport,
         ForbiddenImport,
-        MalformedLoad
+        MalformedLoad,
+        MissingDataset,
+        FailureThenMissing,
+        SuccessThenRefreshFailure
     }
+
+    private const string SuccessDatasetJson = """
+        {
+          "dataset": "my-stats",
+          "version": "v1",
+          "series": {
+            "gymCloud": { "x": [1], "y": [2], "z": [3] }
+          },
+          "meta": { "gymPointCount": 1, "recordCount": 1 }
+        }
+        """;
+
+    private const string SuccessImportStatusJson = """
+        {
+          "id": "job-rendered-success",
+          "outcome": "succeeded",
+          "startedAtUtc": "2026-09-05T00:00:00Z",
+          "completedAtUtc": "2026-09-05T00:00:01Z",
+          "pagesFetched": 1,
+          "logsFetched": 10,
+          "logsAppended": 1,
+          "errorMessage": null
+        }
+        """;
 
     private const string FailedImportStatusJson = """
         {

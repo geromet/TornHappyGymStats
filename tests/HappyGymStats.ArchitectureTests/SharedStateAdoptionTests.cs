@@ -90,6 +90,8 @@ public sealed class SharedStateAdoptionTests
         Assert.Contains("<ErrorState", home, StringComparison.Ordinal);
         Assert.Contains("<LoadingState", myStats, StringComparison.Ordinal);
         Assert.Contains("<ErrorState", myStats, StringComparison.Ordinal);
+        Assert.Contains("<EmptyState", myStats, StringComparison.Ordinal);
+        Assert.Contains("<StaleDataBanner", myStats, StringComparison.Ordinal);
         Assert.Contains("<LoadingState", war, StringComparison.Ordinal);
         Assert.Contains("<ErrorState", war, StringComparison.Ordinal);
         Assert.Contains("<EmptyState", war, StringComparison.Ordinal);

@@ -44,33 +44,56 @@
     </MudCardContent>
 </MudCard>
 
-@if (_loading)
+@if (_loading && _surfaces is null)
 {
     <LoadingState Message="Loading your stats…" />
 }
-else if (_loadError != null)
+else if (_loadError != null && _surfaces is null)
 {
-    <ErrorState Message="@_loadError" />
+    <ErrorState Message="@_loadError" OnRetry="LoadSurfacesAsync" />
 }
-else if (_surfaces != null)
+else
 {
-    <MudCard Class="mb-4">
-        <MudCardHeader>
-            <CardHeaderContent>
-                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Style="width:100%">
-                    <div>
-                        <MudText Typo="Typo.h6">My gym trains point cloud</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">
-                            @_surfaces.Meta.GymPointCount points
-                        </MudText>
-                    </div>
-                </MudStack>
-            </CardHeaderContent>
-        </MudCardHeader>
-        <MudCardContent Class="pa-0">
-            <div id="my-gym-cloud-chart" style="width: 100%; height: 760px;"></div>
-        </MudCardContent>
-    </MudCard>
+    @if (_loading)
+    {
+        <LoadingState Message="Refreshing your stats…" Dense="true" />
+    }
+    else if (_loadError != null)
+    {
+        <StaleDataBanner Message="Refresh failed. Showing your last loaded stats; retry before relying on them." />
+        <MudButton Variant="Variant.Text"
+                   Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.Refresh"
+                   OnClick="LoadSurfacesAsync"
+                   Class="mb-4">
+            Retry refresh
+        </MudButton>
+    }
+
+    @if (_surfaces is null)
+    {
+        <EmptyState Message="No personal gym stats found yet. Import data first." />
+    }
+    else
+    {
+        <MudCard Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Style="width:100%">
+                        <div>
+                            <MudText Typo="Typo.h6">My gym trains point cloud</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @_surfaces.Meta.GymPointCount points
+                            </MudText>
+                        </div>
+                    </MudStack>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent Class="pa-0">
+                <div id="my-gym-cloud-chart" style="width: 100%; height: 760px;"></div>
+            </MudCardContent>
+        </MudCard>
+    }
 }
 
 @code {
@@ -102,9 +125,8 @@ else if (_surfaces != null)
 
         try
         {
-            _surfaces = await SurfacesApi.GetMyStatsAsync();
-            if (_surfaces == null)
-                _loadError = "No personal gym stats found yet. Import data first.";
+            var surfaces = await SurfacesApi.GetMyStatsAsync();
+            _surfaces = surfaces;
         }
         catch (ApiFailure failure)
         {
@@ -149,6 +171,11 @@ else if (_surfaces != null)
             _importStatusSeverity = Severity.Success;
 
             await LoadSurfacesAsync();
+            if (_loadError != null)
+            {
+                _importStatusMessage = "Import completed, but your stats could not be refreshed. Retry the refresh.";
+                _importStatusSeverity = Severity.Warning;
+            }
         }
         catch (ApiFailure failure)
         {
