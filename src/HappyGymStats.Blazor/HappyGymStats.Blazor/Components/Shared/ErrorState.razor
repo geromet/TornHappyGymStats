@@ -1,5 +1,5 @@
 @* Callers must pass pre-filtered member-safe text — never raw exception messages or API error strings. *@
-<MudAlert Severity="Severity.Warning" Dense="@Dense" Class="@Class">
+<MudAlert Severity="Severity.Warning" Dense="@Dense" Class="@Class" role="alert" aria-live="assertive" aria-atomic="true">
     @Message
     @if (OnRetry.HasDelegate)
     {

@@ -31,6 +31,68 @@ public sealed class SharedStateRenderedTests : BunitContext
     }
 
     [Fact]
+    public void EmptyState_announces_a_successful_empty_result_politely()
+    {
+        Services.AddMudServices();
+
+        var cut = Render<EmptyState>(parameters => parameters
+            .Add(component => component.Message, "No matching members."));
+
+        var status = cut.Find("[role='status']");
+        Assert.Equal("polite", status.GetAttribute("aria-live"));
+        Assert.Equal("true", status.GetAttribute("aria-atomic"));
+        Assert.Contains("No matching members.", status.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SetupRequiredState_announces_required_setup_and_keeps_its_action_keyboard_native()
+    {
+        Services.AddMudServices();
+
+        var cut = Render<SetupRequiredState>(parameters => parameters
+            .Add(component => component.Message, "Connect Torn before importing.")
+            .Add(component => component.ActionHref, "/player-account")
+            .Add(component => component.ActionLabel, "Open account"));
+
+        var status = cut.Find("[role='status']");
+        Assert.Equal("polite", status.GetAttribute("aria-live"));
+        Assert.Equal("true", status.GetAttribute("aria-atomic"));
+        var action = cut.Find("a[href='/player-account']");
+        Assert.Contains("Open account", action.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ErrorState_uses_an_atomic_assertive_alert_and_exposes_retry_as_a_button()
+    {
+        Services.AddMudServices();
+
+        var cut = Render<ErrorState>(parameters => parameters
+            .Add(component => component.Message, "The request failed.")
+            .Add(component => component.OnRetry, () => { }));
+
+        var alert = cut.Find("[role='alert']");
+        Assert.Equal("assertive", alert.GetAttribute("aria-live"));
+        Assert.Equal("true", alert.GetAttribute("aria-atomic"));
+        Assert.Contains("The request failed.", alert.TextContent, StringComparison.Ordinal);
+        Assert.Equal("button", cut.Find("button").TagName.ToLowerInvariant());
+    }
+
+    [Fact]
+    public void StaleDataBanner_announces_non_urgent_freshness_changes_politely()
+    {
+        Services.AddMudServices();
+
+        var cut = Render<StaleDataBanner>(parameters => parameters
+            .Add(component => component.Message, "Last update was ten minutes ago."));
+
+        var status = cut.Find("[role='status']");
+        Assert.Equal("polite", status.GetAttribute("aria-live"));
+        Assert.Equal("true", status.GetAttribute("aria-atomic"));
+        Assert.Contains("Stale data.", status.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Last update was ten minutes ago.", status.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Home_renders_successful_empty_state_when_no_surface_dataset_exists()
     {
         ConfigureHome(new HomeMessageHandler(HttpStatusCode.NotFound));
