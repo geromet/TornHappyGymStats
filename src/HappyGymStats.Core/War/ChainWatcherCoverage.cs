@@ -130,7 +130,7 @@ public static class ChainWatcherCoverage
             .Select(item => item.OccurredAtUtc.ToUniversalTime())
             .Where(at => at >= shift.StartsAtUtc && at < shift.EndsAtUtc)
             .OrderBy(at => at)
-            .Cast<DateTimeOffset?>()
+            .Select(at => (DateTimeOffset?)at)
             .FirstOrDefault();
 
         if (firstCheckIn is null)
