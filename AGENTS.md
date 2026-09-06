@@ -45,13 +45,30 @@ stable branch that still contains useful work absent from default needs a live
 stable-to-default review surface for Gerome rather than being left hidden merely
 to reduce PR count.
 
+## Verification economy
+
+Use **change-directed local verification**. Do not automatically reproduce the
+full GitHub Actions matrix or run the complete canonical gate merely because a
+task changed code. Start with the smallest deterministic proof that can
+meaningfully falsify the affected behavior, then broaden only when the change has
+wide impact, the acceptance criteria require a higher evidence tier, focused proof
+fails or exposes adjacent uncertainty, verifier/CI infrastructure changed, or
+current-head GitHub CI reports a deterministic failure that needs reproduction.
+
+GitHub Actions is the broad regression surface for PR heads. Inspect required
+current-head checks before declaring work ready, and fix deterministic CI failures
+rather than treating them as human blockers. Pending or failed checks are not
+proof, and never claim a command or evidence tier was observed unless it actually
+ran. See `docs/WORKING-AGREEMENT.md` §4 for the full policy.
+
 Then use:
 
 - [`README.md`](README.md) for the repository map;
 - [`docs/OVERVIEW.md`](docs/OVERVIEW.md) for architecture;
 - GitHub issues for authoritative planned work and dependency/stop-gate state;
 - `scripts/verify/manifest.tsv` for the canonical verifier graph;
-- `bash scripts/verify/build-and-test.sh` for the source/build/test gate;
+- `bash scripts/verify/build-and-test.sh` for the source/build/test gate when broad
+  local proof is warranted;
 - `docs/OPERATIONS-PITFALLS.md` before touching deploy/SSH/remote-exec code.
 
 Do not treat gitignored `workspace/` material as required project state. A clean
